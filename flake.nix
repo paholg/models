@@ -12,13 +12,20 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        snapmaker-orca = pkgs.callPackage ./nix/snapmaker-orca.nix { };
       in
       {
+        packages = pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          snapmaker-orca = pkgs.callPackage ./nix/snapmaker-orca.nix { };
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             openscad-lsp
             openscad-unstable
             unzip
+
+            snapmaker-orca
           ];
 
           FONTCONFIG_FILE = pkgs.makeFontsConf {
