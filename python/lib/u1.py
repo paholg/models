@@ -10,7 +10,7 @@ from pathlib import Path
 
 import fullcontrol as fc
 
-from . import orca
+from . import TMP, orca
 from .settings import DEFAULT, Settings
 
 # From the stock machine profile: printable_area / printable_height.
@@ -22,8 +22,6 @@ TOOLS = 4
 TOOLCHANGE_RETRACT = 10
 # Where the start G-code's purge line ends.
 PURGE_END = (185, 1)
-
-TMP = Path(__file__).resolve().parents[2] / "tmp"
 
 
 def start_gcode(tool: int, nozzle: int, bed: int) -> str:
@@ -104,15 +102,20 @@ M106 S0
 
 
 def tool_change(
-    tool: int, at: fc.Point, s: Settings = DEFAULT, lift: float = 1.5
+    tool: int,
+    at: fc.Point,
+    s: Settings = DEFAULT,
+    lift: float = 1.5,
+    to: fc.Point | None = None,
 ) -> list:
-    """Steps to switch to `tool`, starting and ending at point `at`.
+    """Steps to switch to `tool` at point `at`, then continue from `to` (default `at`).
 
     Based on the stock profile's change_filament_gcode. The old tool is
     retracted and not unretracted, so switching back to a tool isn't handled yet.
     """
     if at.x is None or at.y is None or at.z is None:
         raise ValueError(f"tool_change needs a point with x, y and z: {at}")
+    to = to or at
     nozzle = s.filaments[tool].nozzle_temp
     return [
         fc.ManualGcode(
@@ -132,7 +135,9 @@ G90
 G0 X{at.x:.4f} Y{at.y:.4f} Z{at.z + lift:.4f} F8000 ; back over the part
 ;===== end tool change ====="""
         ),
-        fc.Point(x=at.x, y=at.y, z=at.z),
+        # FullControl now knows where the head is again.
+        fc.Point(x=to.x, y=to.y, z=(to.z or 0) + lift),
+        to.model_copy(),
         fc.Extruder(on=True),
     ]
 
