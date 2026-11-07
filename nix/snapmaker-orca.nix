@@ -16,6 +16,9 @@ appimageTools.wrapType2 {
 
   extraPkgs = _: [ webkitgtk_4_1 ];
 
+  # Bundled printer/filament/process profiles (what Orca copies into ~/.config on startup).
+  passthru.profiles = "${contents}/resources/profiles";
+
   extraInstallCommands = ''
     install -Dm444 ${contents}/io.github.Snapmaker.Snapmaker_Orca.desktop \
       $out/share/applications/snapmaker-orca.desktop

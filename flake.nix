@@ -34,6 +34,8 @@
               snapmaker-orca
             ];
 
+          SNAPMAKER_ORCA_PROFILES = snapmaker-orca.profiles;
+
           FONTCONFIG_FILE = pkgs.makeFontsConf {
             fontDirectories = [ pkgs.liberation_ttf ];
           };
