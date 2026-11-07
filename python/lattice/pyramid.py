@@ -2,7 +2,7 @@
 
 from lib import u1
 from lib.preview import preview
-from lib.pyramid import Lattice, floor, strand_steps
+from lib.pyramid import CENTER, Lattice, floor, square, strand_steps
 from lib.settings import DEFAULT
 
 S = DEFAULT
@@ -17,7 +17,8 @@ STRAND_SPEED = 600  # mm/min
 
 bottom = floor(BASE, BOTTOM_LAYERS, LW, LH)
 lattice = Lattice(
-    base=BASE - LW,
+    base=square(BASE - LW),
+    apex=CENTER,
     height=HEIGHT,
     diamonds_per_face=DIAMONDS_PER_FACE,
     z_start=BOTTOM_LAYERS * LH + STRAND_DIAMETER,

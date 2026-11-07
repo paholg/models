@@ -108,6 +108,7 @@ def tool_change(
     lift: float = 1.5,
     to: fc.Point | None = None,
     travel_z: float | None = None,
+    unretract: bool = False,
 ) -> list:
     """Steps to switch to `tool` at point `at`, then continue from `to` (default `at`).
 
@@ -115,7 +116,8 @@ def tool_change(
     moves over `to`, then descends, so set `travel_z` above anything in the way.
 
     Based on the stock profile's change_filament_gcode. The old tool is
-    retracted and not unretracted, so switching back to a tool isn't handled yet.
+    retracted; pass `unretract` when switching back to a tool that was retracted
+    this way (ToolState tracks this).
     """
     if at.x is None or at.y is None or at.z is None:
         raise ValueError(f"tool_change needs a point with x, y and z: {at}")
@@ -148,8 +150,53 @@ G0 X{at.x:.4f} Y{at.y:.4f} F8000 ; back over the part
         fc.Point(x=to.x, y=to.y, z=safe_z),
         fc.Point(x=to.x, y=to.y, z=to.z + lift),
         to.model_copy(),
+        *(
+            [fc.ManualGcode(text=f"G1 E{TOOLCHANGE_RETRACT} F1800 ; unretract")]
+            if unretract
+            else []
+        ),
         fc.Extruder(on=True),
     ]
+
+
+def travel(to: fc.Point, z: float) -> list:
+    """Lift to `z`, move over `to`, and descend, without extruding."""
+    return [
+        fc.Extruder(on=False),
+        fc.Point(z=z),
+        fc.Point(x=to.x, y=to.y, z=z),
+        to.model_copy(),
+        fc.Extruder(on=True),
+    ]
+
+
+class ToolState:
+    """Tracks the active tool and which tools are retracted from tool changes."""
+
+    def __init__(self, s: Settings = DEFAULT, tool: int = 0):
+        self.s = s
+        self.current = tool
+        self.retracted: set[int] = set()
+
+    def change(
+        self, tool: int, at: fc.Point, to: fc.Point, travel_z: float | None = None
+    ) -> list:
+        """Switch to `tool` (or just travel, if it's already active) and continue at `to`."""
+        if tool == self.current:
+            assert at.z is not None
+            return travel(to, max(at.z + 1.5, travel_z or 0))
+        steps = tool_change(
+            tool,
+            at,
+            self.s,
+            to=to,
+            travel_z=travel_z,
+            unretract=tool in self.retracted,
+        )
+        self.retracted.add(self.current)
+        self.retracted.discard(tool)
+        self.current = tool
+        return steps
 
 
 END_GCODE = """\

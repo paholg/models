@@ -10,7 +10,7 @@ hotend reaches down within about INNER_INSET of it. Increase the inset if it hit
 
 from lib import u1
 from lib.preview import preview
-from lib.pyramid import Lattice, floor, strand_steps
+from lib.pyramid import CENTER, Lattice, floor, square, strand_steps
 from lib.settings import DEFAULT
 
 S = DEFAULT
@@ -32,13 +32,15 @@ TRAVEL_CLEARANCE = 5.0  # above the inner apex when moving to the outer lattice
 z_start = BOTTOM_LAYERS * LH + STRAND_DIAMETER
 bottom = floor(BASE, BOTTOM_LAYERS, LW, LH)
 inner = Lattice(
-    base=BASE - LW - 2 * INNER_INSET,
+    base=square(BASE - LW - 2 * INNER_INSET),
+    apex=CENTER,
     height=INNER_HEIGHT,
     diamonds_per_face=INNER_DIAMONDS_PER_FACE,
     z_start=z_start,
 )
 outer = Lattice(
-    base=BASE - LW,
+    base=square(BASE - LW),
+    apex=CENTER,
     height=HEIGHT,
     diamonds_per_face=DIAMONDS_PER_FACE,
     z_start=z_start,
@@ -65,7 +67,8 @@ if __name__ == "__main__":
     for lattice, name in [(inner, "inner"), (outer, "outer")]:
         print(
             f"{name}: {lattice.diamonds_per_face} diamonds/face, "
-            f"{lattice.diamond_width:.1f} mm wide x {lattice.row_height:.1f} mm rows"
+            f"{lattice.diamond_widths()[0]:.1f} mm wide x {lattice.row_height:.1f} mm rows, "
+            f"strands >= {min(lattice.strand_angles()):.0f}°"
         )
     print(u1.gcode(steps, "double_pyramid", S))
     print(preview(steps, "double_pyramid", S))

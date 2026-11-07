@@ -1,4 +1,4 @@
-"""Square pyramids: solid floors and nonplanar diamond lattices on the faces.
+"""Pyramids: solid floors and nonplanar diamond lattices on the faces.
 
 Each face gets a flat diamond grid, as if drawn on the unrolled triangle: with
 n diamonds per face at the start, diamond width = face width / n and row height
@@ -10,11 +10,14 @@ nodes, which are offset by half a diamond. Rows start/end at corner 0, stepping
 up along that edge. The apex is closed with an X of edge strands.
 """
 
+import math
 from dataclasses import dataclass
 
 import fullcontrol as fc
+from shapely.geometry import Polygon
 
-Center = tuple[float, float]
+Point2 = tuple[float, float]
+Center = Point2
 CENTER: Center = (135.0, 135.0)
 
 
@@ -62,50 +65,114 @@ def strand_steps(diameter: float, speed: int) -> list:
     ]
 
 
+def square(side: float, center: Center = CENTER) -> list[Point2]:
+    """Square vertices, CCW from (-half, -half), matching square_point's order."""
+    h = side / 2
+    cx, cy = center
+    return [(cx - h, cy - h), (cx + h, cy - h), (cx + h, cy + h), (cx - h, cy + h)]
+
+
+def polygon_floor(
+    outline: Polygon, layers: int, line_width: float, layer_height: float
+) -> list:
+    """Solid floor of concentric inward offsets of `outline`, travelling between loops."""
+    steps = []
+    for layer in range(layers):
+        z = layer_height * (layer + 1)
+        k = 0
+        while True:
+            inset = outline.buffer(
+                -(line_width / 2 + k * line_width), join_style="mitre"
+            )
+            if inset.is_empty:
+                break
+            for poly in getattr(inset, "geoms", [inset]):
+                ring = list(poly.exterior.coords)
+                steps.append(fc.Extruder(on=False))
+                steps += [fc.Point(x=x, y=y, z=z) for x, y in ring[:1]]
+                steps.append(fc.Extruder(on=True))
+                steps += [fc.Point(x=x, y=y, z=z) for x, y in ring[1:]]
+            k += 1
+    return steps
+
+
 @dataclass(frozen=True)
 class Lattice:
-    base: float  # strand centerline side length at z=0
-    height: float  # apex
-    diamonds_per_face: int  # at z_start; sets the diamond size
+    """Diamond lattice on a pyramid over a star-shaped polygon.
+
+    `base` is the strand centerline outline at z=0 (CCW), and the apex is above
+    `apex`, which must see every edge (be in the polygon's kernel). Each face
+    starts with `diamonds_per_face` diamonds, so diamond width scales with edge
+    length; row height is shared.
+    """
+
+    base: list[Point2]
+    apex: Point2
+    height: float
+    diamonds_per_face: int  # at z_start, on every face
     z_start: float  # first row's troughs
     node_layer: float = 0.3  # Z between a peak and the trough that sits on it
-    center: Center = CENTER
+
+    @property
+    def faces(self) -> int:
+        return len(self.base)
 
     @property
     def row_height(self) -> float:
         return (self.height - self.z_start) / self.diamonds_per_face
 
-    @property
-    def diamond_width(self) -> float:
-        return 2 * self.half_start / self.diamonds_per_face
+    def diamond_widths(self) -> list[float]:
+        """Per face, at z_start."""
+        s = 1 - self.z_start / self.height
+        n = self.diamonds_per_face
+        b = self.base
+        return [s * math.dist(b[f], b[(f + 1) % len(b)]) / n for f in range(len(b))]
 
-    @property
-    def half_start(self) -> float:
-        return self.base / 2 * (1 - self.z_start / self.height)
+    def strand_angles(self) -> list[float]:
+        """Per face: degrees from horizontal of the strands (lower is less supported)."""
+        angles = []
+        for f in range(self.faces):
+            p0, p1 = self.base[f], self.base[(f + 1) % self.faces]
+            length = math.dist(p0, p1)
+            # Perpendicular distance from the apex to the edge line.
+            cross = (p1[0] - p0[0]) * (self.apex[1] - p0[1]) - (p1[1] - p0[1]) * (
+                self.apex[0] - p0[0]
+            )
+            r = abs(cross) / length
+            angles.append(
+                math.degrees(math.atan2(self.height, math.hypot(length / 2, r)))
+            )
+        return angles
 
     def node(self, level: int, face: int, j: int, peak: bool = False) -> fc.Point:
         """Node j (0 = face's starting corner) on `face` at `level`.
 
-        Level m has n - m diamonds per face. A peak sits node_layer below the
-        level, so the next row's trough lands on top of it.
+        Level m has n - m diamonds per face, on the base scaled toward the apex.
+        A peak sits node_layer below the level, so the next row's trough lands
+        on top of it.
         """
         n = self.diamonds_per_face
         q = n - level
-        half = self.half_start * q / n
-        z = self.z_start + level * self.row_height - (self.node_layer if peak else 0)
-        u = (face + (j / q if q else 0)) / 4
-        return square_point(half, u, z, self.center)
+        z = self.z_start + level * self.row_height
+        scale = (1 - self.z_start / self.height) * q / n
+        p0 = self.base[face % self.faces]
+        p1 = self.base[(face + 1) % self.faces]
+        t = j / q if q else 0
+        ax, ay = self.apex
+        x = ax + scale * (p0[0] + t * (p1[0] - p0[0]) - ax)
+        y = ay + scale * (p0[1] + t * (p1[1] - p0[1]) - ay)
+        return fc.Point(x=x, y=y, z=z - (self.node_layer if peak else 0))
 
     def row(self, m: int) -> list:
         """Zigzag loop between level m (troughs) and m+1 (peaks), from corner 0.
 
-        Per face: corner peak, then alternating troughs/peaks. At corners 1-3,
-        after arriving at the corner peak, travel down the edge and print it
-        upward. Corner 0's edge is printed by the step up between rows.
+        Per face: corner peak, then alternating troughs/peaks. At corners other
+        than 0, after arriving at the corner peak, travel down the edge and
+        print it upward. Corner 0's edge is printed by the step up between rows.
         """
         q = self.diamonds_per_face - m
         points = []
-        for face in range(4):
+        for face in range(self.faces):
             corner_peak = self.node(m + 1, face, 0, peak=True)
             points.append(corner_peak)
             if face:
@@ -133,27 +200,34 @@ class Lattice:
             points += self.row(m)
         return points
 
-    def cap(self) -> list:
-        """X of edge strands from the top corners to the apex.
+    def _cap_pairs(self) -> list[tuple[int, int]]:
+        half = self.faces // 2
+        return [(i, i + half) for i in range(half)]
 
-        Starts where the last row ends (corner 0); travels between the two halves.
+    def cap(self) -> list:
+        """Edge strands from the top corners to the apex, in opposite pairs.
+
+        Starts where the last row ends (corner 0); travels between pairs.
         """
         top = self.diamonds_per_face - 1
         apex = self.node(self.diamonds_per_face, 0, 0, peak=True)
-        c = [self.node(top, f, 0, peak=True) for f in range(4)]
-        assert c[1].z is not None
-        return [
-            apex,
-            c[2],
-            fc.Extruder(on=False),
-            fc.Point(z=c[1].z + 2),
-            fc.Point(x=c[1].x, y=c[1].y),
-            c[1],
-            fc.Extruder(on=True),
-            apex.model_copy(),
-            c[3],
-        ]
+        c = [self.node(top, f, 0, peak=True) for f in range(self.faces)]
+        steps = []
+        for i, (a, b) in enumerate(self._cap_pairs()):
+            if i:
+                z = c[a].z
+                assert z is not None
+                steps += [
+                    fc.Extruder(on=False),
+                    fc.Point(z=z + 2),
+                    fc.Point(x=c[a].x, y=c[a].y),
+                    c[a],
+                    fc.Extruder(on=True),
+                ]
+            steps += [apex.model_copy(), c[b]]
+        return steps
 
     def end(self) -> fc.Point:
         """Where cap() finishes."""
-        return self.node(self.diamonds_per_face - 1, 3, 0, peak=True)
+        b = self._cap_pairs()[-1][1]
+        return self.node(self.diamonds_per_face - 1, b, 0, peak=True)
