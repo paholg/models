@@ -13,8 +13,9 @@ import math
 from shapely.geometry import Polygon
 
 from lib import u1
+from lib.hat import hat
 from lib.preview import preview
-from lib.pyramid import CENTER, Lattice, polygon_floor, strand_steps
+from lib.pyramid import Lattice, polygon_floor, strand_steps
 from lib.settings import DEFAULT
 
 S = DEFAULT
@@ -29,27 +30,15 @@ MIN_STRAND_ANGLE = 50.0  # degrees from horizontal, outer lattice
 # sqrt(3) edges, for near-uniform diamonds but an extra rib up those faces.
 MAX_FACE_LENGTH = 1.8
 
-INNER_SCALE = 0.55  # inner hat, scaled toward the apex
+INNER_SCALE = (
+    0.55  # inner hat, scaled toward the apex (see hat_roof for a constant gap)
+)
 INNER_DIAMONDS_PER_FACE = 4
 INNER_MIN_STRAND_ANGLE = 45.0  # lower slope than the outer
 
 STRAND_DIAMETER = 0.6
 STRAND_SPEED = 600  # mm/min
 TRAVEL_CLEARANCE = 5.0
-
-
-def hat(unit: float) -> list[tuple[float, float]]:
-    """The hat polykite, CCW, in mm.
-
-    Vertices on the hex grid, from Smith, Myers, Kaplan & Goodman-Strauss (2023).
-    """
-    s3 = math.sqrt(3)
-    grid = [(0, 0), (-1, -1), (0, -2), (2, -2), (2, -1), (4, -2)]
-    grid += [(5, -1), (4, 0), (3, 0), (2, 2), (0, 3), (0, 2), (-1, 2)]
-    pts = [((x + y / 2) * unit, (s3 / 2 * y) * unit) for x, y in grid]
-    if not Polygon(pts).exterior.is_ccw:
-        pts.reverse()
-    return pts
 
 
 def split_long_edges(pts: list[tuple[float, float]], max_len: float) -> list:
@@ -101,40 +90,41 @@ def height_for(base, apex, min_angle: float) -> float:
     return worst * math.tan(math.radians(min_angle))
 
 
-# Center the hat's bounding box on the bed.
+def inset(outline: list[tuple[float, float]], distance: float) -> list:
+    """Outline offset inward by `distance`, CCW, starting near outline[0], long edges split."""
+    pts = list(Polygon(outline).buffer(-distance, join_style="mitre").exterior.coords)
+    pts = pts[:-1]
+    if not Polygon(pts).exterior.is_ccw:
+        pts.reverse()
+    # buffer() may rotate the vertex order.
+    first = min(range(len(pts)), key=lambda i: math.dist(pts[i], outline[0]))
+    pts = pts[first:] + pts[:first]
+    return split_long_edges(pts, MAX_FACE_LENGTH * UNIT)
+
+
 outline = hat(UNIT)
-minx, miny, maxx, maxy = Polygon(outline).bounds
-dx, dy = CENTER[0] - (minx + maxx) / 2, CENTER[1] - (miny + maxy) / 2
-outline = [(x + dx, y + dy) for x, y in outline]
-apex = kernel_center(outline)
 
 # Strand centerlines: outer sits half a line in from the floor's edge.
-outer_base = list(Polygon(outline).buffer(-LW / 2, join_style="mitre").exterior.coords)[
-    :-1
-]
-if not Polygon(outer_base).exterior.is_ccw:
-    outer_base.reverse()
-# buffer() may rotate the vertex order; start nearest the original first vertex.
-first = min(range(len(outer_base)), key=lambda i: math.dist(outer_base[i], outline[0]))
-outer_base = outer_base[first:] + outer_base[:first]
-outer_base = split_long_edges(outer_base, MAX_FACE_LENGTH * UNIT)
+outer_base = inset(outline, LW / 2)
+apex = kernel_center(outer_base)
 inner_base = [
     (apex[0] + INNER_SCALE * (x - apex[0]), apex[1] + INNER_SCALE * (y - apex[1]))
     for x, y in outer_base
 ]
 
 z_start = BOTTOM_LAYERS * LH + STRAND_DIAMETER
+outer_apex = inner_apex = apex
 outer = Lattice(
     base=outer_base,
-    apex=apex,
-    height=height_for(outer_base, apex, MIN_STRAND_ANGLE),
+    apex=outer_apex,
+    height=height_for(outer_base, outer_apex, MIN_STRAND_ANGLE),
     diamonds_per_face=DIAMONDS_PER_FACE,
     z_start=z_start,
 )
 inner = Lattice(
     base=inner_base,
-    apex=apex,
-    height=height_for(inner_base, apex, INNER_MIN_STRAND_ANGLE),
+    apex=inner_apex,
+    height=height_for(inner_base, inner_apex, INNER_MIN_STRAND_ANGLE),
     diamonds_per_face=INNER_DIAMONDS_PER_FACE,
     z_start=z_start,
 )
