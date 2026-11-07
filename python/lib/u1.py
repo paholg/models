@@ -107,8 +107,12 @@ def tool_change(
     s: Settings = DEFAULT,
     lift: float = 1.5,
     to: fc.Point | None = None,
+    travel_z: float | None = None,
 ) -> list:
     """Steps to switch to `tool` at point `at`, then continue from `to` (default `at`).
+
+    After the switch, the head rises to `travel_z` (default: `lift` above `at`),
+    moves over `to`, then descends, so set `travel_z` above anything in the way.
 
     Based on the stock profile's change_filament_gcode. The old tool is
     retracted and not unretracted, so switching back to a tool isn't handled yet.
@@ -116,6 +120,9 @@ def tool_change(
     if at.x is None or at.y is None or at.z is None:
         raise ValueError(f"tool_change needs a point with x, y and z: {at}")
     to = to or at
+    if to.x is None or to.y is None or to.z is None:
+        raise ValueError(f"tool_change needs a point with x, y and z: {to}")
+    safe_z = max(at.z + lift, travel_z or 0)
     nozzle = s.filaments[tool].nozzle_temp
     return [
         fc.ManualGcode(
@@ -132,11 +139,14 @@ T{tool}
 M109 T{tool} S{nozzle} ; not in stock profile: avoid cold extrusion
 SM_PRINT_PREEXTRUDE_FILAMENT INDEX={tool}
 G90
-G0 X{at.x:.4f} Y{at.y:.4f} Z{at.z + lift:.4f} F8000 ; back over the part
+G0 Z{safe_z:.4f} F8000
+G0 X{at.x:.4f} Y{at.y:.4f} F8000 ; back over the part
 ;===== end tool change ====="""
         ),
-        # FullControl now knows where the head is again.
-        fc.Point(x=to.x, y=to.y, z=(to.z or 0) + lift),
+        # Re-sync FullControl with where the head is, then travel over and down.
+        fc.Point(x=at.x, y=at.y, z=safe_z),
+        fc.Point(x=to.x, y=to.y, z=safe_z),
+        fc.Point(x=to.x, y=to.y, z=to.z + lift),
         to.model_copy(),
         fc.Extruder(on=True),
     ]
