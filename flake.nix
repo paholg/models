@@ -20,13 +20,19 @@
         };
 
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            openscad-lsp
-            openscad-unstable
-            unzip
-
-            snapmaker-orca
-          ];
+          packages =
+            with pkgs;
+            [
+              openscad-lsp
+              openscad-unstable
+              ruff
+              ty
+              unzip
+              uv
+            ]
+            ++ [
+              snapmaker-orca
+            ];
 
           FONTCONFIG_FILE = pkgs.makeFontsConf {
             fontDirectories = [ pkgs.liberation_ttf ];
