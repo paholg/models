@@ -25,6 +25,7 @@
             [
               openscad-lsp
               openscad-unstable
+              prusa-slicer
               ruff
               ty
               unzip
