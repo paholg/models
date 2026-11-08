@@ -15,7 +15,7 @@ from shapely.geometry import Polygon
 from lib import u1
 from lib.hat import hat
 from lib.preview import preview
-from lib.pyramid import Lattice, polygon_floor, strand_steps
+from lib.pyramid import Lattice, kernel_center, polygon_floor, strand_steps
 from lib.settings import DEFAULT
 
 S = DEFAULT
@@ -54,28 +54,6 @@ def split_long_edges(pts: list[tuple[float, float]], max_len: float) -> list:
             for k in range(parts)
         ]
     return out
-
-
-def kernel_center(pts: list[tuple[float, float]]) -> tuple[float, float]:
-    """Centroid of the kernel: points that see every edge (left of each CCW edge)."""
-    big = 1e4
-    k = Polygon([(-big, -big), (big, -big), (big, big), (-big, big)])
-    for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1], strict=True):
-        dx, dy = x1 - x0, y1 - y0
-        nx, ny = -dy, dx  # left normal
-        k = k.intersection(
-            Polygon(
-                [
-                    (x0 - dx * big, y0 - dy * big),
-                    (x1 + dx * big, y1 + dy * big),
-                    (x1 + dx * big + nx * big, y1 + dy * big + ny * big),
-                    (x0 - dx * big + nx * big, y0 - dy * big + ny * big),
-                ]
-            )
-        )
-    assert not k.is_empty, "base isn't star-shaped"
-    c = k.centroid
-    return (c.x, c.y)
 
 
 def height_for(base, apex, min_angle: float) -> float:

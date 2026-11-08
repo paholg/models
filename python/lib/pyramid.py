@@ -96,6 +96,52 @@ def polygon_floor(
     return steps
 
 
+def kernel_center(pts: list[tuple[float, float]]) -> tuple[float, float]:
+    """Centroid of the kernel: points that see every edge (left of each CCW edge)."""
+    big = 1e4
+    k = Polygon([(-big, -big), (big, -big), (big, big), (-big, big)])
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1], strict=True):
+        dx, dy = x1 - x0, y1 - y0
+        nx, ny = -dy, dx  # left normal
+        k = k.intersection(
+            Polygon(
+                [
+                    (x0 - dx * big, y0 - dy * big),
+                    (x1 + dx * big, y1 + dy * big),
+                    (x1 + dx * big + nx * big, y1 + dy * big + ny * big),
+                    (x0 - dx * big + nx * big, y0 - dy * big + ny * big),
+                ]
+            )
+        )
+    assert not k.is_empty, "base isn't star-shaped"
+    c = k.centroid
+    return (c.x, c.y)
+
+
+def best_view(pts: list[tuple[float, float]], step: float = 0.25) -> tuple[float, float]:
+    """The point most inside every edge's line (CCW outline).
+
+    Maximizes the smallest signed distance to the edges' lines: in the kernel
+    when there is one (as far from every edge as possible), otherwise the point
+    that's least behind any edge, so scaling toward it barely tips that face out.
+    """
+
+    def worst(x: float, y: float) -> float:
+        return min(
+            ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) / math.dist((x0, y0), (x1, y1))
+            for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1], strict=True)
+        )
+
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    nx, ny = int((max(xs) - min(xs)) / step), int((max(ys) - min(ys)) / step)
+    grid = (
+        (min(xs) + i * step, min(ys) + j * step)
+        for i in range(nx + 1)
+        for j in range(ny + 1)
+    )
+    return max(grid, key=lambda p: worst(*p))
+
+
 @dataclass(frozen=True)
 class Lattice:
     """Diamond lattice on a pyramid over a star-shaped polygon.
