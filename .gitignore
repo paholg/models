@@ -1,6 +1,9 @@
 tmp/*
 !tmp/.keep
 
+gen/*
+!gen/.keep
+
 .direnv/
 
 __pycache__/

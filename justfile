@@ -18,3 +18,12 @@ preview file:
             *.html) xdg-open "$f" >/dev/null 2>&1 & ;;
         esac
     done <<< "$out"
+
+# Clear gen/, then export each part a .scad file lists in its `// export:`
+# line to gen/<stem>-<part>.3mf, one object per color. Save Orca projects made
+# from them next to the .scad.
+export file:
+    find gen -mindepth 1 ! -name .keep -delete
+    for p in $(sed -n 's|^// export:||p' {{file}}); do \
+        openscad -q --enable=lazy-union -D "part=\"$p\"" -o "gen/{{file_stem(file)}}-$p.3mf" {{file}}; \
+    done
