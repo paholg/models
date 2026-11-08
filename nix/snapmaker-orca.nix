@@ -16,6 +16,14 @@ appimageTools.wrapType2 {
 
   extraPkgs = _: [ webkitgtk_4_1 ];
 
+  # Disable the input method (ibus/fcitx) for Orca: under XWayland it injects
+  # stray text into ImGui text fields (e.g. the emboss tool) and steals focus.
+  profile = ''
+    export XMODIFIERS=@im=none
+    export GTK_IM_MODULE=gtk-im-context-simple
+    export QT_IM_MODULE=
+  '';
+
   # Bundled printer/filament/process profiles (what Orca copies into ~/.config on startup).
   passthru.profiles = "${contents}/resources/profiles";
 
