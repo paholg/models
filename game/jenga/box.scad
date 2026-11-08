@@ -12,6 +12,8 @@
 // Print the stacker on its right side and the lid face down. The stacker and lid are output at 45° to fit
 // the bed diagonally.
 
+// export: stacker lid
+
 /* [Output] */
 part = "assembly"; // [assembly, stack, stacker, lid]
 // Lid height above closed, in the assembly view.

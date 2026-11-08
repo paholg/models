@@ -3,8 +3,11 @@
 // x is right, y is up, z is out from the wall (wall at z = 0). Gang 0 is the
 // leftmost gang, centered at the origin.
 
+// export: print
+
 /* [Output] */
-part = "assembly"; // [assembly, plate, cap]
+// "print" is the plate and cap side by side on the bed.
+part = "assembly"; // [assembly, print, plate, cap]
 
 /* [Layout] */
 // Frame shifts away from neighboring gangs as needed.
@@ -224,12 +227,20 @@ module plug() {
       [z_back + dt / 2 - 3.5, z_back + dt / 2 + 3.5]);
 }
 
-if (part == "plate") {
-  plate();
-} else if (part == "cap") {
-  // Front face down.
+// Front face down, centered on the origin.
+module print_cap() {
   translate([0, 0, z_top]) rotate([180, 0, 0])
     translate([0, -(dev_top + tub_y1) / 2, 0]) cap();
+}
+
+if (part == "print") {
+  color("white") plate();
+  color("lightgray") translate([(plate_x0 + plate_x1) / 2, -plate_h / 2 - 10, 0])
+    print_cap();
+} else if (part == "plate") {
+  plate();
+} else if (part == "cap") {
+  print_cap();
 } else {
   color("white") plate();
   on_frame() {
