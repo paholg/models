@@ -130,13 +130,13 @@ sl = plate_side / 2 + hp;
 chan_reach = sl + c * sqrt(2);
 bump_u = hp - bump_r + bump_h;
 
-// Each player has a sixes slider (0, 6, 12, 18) and a ones slider (0-5).
-// The sixes track shares the ones track's top.
+// Each player has a sixes slider (0-30) and a ones slider (0-5), for scores
+// up to 35, the long game. The two tracks are the same length.
 //
 // This is the -u board, read from the bottom end. The other board is this one
 // turned 180° about (0, v_c), so it can come no closer to the top than the
 // seam allows; this one stops the same distance from the bottom.
-n_sixes = 4;
+n_sixes = 6;
 n_ones = 6;
 v_c = box_h / 2;
 end_gap = box_h - z_sb + 1.5;
