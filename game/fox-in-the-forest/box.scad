@@ -7,7 +7,7 @@
 // tongue, and the lid's walls cover the outer half, flush with the body.
 //
 // Print the body upright and the lid top down. The sliders print in place in
-// the body's back channels, captured, each at its zero.
+// the body's back channels, captured, each at the bottom of its track.
 // Every downward face on the sliders and channels is 45° or steeper.
 //
 // The box lies on its front between the players, who sit at its ends. Each
@@ -57,7 +57,7 @@ snap_x_back = 28;
 snap_clear = 0.1;
 
 /* [Scoreboard] */
-font = "Liberation Sans:style=Bold";
+font = "TeX Gyre Bonum:style=Bold";
 num_h = 4.5;
 num_depth = 0.6;
 // Between a label and its slider's tip.
@@ -144,8 +144,9 @@ v_ones = end_gap + chan_reach;
 v_sixes = v_ones + (n_ones - n_sixes) * pitch;
 
 num_size = num_h / 0.97;
-w_two = 1.12 * num_size;
-w_one = 0.56 * num_size;
+// Widest two- and one-digit labels ("18", "4") in the font, measured.
+w_two = 1.8 * num_size;
+w_one = 0.9 * num_size;
 // Slot centers in one board, from its left edge.
 u_sixes = w_two + num_gap + cap_tip;
 u_ones = u_sixes + cap_back + mid_gap + w_one + num_gap + cap_tip;
@@ -343,9 +344,11 @@ module lid() {
   }
 }
 
-// Each at position 0.
+// Each at the bottom of its track, like the test block: position 0 for
+// player 0, the last position for player 1, whose board is upside down.
 module sliders_in_place(players = [0, 1]) {
-  on_back() for (i = players) player(i) for (t = tracks) at_track(t) slider();
+  on_back() for (i = players) player(i) for (t = tracks) at_track(t)
+    translate([0, i == 0 ? 0 : (t[2] - 1) * pitch, 0]) slider();
 }
 
 module assembly(lift) {
