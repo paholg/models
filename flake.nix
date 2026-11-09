@@ -25,6 +25,7 @@
             [
               openscad-lsp
               openscad-unstable
+              orca-slicer
               prusa-slicer
               ruff
               ty
