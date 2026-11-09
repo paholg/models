@@ -18,7 +18,7 @@
 
 /* [Output] */
 // "print" is every printed piece in place on the bed, one object per color.
-part = "closed"; // [closed, open, print, body, numbers, sliders, lid, test_block]
+part = "closed"; // [closed, open, print, body, numbers, fox, sliders, lid, test_block]
 
 /* [Cards] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
@@ -71,6 +71,13 @@ player_gap = 5;
 // Title traced from the Deluxe box front, inlaid flush in the lid top.
 logo_w = 58;
 logo_depth = 0.6;
+
+/* [Fox] */
+// Fox silhouette inlaid flush in the body's front, below the seam.
+fox_h = 50;
+fox_depth = 0.6;
+// Center height of the fox on the front.
+fox_z = 31;
 
 /* [Slider] */
 // Print-in-place gap between slider and body, all around.
@@ -320,7 +327,15 @@ module body() {
     }
     box([-cav.x / 2, cav.x / 2], [wall, y_back], [floor_t, box_h + 1]);
     on_back() board_cuts();
+    fox(eps);
   }
+}
+
+// Reads from the front.
+module fox(above = 0) {
+  translate([0, 0, fox_z]) rotate([90, 0, 0])
+    translate([0, 0, -fox_depth]) linear_extrude(fox_depth + above, convexity = 10)
+      resize([0, fox_h], auto = true) import("fox.svg", center = true);
 }
 
 module numbers() {
@@ -354,6 +369,7 @@ module sliders_in_place(players = [0, 1]) {
 module assembly(lift) {
   color("darkgreen") body();
   color("white") numbers();
+  color("orange") fox();
   color("orange") sliders_in_place([0]);
   color("royalblue") sliders_in_place([1]);
   color("forestgreen") translate([0, 0, lift]) lid();
@@ -392,8 +408,11 @@ if (part == "print") {
   // New pieces go last, so a saved Orca project's parts keep their order.
   color("white") print_lid() logo();
   color("royalblue") sliders_in_place([1]);
+  color("orange") fox();
 } else if (part == "body") {
   body();
+} else if (part == "fox") {
+  fox();
 } else if (part == "numbers") {
   numbers();
 } else if (part == "lid") {
