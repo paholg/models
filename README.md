@@ -7,17 +7,9 @@ is the current process.
 
 **Initial Setup**
 
-1. Run `just export $FILE.scad`. This will create a 3mf file in `gen/`.
-2. Run Snapmaker Orca, import that file.
-3. Do whatever in Orca
-4. Save the project next to the `.scad` file, so it will be tracked by git.
-
-**Edits**
-1. Run `just export $FILE.scad`
-2. In Snapmaker Orca, in Pepare, right click the object and "Reload from disk".
-
-*NOTE:* This only works for editing parts, not for adding/removing parts. On
-add/remove, it's probably easiest to start the Orca project over.
+1. Run `just generate $FILE.scad`. This will create a 3mf file in `~/3d-project-generated/`.
+2. Run Orca, import that file.
+3. Do whatever in Orca.
 
 ## Python
 
