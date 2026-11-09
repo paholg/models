@@ -60,7 +60,7 @@ snap_clear = 0.1;
 font = "TeX Gyre Bonum:style=Bold";
 num_h = 4.5;
 num_depth = 0.6;
-// Between a label and its slider's tip.
+// Between a label and its slider's cap.
 num_gap = 1;
 pitch = 8;
 // Between a sixes slider and the ones labels.
@@ -82,10 +82,9 @@ fox_z = 31;
 /* [Slider] */
 // Print-in-place gap between slider and body, all around.
 pip_clear = 0.3;
-// The cap points at its label: tip reach to the left, flat back edge to the
-// right. Its bottom and top run at 45° from the tip and back corners.
-cap_tip = 4;
-cap_back = 3;
+// The cap is a diamond of half-width cap_w, its corners rounded by cap_r.
+cap_w = 3.5;
+cap_r = 1;
 cap_t = 1.2;
 cap_chamfer = 0.4;
 // Stem through the slot, and the face lip it passes through.
@@ -128,9 +127,11 @@ chan_d = slot_d + 2 * c + plate_t;
 assert(chan_d + 0.8 <= back_t, "back wall too thin for the slider channel");
 hs = stem_w / 2;
 hp = plate_w / 2;
-stem_c = cap_tip - hs - 0.5;
+// The stem's 45° points reach the cap's bottom and top, so the cap's lowest
+// layer prints joined to the stem, which hangs off the plate. The rounded cap
+// tip sits higher, leaving the stem tip just behind and below it.
+stem_c = cap_w - hs;
 assert(stem_c >= 0, "stem too wide for the cap");
-assert(cap_back < cap_tip, "cap back must be inside its 45° sides");
 assert(hp - beam_t - slit_w >= hs, "plate too narrow for the detent beam");
 // Slider half-length, and how far a channel reaches past its end positions.
 sl = plate_side / 2 + hp;
@@ -155,9 +156,9 @@ num_size = num_h / 0.97;
 w_two = 1.8 * num_size;
 w_one = 0.9 * num_size;
 // Slot centers in one board, from its left edge.
-u_sixes = w_two + num_gap + cap_tip;
-u_ones = u_sixes + cap_back + mid_gap + w_one + num_gap + cap_tip;
-board_w = u_ones + cap_back;
+u_sixes = w_two + num_gap + cap_w;
+u_ones = u_sixes + cap_w + mid_gap + w_one + num_gap + cap_w;
+board_w = u_ones + cap_w;
 board_l = -(2 * board_w + player_gap) / 2;
 // Tracks as [u, v of position 0, positions, step].
 tracks = [
@@ -240,7 +241,7 @@ module track_cut(n) {
 }
 
 module label(s, u, v) {
-  translate([u - cap_tip - num_gap, v])
+  translate([u - cap_w - num_gap, v])
     text(s, size = num_size, font = font, halign = "right", valign = "center");
 }
 
@@ -259,8 +260,8 @@ module board_cuts() {
 }
 
 module cap_2d() {
-  k = cap_tip - cap_back;
-  polygon([[-cap_tip, 0], [0, -cap_tip], [cap_back, -k], [cap_back, k], [0, cap_tip]]);
+  a = cap_w;
+  offset(r = cap_r) offset(delta = -cap_r) polygon([[-a, 0], [0, -a], [a, 0], [0, a]]);
 }
 
 // Slider at position 0, in face coordinates.
@@ -388,7 +389,7 @@ module on_test() {
 module test_block() {
   h = test_v0 + (test_n - 1) * pitch + chan_reach + 1.5;
   on_test() difference() {
-    slab([-cap_tip - num_gap - w_one - 2, bump_u + bump_r + c + 2],
+    slab([-cap_w - num_gap - w_one - 2, bump_u + bump_r + c + 2],
          [-test_v0, h - test_v0], 0, back_t);
     track_cut(test_n);
     track_labels(test_n, 1, eps);
