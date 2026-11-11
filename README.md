@@ -7,8 +7,10 @@ is the current process.
 
 **Initial Setup**
 
-1. Run `just generate $FILE.scad`. This will create a 3mf file in `~/3d-project-generated/`.
-2. Run Orca, import that file.
+1. Run `just generate $FILE.scad`. This will create an Orca project in
+   `~/3d-project-generated/` for each part on the file's `// export:` line, with one part per
+   color and the slicer settings from its `// orca:` line (see `python/generate.py`).
+2. Open that project in Orca.
 3. Do whatever in Orca.
 
 ## Python

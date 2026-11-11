@@ -20,11 +20,9 @@ preview file:
     done <<< "$out"
 
 # Clear ~/3d-project-generated, then export each part a .scad file lists in its `// export:`
-# line to ~/3d-project-generated/<stem>-<part>.3mf, one object per color. Save Orca projects made
-# from them next to the .scad.
+# line to ~/3d-project-generated/<stem>-<part>.3mf, an Orca project with one part per color and
+# the settings from the file's `// orca:` line (see python/generate.py).
 generate file:
     rm -rf ~/3d-project-generated
     mkdir ~/3d-project-generated
-    for p in $(sed -n 's|^// export:||p' {{file}}); do \
-        openscad -q --enable=lazy-union -D "part=\"$p\"" -o "$HOME/3d-project-generated/{{file_stem(file)}}-$p.3mf" {{file}}; \
-    done
+    uv --project python run python/generate.py {{file}} ~/3d-project-generated
