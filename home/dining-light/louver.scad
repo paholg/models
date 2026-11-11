@@ -25,6 +25,15 @@ cell = 10;
 // eye roughly 31, so aim for about 30.
 depth = 17;
 wall = 0.8;
+// Cells in the middle of the louver are stretched this much along the light,
+// to let more light through. Shielding across the table is unchanged; only
+// people sitting in line with the light lose some. 1 = regular hexagons.
+stretch = 2;
+// Regular cells are kept for this far in from each end. 0 for this test piece;
+// the full-length light will want regular cells at its two ends.
+end_len = 0;
+// Length over which the stretch eases in.
+ramp_len = 0;
 
 /* [Frame] */
 rail_t = 3;
@@ -49,14 +58,31 @@ pitch = cell + wall;
 echo(str("cutoff across flats: ", atan(cell / depth), " deg from straight down"));
 echo(str("cutoff across corners: ", atan(cell * 2 / sqrt(3) / depth), " deg"));
 
+// The hex grid is laid out unstretched along u, then mapped to x: stretched
+// in the middle, eased over the ramp, unstretched at the ends.
+mid_x = max(0, length / 2 - end_len - ramp_len);
+mid_u = mid_x / stretch;
+ramp_u = ramp_len * 2 / (stretch + 1);
+
+function warp(u) =
+    let (a = abs(u), t = a - mid_u)
+    sign(u) * (
+        a <= mid_u ? stretch * a
+        : t <= ramp_u ? mid_x + stretch * t - (stretch - 1) * t * t / (2 * ramp_u)
+        : mid_x + ramp_len + t - ramp_u);
+
 module hex_holes() {
-    // Flats face +-y, columns step along x.
-    dx = pitch * sqrt(3) / 2;
-    nx = ceil(length / 2 / dx) + 1;
+    // Flats face +-y, columns step along u.
+    r = pitch / sqrt(3);
+    du = pitch * sqrt(3) / 2;
+    nu = ceil((mid_u + ramp_u + end_len) / du) + 1;
     ny = ceil(width / 2 / pitch) + 1;
-    for (i = [-nx:nx], j = [-ny:ny])
-        translate([i * dx, (j + (i % 2 == 0 ? 0 : 0.5)) * pitch])
-            circle(d = cell * 2 / sqrt(3), $fn = 6);
+    for (i = [-nu:nu], j = [-ny:ny]) {
+        cu = i * du;
+        cy = (j + (i % 2 == 0 ? 0 : 0.5)) * pitch;
+        offset(delta = -wall / 2)
+            polygon([for (k = [0:5]) [warp(cu + r * cos(60 * k)), cy + r * sin(60 * k)]]);
+    }
 }
 
 module honeycomb() {
