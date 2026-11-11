@@ -57,6 +57,8 @@ boats; we would want to print the prices (3, 5, 8) on it.
 
 VP bonus: 25 mm square, 2x "4 vp", 6x "3 vp", 8x "2 vp"
 
+Boats, in tiles: 8x 1x4, 10x 2x3, 12x 2x4, 10x 2x4
+
 ### Goods, Money, Animals
 
 Rather than list the size of all these, I'll list the shapes and numbers. A 1x1
@@ -79,6 +81,102 @@ Money:
 1x2: 32
 2x2: 18
 2x5: 5
+
+### Special tiles
+
+Two sections.
+
+One (the "under 9" with forge icon):
+
+xxx
+ x
+ x
+
+xx
+ xxx
+
+xx
+xx
+ x
+
+x
+xxxxx
+
+ x
+xxx
+ x
+ x
+
+xxx
+x xx
+
+The others:
+
+ x
+xxx
+xxx
+
+ xx
+xxxx
+xxxx
+ xx
+
+ xx
+xxx
+x
+
+xxxx
+ xx
+ xx
+ xx
+
+ x
+xxx
+ x
+
+x x
+x x
+xxx
+
+xxx
+xxx
+ x
+ x
+ x
+
+xxx
+xxx
+ x
+xxx
+
+  x
+x x x
+xxxxx
+
+  x
+ xxx
+xxxxx
+
+ x
+xxx
+xxx
+ x
+
+x x x
+xxxxx
+xxxxx
+
+ x
+xxx
+x x
+
+xxxxx
+
+xxxx
+ xxx
+ xx
+ xx
+
 
 ## Misc
 
