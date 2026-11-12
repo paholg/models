@@ -82,8 +82,13 @@ slot_bottom = 4;
 // Pocket depth; tiles are 2.25 thick.
 pocket_d = 2.6;
 pocket_clear = 0.4;
-// How far the notch goes below the pocket floor.
-notch_extra = 1;
+// Under one end of each tile the pocket floor drops by tilt_d, for tilt_a in
+// from the tile's edge: press there and the far end tips up to grab.
+tilt_d = 2.5;
+tilt_a = 8;
+// The step down is an S: rounded over at the top, where the tile pivots, and
+// filleted at the bottom.
+tilt_r = 1.25;
 special_margin = 3;
 
 /* [Hidden] */
@@ -92,7 +97,7 @@ special_margin = 3;
 // Printing: the part is exported once per color in print_colors, with $only
 // set, and each piece of geometry shows only in its own pass. Unset (the
 // preview), everything shows.
-c_game = "slategray";
+c_game = "lightsteelblue";
 c_setup = "tan";
 vik_colors = ["red", "blue", "yellow", "white"];
 $only = undef;
@@ -113,9 +118,12 @@ up_h = deck_size(0).x;
 front_y = deck_size(0).y;
 tier_h = up_h / 2;
 decks_x = sum([for (h = deck_hs) deck_size(h).z + gap]) - gap;
-big = [box.x - 1, box.y - 1 - front_y - gap];
-islands = [129 + 1.5 + 2 * post_t, big.y];
-wood = [box.x - 1 - islands.x - gap, big.y];
+// Behind the front strip.
+back_y = box.y - 1 - front_y - gap;
+// The big tiles' tray: a half tray's footprint.
+big = [box.x - 1, half.y];
+islands = [129 + 1.5 + 2 * post_t, back_y];
+wood = [box.x - 1 - islands.x - gap, back_y];
 
 c_food = "orange";
 c_equip = "seagreen";
@@ -165,18 +173,19 @@ money_rows = [
 ];
 
 // Big tiles and animals: one shared copy, full counts. Animals in front,
-// equipment behind.
-big_cols = [89.5, 101, -1];
+// equipment behind. Each bin is two tiles wide and one deep behind its scoop,
+// filled about as full as the half trays' bins.
+big_cols = [89.5, 90, -1];
 big_rows = [
-    [71, [
+    [-1, [
         ["A2x4", big_cols[0], t(4, 2), 18, c_animal],
         ["A3x4", big_cols[1], t(4, 3), 15, c_animal],
-        ["A2x5", big_cols[2], t(2, 5), 21, c_animal],
+        ["A2x5", big_cols[2], t(5, 2), 21, c_animal],
     ]],
     [-1, [
         ["E2x4", big_cols[0], t(4, 2), 20, c_equip],
         ["E3x4", big_cols[1], t(4, 3), 15, c_equip],
-        ["E2x5", big_cols[2], t(2, 5), 14, c_equip],
+        ["E2x5", big_cols[2], t(5, 2), 14, c_equip],
     ]],
 ];
 
@@ -196,8 +205,10 @@ boat_slot_lip = 2;
 boat_slot_bottom = 2;
 boat_well = [for (b = boats) b[1] + [boat_clear, boat_clear]];
 boat_well_y = max([for (w = boat_well) w.y]);
-// The market pieces are as tall as the layer, so nothing sits on them.
-boat_h = up_h;
+// Just tall enough for the tallest stack.
+boat_h = floor_t + max([for (b = boats) b[2]]) * tile_t;
+// Each well's floor is raised so its full stack comes flush with the top.
+function boat_floor(i) = max(floor_t, boat_h - boats[i][2] * tile_t);
 function boat_x(i) = wall + sum([for (j = [0:1:i - 1]) boat_well[j].x + wall]);
 boats_x = boat_x(len(boats));
 
@@ -212,7 +223,7 @@ module boat_tray() {
             sw = min(boat_slot_w, w.x - 2 * boat_slot_lip);
             // Well, against the back.
             translate([boat_x(i), boat.y - wall - w.y, 0]) {
-                well(w, floor_t, boat_h);
+                well(w, boat_floor(i), boat_h);
                 rim(w, boat_h);
             }
             // Pinch slot through the front and back walls, round-bottomed;
@@ -220,14 +231,14 @@ module boat_tray() {
             // through the outer side wall instead.
             wy = boat.y - wall - w.y;
             if (i == 0) translate([0, wy + w.y / 2, 0]) rotate(-90)
-                u_slot(boat_slot_w, floor_t + boat_slot_bottom, boat_h + 1, 0, wall, [[0, 1], [wall, -1]]);
+                u_slot(boat_slot_w, boat_floor(i) + boat_slot_bottom, boat_h + 1, 0, wall, [[0, 1], [wall, -1]]);
             else translate([boat_x(i) + w.x / 2, 0, 0])
-                u_slot(sw, floor_t + boat_slot_bottom, boat_h + 1, 0, boat.y,
+                u_slot(sw, boat_floor(i) + boat_slot_bottom, boat_h + 1, 0, boat.y,
                        [[0, 1], [wy, -1], [wy + w.y, 1], [boat.y, -1]]);
         }
     }
     for (i = [0:len(boats) - 1]) paint("black")
-        translate([boat_x(i) + boat_well[i].x / 2, boat.y - wall - 3, floor_t])
+        translate([boat_x(i) + boat_well[i].x / 2, boat.y - wall - 3, boat_floor(i)])
         rotate(90) linear_extrude(0.4) text(boats[i][0], size = 3.5, halign = "right", valign = "center");
 }
 
@@ -302,13 +313,15 @@ module round_well(r, z0, h, f = fillet_r, c = chamfer) rotate_extrude($fn = 96) 
 module octahedron(c) polyhedron(
     [[c, 0, 0], [-c, 0, 0], [0, c, 0], [0, -c, 0], [0, 0, c], [0, 0, -c]],
     [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]]);
-// The 2x5 money, and the 7 penalty tokens (30 mm round) thrown in.
+// The 2x5 money, and the 7 penalty tokens (30 mm round) thrown in. Half the
+// layer's height is plenty.
+money_h = tier_h;
 money_box = [market.x - boat.x - gap, market.y];
 money_box_rows = [
     [39, [["M2x5", -1, t(5, 2), 5, c_money]]],
     [-1, [["penalty", -1, [30, 30], 0, "lightgray"]]],
 ];
-module money_tray() bin_tray("money", money_box, boat_h, money_box_rows);
+module money_tray() bin_tray("money", money_box, money_h, money_box_rows);
 module market() {
     translate([0, market.y - boat.y, 0]) boat_tray();
     vp_tray();
@@ -511,6 +524,7 @@ module floor_slab(size, z0, h, s = 0) intersection() {
 // Same, for any 2D outline (children).
 // In steps of a printed layer (0.2 mm), which is what prints anyway; the
 // parts using it are render()ed so the preview doesn't shimmer on the steps.
+// (A true slope needs a minkowski() per outline, some 20x slower.)
 module rim_2d(h, c = chamfer, steps = 2) {
     for (i = [0:steps - 1]) translate([0, 0, h - c + i * c / steps])
         linear_extrude(c / steps + eps) offset(delta = (i + 1) * c / steps) children();
@@ -701,39 +715,70 @@ module big_tray() {
 
 // The special tiles' boards: a pocket per tile, the forge tiles on their
 // own board. Layout from pack_special.py.
-special_h = floor_t + notch_extra + pocket_d;
+special_h = floor_t + tilt_d + pocket_d;
 special_others_x0 = special_forge_w + special_gap;
 special_forge = [special_forge_w, special_size.y] + 2 * [special_margin, special_margin];
 special_others = [special_size.x - special_others_x0, special_size.y] + 2 * [special_margin, special_margin];
-// Finger notch: chamfered where it meets the board top (notch_top_c) and the
-// pocket floor (notch_step_c), filleted at its own floor (notch_fillet).
-notch_top_c = 0; // the pocket rim chamfers the notch's top
-notch_step_c = 0.5;
-notch_fillet = 0.5;
-module notch_cut(r = special_notch_r) {
-    d = pocket_d + notch_extra;
-    rf = r - notch_step_c;
-    rotate_extrude($fn = 96) polygon(concat(
-        [[0, 0]],
-        [for (a = [-90:15:0]) [rf - notch_fillet + notch_fillet * cos(a), notch_fillet + notch_fillet * sin(a)]],
-        [[rf, notch_extra - notch_step_c], [r, notch_extra], [r, d - notch_top_c],
-         [r + notch_top_c, d + eps], [0, d + eps]]
+// A tile's pocket outline, in board coordinates: outside corners rounded by
+// the clearance, inside corners sharp.
+module pocket_2d(st) offset(r = pocket_clear) translate(st[2]) for (c = st[1]) translate(c * unit) square(unit);
+// The chamfer round a pocket's rim, at z = 0 to c: a true slope, built a cell
+// at a time (each cell's is convex, and their union is the whole outline's).
+module pocket_rim(st, c = chamfer) translate(st[2]) for (cell = st[1]) translate(cell * unit) hull() {
+    linear_extrude(eps) offset(r = pocket_clear) square(unit);
+    translate([0, 0, c]) linear_extrude(eps) offset(r = pocket_clear + c) square(unit);
+}
+// The parts of the pocket whose floor drops: a strip along each side of the
+// tile's bounding box that can be a press end. A side is one if the tile is at
+// least tilt_min_cells long that way (for leverage), and its center of mass is
+// tilt_balance clear of the strip (so it rests flat). So a cross tips from any
+// arm, a bar from either end.
+tilt_min_cells = 3;
+tilt_balance = 3;
+function tile_n(st) = [max([for (c = st[1]) c.x]) + 1, max([for (c = st[1]) c.y]) + 1];
+function tile_com(st) = [for (k = [0, 1]) sum([for (c = st[1]) (c[k] + 0.5) * unit]) / len(st[1])];
+// [[left, right], [front, back]]
+function tilt_sides(st) = let (n = tile_n(st), com = tile_com(st)) [for (k = [0, 1]) [
+    n[k] >= tilt_min_cells && com[k] >= tilt_a + tilt_balance,
+    n[k] >= tilt_min_cells && com[k] <= n[k] * unit - tilt_a - tilt_balance]];
+module tilt_2d(st) intersection() {
+    pocket_2d(st);
+    n = tile_n(st) * unit;
+    sides = tilt_sides(st);
+    translate(st[2]) {
+        if (sides.x[0]) translate([-1, -1]) square([tilt_a + 1, n.y + 2]);
+        if (sides.x[1]) translate([n.x - tilt_a, -1]) square([tilt_a + 1, n.y + 2]);
+        if (sides.y[0]) translate([-1, -1]) square([n.x + 2, tilt_a + 1]);
+        if (sides.y[1]) translate([-1, n.y - tilt_a]) square([n.x + 2, tilt_a + 1]);
+    }
+}
+// The drop's cross-section, the tile's edge at x = 0, the drop's floor at
+// y = 0 and the pocket's at y = tilt_d.
+assert(tilt_r <= tilt_d / 2);
+module tilt_profile() {
+    r = tilt_r;
+    w = tilt_a - r; // the step's wall
+    polygon(concat(
+        [[-1, 0]],
+        [for (t = [-90:15:0]) [w - r + r * cos(t), r + r * sin(t)]],
+        [for (t = [180:-15:90]) [w + r + r * cos(t), tilt_d - r + r * sin(t)]],
+        [[tilt_a, tilt_d + eps], [-1, tilt_d + eps]]
     ));
 }
-// A tile's pocket outline with its notch, in board coordinates: every corner
-// rounded, the tile's corners by the clearance, the rest by fillet_r.
-module pocket_2d(st) offset(r = -fillet_r) offset(r = fillet_r + pocket_clear) {
-    translate(st[2]) for (c = st[1]) translate(c * unit) square(unit);
-    translate(st[3]) circle(r = special_notch_r - pocket_clear, $fn = 96);
-}
-// A pocket from z0 to h: floor edge chamfered by the clearance (so the tile
-// still sits flat), rim chamfered.
-module pocket_cut(z0, h, steps = 2) {
-    fc = pocket_clear;
-    translate([0, 0, z0 + fc]) linear_extrude(h - z0 - fc + eps) children();
-    for (i = [0:steps - 1]) translate([0, 0, z0 + i * fc / steps])
-        linear_extrude(fc / steps + eps) offset(delta = -(steps - i) * fc / steps) children();
-    rim_2d(h) children();
+// The drop along the left side of a box [0, 0] to n, and the cut for a whole
+// tile, from the drop's floor at z = 0.
+module tilt_strip(n) translate([0, n.y + 1, 0]) rotate([90, 0, 0]) linear_extrude(n.y + 2) tilt_profile();
+module tilt_cut(st) intersection() {
+    linear_extrude(tilt_d + 2 * eps) pocket_2d(st);
+    n = tile_n(st) * unit;
+    sides = tilt_sides(st);
+    swap = [[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]];
+    translate(st[2]) {
+        if (sides.x[0]) tilt_strip(n);
+        if (sides.x[1]) translate([n.x, 0, 0]) mirror([1, 0, 0]) tilt_strip(n);
+        if (sides.y[0]) multmatrix(swap) tilt_strip([n.y, n.x]);
+        if (sides.y[1]) translate([0, n.y, 0]) mirror([0, 1, 0]) multmatrix(swap) tilt_strip([n.y, n.x]);
+    }
 }
 module special_board(section) {
     m = special_margin;
@@ -742,10 +787,16 @@ module special_board(section) {
     body() render() difference() {
         cbox(size, special_h);
         for (st = special_tiles) if (st[0] == section) translate([m - x0, m, 0]) {
-            pocket_cut(special_h - pocket_d, special_h) pocket_2d(st);
-            translate([st[3].x, st[3].y, special_h - pocket_d - notch_extra]) notch_cut();
+            // Straight walls, so the tile has its full clearance all the way down.
+            translate([0, 0, special_h - pocket_d]) linear_extrude(pocket_d + eps) pocket_2d(st);
+            translate([0, 0, special_h - chamfer]) pocket_rim(st);
+            translate([0, 0, special_h - pocket_d - tilt_d]) tilt_cut(st);
         }
     }
+    // Preview only: tint the dropped floors, which are otherwise hard to see.
+    if ($preview && (is_undef($only) || $only == role_color("body"))) color("steelblue")
+        for (st = special_tiles) if (st[0] == section)
+            translate([m - x0, m, special_h - pocket_d - tilt_d]) linear_extrude(0.05) tilt_2d(st);
 }
 module special_boards() {
     special_board("forge");
