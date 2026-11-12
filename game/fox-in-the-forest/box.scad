@@ -1,76 +1,81 @@
 // Upright card box for The Fox in the Forest Deluxe: the 61 standard-size
-// cards in sleeves, standing on end, with a lift-off lid and a two-player
-// scoreboard on the back.
+// cards in sleeves, standing on end, with the score tracker (score.scad)
+// behind them, and a lift-off lid held on by magnets.
 //
-// x is across the cards, y is front (0) to back, z is up. The seam slopes
-// down toward the front. Above the seam the body walls step in to an inner
-// tongue, and the lid's walls cover the outer half, flush with the body.
+// x is across the cards, y is front (0) to back, z is up. The seam is level
+// across the front and back walls and slopes up between them along the sides.
 //
-// Print the body upright and the lid top down. The sliders print in place in
-// the body's back channels, captured, each at the bottom of its track, with a
-// peg standing out of the face. The caps print flat and glue onto the pegs.
-// Every downward face on the sliders and channels is 45° or steeper.
+// The box is ten flat panels, mitred and glued: floor, top, and a body and a
+// lid piece of each wall. Every panel prints with its outside face on the
+// bed, and the mitres meet on the box's edges, so no joint shows on a face.
 //
-// The box lies on its front between the players, who sit at its ends. Each
-// board reads upright from its player's end and sits toward it; one board is
-// the other turned 180° about the center of the back.
+// Bar magnets stand on edge in the front and back walls, in pockets open to
+// the inside and to the seam, each meeting its partner edge to edge across
+// the seam. They're magnetized through their thickness, so glue one of each
+// pair in flipped, to attract. A trapezoid key on each wall's seam locates
+// the lid. Hidden tabs inside the mitres line the panels up for gluing.
 
-// Each export imports into Orca as one object (answer yes when it asks), so
-// the flat-printed caps get their own files.
-// export: print caps test_block test_caps
+// export: print
 
 /* [Output] */
-// "print" is every printed piece in place on the bed, one object per color.
-part = "closed"; // [closed, open, print, body, numbers, fox, sliders, lid, caps, test_block, test_caps]
+// "print" is every panel on the bed, outside down, one object per color.
+part = "closed"; // [closed, open, exploded, print]
 
-/* [Cards] */
+/* [Contents] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
 sleeve = [66.5, 92.5];
 // 61 sleeved cards at ~0.61 mm each: a 0.30 mm card, 0.26 mm of sleeve, and
 // ~0.05 mm of loose-stack air.
 stack_h = 37.5;
+// The score tracker, rupees and all (score.scad: top_h + rupee_lift +
+// rupee_t).
+score_t = 9;
 card_clear = 0.5;
 // Above the cards, under the lid.
 top_clear = 0.5;
 
 /* [Box] */
-wall = 1.6;
-// Holds the score channels.
-back_t = 5;
-floor_t = 1.2;
-top_t = 1.6;
-corner_r = 1;
+// Side walls, floor and top.
+wall = 2;
 // How far the seam drops from back to front.
 seam_drop = 25;
-// Tongue thickness on the sides and front; the back tongue is half back_t.
-lip_t = 0.7;
-// How far the lid overlaps the tongue.
-lip_h = 5;
-lip_clear = 0.1;
-// Between the tongue top and the lid's top plate.
-lip_top_gap = 0.5;
+// Height of the lid at the back, top plate included.
+lid_back_h = 14;
+// Chamfer on the outside edges, which also blunts the mitres' knife edges.
+chamfer = 0.6;
 
-/* [Snap] */
-snap_r = 0.8;
-// How far the bumps stand off the lips.
-snap_h = 0.35;
-snap_len = 6;
-// Back bumps sit this far either side of center, clear of the channels.
-snap_x_back = 28;
-snap_clear = 0.1;
+/* [Magnets] */
+// Bar magnets in the seam: length along the wall, height, thickness.
+mag = [20, 10, 3];
+// Pocket clearance, on the length and the thickness.
+mag_c = 0.2;
+// Plastic outside a pocket; with the magnet, the front and back walls'
+// thickness.
+mag_skin = 0.8;
+// How far each magnet sits below its seam face, so the plastic bears.
+mag_recess = 0.05;
+// Magnets sit this far either side of center, on the front and the back.
+mag_x = 20;
 
-/* [Scoreboard] */
-font = "TeX Gyre Bonum:style=Bold";
-num_h = 4.5;
-num_depth = 0.6;
-// Half-width of a slider's lane, for placing labels; the caps overhang it.
-track_w = 3.5;
-// Between a label and its slider's lane.
-num_gap = 1;
-pitch = 8;
-// Between a sixes slider and the ones labels.
-mid_gap = 1.5;
-player_gap = 5;
+/* [Mitre tabs] */
+// Hidden tabs along every mitre, alternating between the two panels: each
+// reaches across the mitre's inner part into a notch in the other panel, so
+// the panels register. Rough tab length.
+tab_len = 12;
+// Where along the mitre, outside to inside, the tabs start.
+tab_start = 0.6;
+// Least plastic left outside a notch.
+tab_skin = 0.6;
+// Clearance around a tab in its notch.
+tab_c = 0.1;
+
+/* [Seam keys] */
+// Width at the base, height, and how far each flank leans in.
+key_w = 14;
+key_h = 2.5;
+key_lean = 1.25;
+// Clearance around a key in the lid.
+key_c = 0.15;
 
 /* [Logo] */
 // Title traced from the Deluxe box front, inlaid flush in the lid top.
@@ -84,371 +89,99 @@ fox_depth = 0.6;
 // Center height of the fox on the front.
 fox_z = 31;
 
-/* [Slider] */
-// Print-in-place gap between slider and body, all around.
-pip_clear = 0.3;
-// Gap under each printed slider, between its lower 45° faces and the end of
-// its channel. 0 rests it on the body, for a mechanism filament that doesn't
-// bond to the body's (tried with PETG in PLA: the stems snapped first).
-rest_gap = pip_clear;
-// The cap is a flat rupee lying across the track, glued onto the stem's
-// peg: cap_l to its points either way, cap_h to its flat push sides, its
-// points cap_p long. A straight wall cap_wall tall, then facets inset by
-// cap_bevel up to the flat top at cap_t.
-cap_l = 5.5;
-cap_h = 4;
-cap_p = 2.5;
-cap_t = 3;
-cap_wall = 1.2;
-cap_bevel = 1.5;
-// Socket for the peg, and the glue gap around it.
-socket_d = 2;
-glue_gap = 0.15;
-// Room for squeezed-out glue: grooves down the socket's sides and points,
-// glue_groove wide and deep, and a 45° chamfer glue_chamfer deep round its
-// mouth.
-glue_groove = 0.6;
-glue_chamfer = 0.6;
-// Between the cap and the face, glued on.
-cap_lift = 0.5;
-// Stem through the slot, and the face lip it passes through. Its straight
-// sides are stem_c either side of center, with 45° points.
-stem_w = 3.4;
-stem_c = 0.5;
-slot_d = 1.2;
-// Plate behind the lip. Its straight sides are plate_side long; its ends
-// come to 45° points.
-plate_w = 9.6;
-plate_t = 1.2;
-plate_side = 10;
-// Detent: a spring beam down each side of the plate, rooted at its bottom,
-// thinner than the plate so it can flex toward the lip. A 45° ridge on each
-// beam's back drops into a groove in the channel floor at each position.
-beam_w = 1.4;
-beam_t = 0.8;
-slit_w = 0.5;
-beam_root = 1;
-// How far the ridge stands off the beam. The beams must flex by
-// bump_h - 2 * pip_clear to get between positions.
-bump_h = 0.9;
-// Ridge position along the slider, from its center.
-bump_v = 3.5;
-
-/* [Colors] */
-// The in-place slider mechanism; the caps carry the player colors.
-mech_color = "darkgreen";
+/* [View] */
+// How far the panels pull apart in the exploded view.
+explode = 12;
 
 /* [Hidden] */
 $fn = 48;
 eps = 0.01;
 
-cav = [sleeve.x + card_clear, stack_h + card_clear, sleeve.y + top_clear];
-back_lip_t = back_t / 2;
+// Front and back wall thickness.
+tf = mag.z + mag_c / 2 + mag_skin;
+cav = [sleeve.x + card_clear, stack_h + score_t + card_clear, sleeve.y + top_clear];
 bx = cav.x + 2 * wall;
-by = wall + cav.y + back_t;
-box_h = floor_t + cav.z + top_t;
-y_back = by - back_t;
+by = cav.y + 2 * tf;
+box_h = cav.z + 2 * wall;
+xs = cav.x / 2;
+xo = bx / 2;
+y_back = by - tf;
+z_top = box_h - wall;
 // Seam height at the back and at the front.
-z_sb = box_h - top_t - lip_top_gap - lip_h;
+z_sb = box_h - lid_back_h;
 z_sf = z_sb - seam_drop;
-seam_k = seam_drop / y_back;
-function seam_z(y) = min(z_sf + seam_k * y, z_sb);
-
-c = pip_clear;
-chan_d = slot_d + 2 * c + plate_t;
-assert(chan_d + 0.8 <= back_t, "back wall too thin for the slider channel");
-hs = stem_w / 2;
-hp = plate_w / 2;
-// Slider half-length, and how far a channel reaches past its end positions.
-sl = plate_side / 2 + hp;
-assert(sl >= stem_c + hs, "plate shorter than the stem");
-assert(cap_t - socket_d >= 0.8, "cap too thin over the socket");
-chan_reach = sl + c * sqrt(2);
-// Peg tip, out from the face.
-w_peg = cap_lift + socket_d;
-// Where the stem's sloped underside meets the peg, inside the socket's mouth
-// chamfer: the slope reaches no further below the peg than the chamfer
-// opens up, so the caps fit over it.
-w_slope = cap_lift + glue_chamfer - glue_gap;
-// Bottom of the stem at the plate, below center.
-stem_low = stem_c + hs + w_slope + slot_d + c;
-assert(stem_low <= sl, "stem's sloped underside runs off the plate");
-// The plate's core, inside the slits, bears on the lip.
-assert(hp - beam_w - slit_w >= hs + c + 0.5, "plate too narrow for the beams");
-bump_u = hp - beam_w / 2;
-assert(back_t - chan_d >= bump_h + 0.6, "channel floor too thin for the grooves");
-assert(bump_h - 2 * c <= plate_t - beam_t + c, "beams can't flex far enough");
-
-// Each player has a sixes slider (0-30) and a ones slider (0-5), for scores
-// up to 35, the long game. The two tracks are the same length.
-//
-// This is the -u board, read from the bottom end. The other board is this one
-// turned 180° about (0, v_c), so it can come no closer to the top than the
-// seam allows; this one stops the same distance from the bottom.
-n_sixes = 6;
-n_ones = 6;
-v_c = box_h / 2;
-end_gap = box_h - z_sb + 1.5;
-v_ones = end_gap + chan_reach;
-v_sixes = v_ones + (n_ones - n_sixes) * pitch;
-
-num_size = num_h / 0.97;
-// Widest two- and one-digit labels ("18", "4") in the font, measured.
-w_two = 1.8 * num_size;
-w_one = 0.9 * num_size;
-// Slot centers in one board, from its left edge.
-u_sixes = w_two + num_gap + track_w;
-u_ones = u_sixes + track_w + mid_gap + w_one + num_gap + track_w;
-board_w = u_ones + track_w;
-board_l = -(2 * board_w + player_gap) / 2;
-// Tracks as [u, v of position 0, positions, step].
-tracks = [
-  [board_l + u_sixes, v_sixes, n_sixes, 6],
-  [board_l + u_ones, v_ones, n_ones, 1],
-];
-
-module rrect(size, r) {
-  offset(r = r) square([size.x - 2 * r, size.y - 2 * r], center = true);
-}
+seam_k = seam_drop / cav.y;
+function seam_z(y) = max(z_sf, min(z_sf + seam_k * (y - tf), z_sb));
+mag_d = mag.y + mag_recess;
+assert(z_top - z_sb >= mag_d + 1, "lid too short at the back for its magnets");
+assert(mag_x - mag.x / 2 - 1 >= key_w / 2 + key_c, "magnets crowd the key");
+assert(mag_x + mag.x / 2 + 1 <= xs, "magnets run into the corners");
 
 module box(x, y, z) {
   translate([x[0], y[0], z[0]]) cube([x[1] - x[0], y[1] - y[0], z[1] - z[0]]);
 }
 
+/* The shell, split at the seam */
+
 module outer() {
-  translate([0, by / 2, 0]) linear_extrude(box_h) rrect([bx, by], corner_r);
+  c = chamfer;
+  hull() {
+    box([-xo + c, xo - c], [c, by - c], [0, box_h]);
+    box([-xo + c, xo - c], [0, by], [c, box_h - c]);
+    box([-xo, xo], [c, by - c], [c, box_h - c]);
+  }
 }
 
-// Everything at or below the seam, raised by dz.
-module below_seam(dz = 0) {
+module cavity() {
+  box([-xs, xs], [tf, y_back], [wall, z_top]);
+}
+
+// Key outline, base on the seam at the origin, grown by g.
+module key_2d(g = 0) {
+  w = key_w / 2;
+  offset(delta = g)
+    polygon([[-w, -1], [-w, 0], [-w + key_lean, key_h], [w - key_lean, key_h], [w, 0], [w, -1]]);
+}
+
+module keys(g) {
+  // Front and back.
+  for (p = [[tf, z_sf], [by + 1, z_sb]])
+    translate([0, p[0], p[1]]) rotate([90, 0, 0]) linear_extrude(tf + 1) key_2d(g);
+  // Sides, leaning with the seam.
+  y_mid = by / 2;
+  translate([0, y_mid, seam_z(y_mid)]) multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, seam_k, 1, 0]])
+    rotate([90, 0, 90]) linear_extrude(bx + 2, center = true) key_2d(g);
+}
+
+// Everything the body keeps: below the seam, plus the keys grown by g.
+module below_seam(g = 0) {
+  big = [-bx, bx];
   intersection() {
-    multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, seam_k, 1, z_sf + dz]])
-      box([-bx, bx], [-1, by + 1], [-box_h, 0]);
-    box([-bx, bx], [-1, by + 1], [-1, z_sb + dz]);
-  }
-}
-
-// Scoreboard parts are built facing the viewer: u right, v up, w out of the
-// back face with the face at w = 0.
-module on_back() {
-  multmatrix([[-1, 0, 0, 0], [0, 0, 1, by], [0, 1, 0, 0]]) children();
-}
-
-// Box in face coordinates between depths d0 < d1 below the face.
-module slab(u, v, d0, d1) {
-  translate([u[0], v[0], -d1]) cube([u[1] - u[0], v[1] - v[0], d1 - d0]);
-}
-
-// Player 0 sits at the bottom end and gets the -u board as given; player 1
-// sits at the lid end and gets its copy turned 180° onto the +u side.
-module player(i) {
-  if (i == 0) children();
-  else translate([0, 2 * v_c, 0]) rotate([0, 0, 180]) children();
-}
-
-module both_players() {
-  player(0) children();
-  player(1) children();
-}
-
-module at_track(t) {
-  translate([t[0], t[1], 0]) children();
-}
-
-// Straight sides at ±s from -c to c, with 45° points beyond.
-module hex(s, c) {
-  polygon([[-s, -c], [0, -c - s], [s, -c], [s, c], [0, c + s], [-s, c]]);
-}
-
-// Prism along u of a polygon in (v, w).
-module prism_u(len, pts) {
-  rotate([90, 0, 90]) linear_extrude(len, center = true) polygon(pts);
-}
-
-// 45° ridge d deep, pointing into the face (-w), its base at w = 0.
-module wedge(len, d) {
-  prism_u(len, [[-d, eps], [d, eps], [0, -d]]);
-}
-
-// The 2D children swept from position 0 to v = span.
-module travel(span) {
-  hull() {
-    children();
-    translate([0, span]) children();
-  }
-}
-
-// A channel end around the plate: c clear at the sides, g clear off its 45°
-// faces.
-module chan_end(g) {
-  hex(hp + c, plate_side / 2 - c + g * sqrt(2));
-}
-
-// One track's slot, channel and detent grooves, with position i at
-// v = i * pitch, for the slider printed at position 0. With flip, mirrored
-// end for end, for the slider printed at the top end of a board turned over.
-module track_cut(n, bh = bump_h, flip = false) {
-  span = (n - 1) * pitch;
-  if (flip) translate([0, span, 0]) mirror([0, 1, 0]) track_cut(n, bh);
-  else {
-  translate([0, 0, -slot_d - eps]) linear_extrude(slot_d + 2 * eps)
-    travel(span) offset(delta = c) hull() {
-      hex(hs, stem_c);
-      // Down to where the stem's sloped underside crosses the back of the
-      // lip, and c more so the gap off the slope is c.
-      translate([0, -(w_slope + slot_d + c)]) hex(hs, stem_c);
-    }
-  translate([0, 0, -chan_d]) linear_extrude(chan_d - slot_d + eps) hull() {
-    chan_end(rest_gap);
-    translate([0, span]) chan_end(c);
-  }
-  // The ridge grown by c, with its base c off the floor.
-  d = bh - c + c * sqrt(2);
-  for (i = [0 : n - 1], su = [-1, 1])
-    translate([su * bump_u, i * pitch + bump_v, -chan_d]) wedge(beam_w + 2 * c, d);
-  }
-}
-
-module label(s, u, v) {
-  translate([u - track_w - num_gap, v])
-    text(s, size = num_size, font = font, halign = "right", valign = "center");
-}
-
-module track_labels(n, step, above = 0) {
-  translate([0, 0, -num_depth]) linear_extrude(num_depth + above, convexity = 10)
-    for (i = [0 : n - 1]) label(str(step * i), 0, i * pitch);
-}
-
-module labels(above = 0) {
-  both_players() for (t = tracks) at_track(t) track_labels(t[2], t[3], above);
-}
-
-module board_cuts() {
-  for (i = [0, 1]) player(i) for (t = tracks) at_track(t) track_cut(t[2], flip = i == 1);
-  labels(eps);
-}
-
-module rupee_2d(inset = 0) {
-  l = cap_l;
-  h = cap_h;
-  offset(delta = -inset)
-    polygon([[-l, 0], [-l + cap_p, -h], [l - cap_p, -h], [l, 0], [l - cap_p, h], [-l + cap_p, h]]);
-}
-
-// Cap with its underside at w = 0, socket and all.
-module cap() {
-  difference() {
     union() {
-      linear_extrude(cap_wall) rupee_2d();
-      hull() {
-        translate([0, 0, cap_wall - eps]) linear_extrude(eps) rupee_2d();
-        translate([0, 0, cap_t - eps]) linear_extrude(eps) rupee_2d(cap_bevel);
-      }
+      box(big, [-1, by + 1], [-1, z_sf]);
+      multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, seam_k, 1, z_sf - seam_k * tf]])
+        box(big, [-1, by + 1], [-2 * box_h, 0]);
     }
-    socket_2d() offset(delta = glue_gap) hex(hs, stem_c);
+    box(big, [-1, by + 1], [-1, z_sb]);
   }
+  keys(g);
 }
 
-// The socket for the peg outline given as the child, with glue relief.
-module socket_2d() {
-  translate([0, 0, -eps]) linear_extrude(socket_d + eps) {
-    children();
-    g = glue_groove;
-    pv = stem_c + hs + glue_gap;
-    pu = hs + glue_gap;
-    for (s = [-1, 1]) {
-      translate([s * pu, 0]) square([2 * g, g], center = true);
-      translate([0, s * pv]) square([g, 2 * g], center = true);
-    }
-  }
-  hull() {
-    translate([0, 0, -eps]) linear_extrude(eps) offset(delta = glue_chamfer) children();
-    translate([0, 0, glue_chamfer - eps]) linear_extrude(eps) children();
-  }
+// Magnets as [x center, y of the cavity-side face, seam z, into the wall].
+mag_at = [for (sx = [-1, 1], p = [[tf, z_sf, -1], [y_back, z_sb, 1]]) [sx * mag_x, p[0], p[1], p[2]]];
+
+// A magnet at m, in the body (dir = -1) or the lid (1): l long, t thick from
+// the wall's inside face, from z0 to z1 off the seam.
+module mag_box(m, dir, l, t, z0, z1) {
+  translate([m[0], m[1], m[2]]) scale([1, m[3], dir]) box([-l / 2, l / 2], [-eps, t], [z0, z1]);
 }
 
-// The slits and beams, as [inner, outer] u on each side, above the root.
-module beam_zone(u0, u1) {
-  for (su = [-1, 1]) translate([su > 0 ? u0 : -u1, -plate_side / 2 + beam_root])
-    square([u1 - u0, 2 * sl]);
+module mag_pockets(dir) {
+  for (m = mag_at) mag_box(m, dir, mag.x + mag_c, mag.z + mag_c / 2, -eps, mag_d);
 }
 
-// Slider at position 0, in face coordinates. With flip, mirrored end for
-// end, for a board turned over; $flip sets it from sliders_in_place.
-module slider(bh = bump_h, flip = undef) {
-  f = is_undef(flip) ? (is_undef($flip) ? false : $flip) : flip;
-  if (f) mirror([0, 1, 0]) slider(bh, false);
-  else {
-  w_front = -slot_d - c;
-  w_back = w_front - plate_t;
-  // Stem and peg, the peg's tip seating on the socket's bottom. The stem's
-  // underside slopes down at 45° from the peg to the plate, so it doesn't
-  // print as a long level ledge sticking out of the plate.
-  translate([0, 0, w_slope - eps]) linear_extrude(w_peg - w_slope + eps) hex(hs, stem_c);
-  hull() {
-    translate([0, 0, w_slope - eps]) linear_extrude(eps) hex(hs, stem_c);
-    translate([0, 0, w_front - eps]) linear_extrude(eps) hull() {
-      hex(hs, stem_c);
-      translate([0, -(w_slope - w_front)]) hex(hs, stem_c);
-    }
-  }
-  translate([0, 0, w_back]) {
-    linear_extrude(plate_t) difference() {
-      hex(hp, plate_side / 2);
-      beam_zone(hp - beam_w - slit_w, hp + 1);
-    }
-    linear_extrude(beam_t) intersection() {
-      hex(hp, plate_side / 2);
-      beam_zone(hp - beam_w, hp + 1);
-    }
-    for (su = [-1, 1]) translate([su * bump_u, bump_v, 0]) wedge(beam_w, bh);
-  }
-  }
-}
-
-// Tongue footprint, grown by c.
-module tongue_box(c, z) {
-  box([-cav.x / 2 - lip_t - c, cav.x / 2 + lip_t + c],
-      [wall - lip_t - c, y_back + back_lip_t + c], z);
-}
-
-module lips() {
-  intersection() {
-    difference() {
-      tongue_box(0, [0, box_h]);
-      box([-cav.x / 2, cav.x / 2], [wall, y_back], [0, box_h + 1]);
-    }
-    below_seam(lip_h);
-  }
-}
-
-// Bumps on the front lip (one, centered) and the back lip (two).
-module snaps(r, len) {
-  inset = snap_r - snap_h;
-  y_f = wall - lip_t + inset;
-  y_b = y_back + back_lip_t - inset;
-  for (p = [[0, y_f], [-snap_x_back, y_b], [snap_x_back, y_b]])
-    translate([p.x, p.y, seam_z(p.y) + lip_h / 2])
-      rotate([0, 90, 0]) cylinder(r = r, h = len, center = true);
-}
-
-module body() {
-  difference() {
-    union() {
-      intersection() {
-        outer();
-        below_seam();
-      }
-      lips();
-      intersection() {
-        snaps(snap_r, snap_len);
-        below_seam(lip_h);
-      }
-    }
-    box([-cav.x / 2, cav.x / 2], [wall, y_back], [floor_t, box_h + 1]);
-    on_back() board_cuts();
-    fox(eps);
-  }
+module magnets(dir) {
+  for (m = mag_at) mag_box(m, dir, mag.x, mag.z, mag_recess, mag_d);
 }
 
 // Reads from the front.
@@ -458,10 +191,6 @@ module fox(above = 0) {
       resize([0, fox_h], auto = true) import("fox.svg", center = true);
 }
 
-module numbers() {
-  on_back() labels();
-}
-
 // Reads from the front, looking down on the lid.
 module logo(above = 0) {
   translate([0, by / 2, box_h - logo_depth])
@@ -469,108 +198,162 @@ module logo(above = 0) {
       resize([logo_w, 0], auto = true) import("logo.svg", center = true);
 }
 
-module lid() {
+module body_shell() {
+  difference() {
+    intersection() {
+      outer();
+      below_seam();
+    }
+    cavity();
+    mag_pockets(-1);
+    fox(eps);
+  }
+}
+
+module lid_shell() {
   difference() {
     outer();
-    below_seam();
-    tongue_box(lip_clear, [0, box_h - top_t]);
-    snaps(snap_r + snap_clear, snap_len + 2 * snap_clear);
+    below_seam(key_c);
+    cavity();
+    mag_pockets(1);
     logo(eps);
   }
 }
 
-// Each at the bottom of its track, like the test block: position 0 for
-// player 0, the last position for player 1, whose board is upside down.
-module sliders_in_place(players = [0, 1]) {
-  on_back() for (i = players) player(i) for (t = tracks) at_track(t)
-    translate([0, i == 0 ? 0 : (t[2] - 1) * pitch, 0]) let($flip = i == 1) children();
+/* Panels: each is the part of a shell inside its region, which runs from
+   its outside face of the box in to its face of the cavity. The regions meet
+   in mitres along every edge. */
+
+walls = ["front", "back", "left", "right"];
+
+module region(name) {
+  X = [-xo, xo]; Y = [0, by]; Z = [0, box_h];
+  x = [-xs, xs]; y = [tf, y_back]; z = [wall, z_top];
+  hull() {
+    if (name == "front") { box(X, [-eps, 0], Z); box(x, [tf, tf + eps], z); }
+    else if (name == "back") { box(X, [by, by + eps], Z); box(x, [y_back - eps, y_back], z); }
+    else if (name == "left") { box([-xo - eps, -xo], Y, Z); box([-xs - eps, -xs], y, z); }
+    else if (name == "right") { box([xo, xo + eps], Y, Z); box([xs, xs + eps], y, z); }
+    else if (name == "floor") { box(X, Y, [-eps, 0]); box(x, y, [wall, wall + eps]); }
+    else { box(X, Y, [box_h, box_h + eps]); box(x, y, [z_top - eps, z_top]); }
+  }
 }
 
-module cap_on() {
-  translate([0, 0, cap_lift]) cap();
+function thk(name) = name == "front" || name == "back" ? tf : wall;
+
+// Mitres as [panel A, panel B, a point on the outside edge, direction along
+// it, ranges along it to fill with tabs]. The upright ones are cut up
+// separately either side of the seam.
+mitres = concat(
+  [for (a = ["front", "back"], b = ["left", "right"]) let (zc = a == "front" ? z_sf : z_sb)
+    [a, b, [b == "left" ? -xo : xo, a == "front" ? 0 : by, 0], [0, 0, 1], [[wall, zc], [zc, z_top]]]],
+  [for (p = ["floor", "top"], w = walls) let (z = p == "floor" ? 0 : box_h)
+    w == "front" || w == "back"
+      ? [p, w, [0, w == "front" ? 0 : by, z], [1, 0, 0], [[-xs, xs]]]
+      : [p, w, [w == "left" ? -xo : xo, 0, z], [0, 1, 0], [[tf, y_back]]]]);
+
+// A tab's outline, in depth below its own panel's outside face (t thick) and
+// below the other's (to thick). From tab_start along the mitre its underside
+// climbs toward the other panel's face at 45° as printed, or steeper to
+// leave tab_skin, and it ends level with its own panel's inside face.
+module tab_2d(t, to, g) {
+  k = tab_start;
+  offset(delta = g)
+    polygon([[k * t, k * to], [t, to], [t, max(k * to - (1 - k) * t, tab_skin)]]);
 }
 
-// Flat on the bed in a row, starting at the origin.
-module caps_flat(n) {
-  for (k = [0 : n - 1]) translate([k * (2 * cap_l + 4), 0, 0]) cap();
+// The tabs panel name owns, grown by g.
+module tabs(name, g = 0) {
+  for (m = mitres) if (m[0] == name || m[1] == name) {
+    a = m[0]; b = m[1]; c = m[2]; e = m[3];
+    na = normal(a); nb = normal(b);
+    mine = name == a ? 0 : 1;
+    // (depth below a, depth below b, along the edge) to box coordinates.
+    multmatrix([for (i = [0 : 2]) [-na[i], -nb[i], e[i], c[i]]])
+      for (r = m[4]) let (n = max(2, round((r[1] - r[0]) / tab_len)), l = (r[1] - r[0]) / n)
+        for (i = [mine : 2 : n - 1]) translate([0, 0, r[0] + i * l - g]) linear_extrude(l + 2 * g)
+          if (mine == 0) tab_2d(thk(a), thk(b), g);
+          else mirror([1, -1]) tab_2d(thk(b), thk(a), g);
+  }
 }
 
-module assembly(lift) {
-  color("darkgreen") body();
-  color("white") numbers();
-  color("orange") fox();
-  color(mech_color) sliders_in_place() slider();
-  color("orange") sliders_in_place([0]) cap_on();
-  color("royalblue") sliders_in_place([1]) cap_on();
-  color("forestgreen") translate([0, 0, lift]) lid();
-  color("white") translate([0, 0, lift]) logo();
-}
-
-// Short tracks side by side, one per bump height, with their sliders and
-// labels, printed upright like the body.
-test_n = 3;
-test_bumps = [0.75, 0.9, 1.05];
-test_dx = 15;
-test_v0 = 1.5 + chan_reach;
-
-// Face coordinates to the bed, with position 0 of the first track at the
-// origin.
-module on_test() {
-  rotate([90, 0, 0]) translate([0, test_v0, 0]) children();
-}
-
-module test_tracks() {
-  for (k = [0 : len(test_bumps) - 1]) translate([k * test_dx, 0, 0]) children(0);
-}
-
-module test_block() {
-  h = test_v0 + (test_n - 1) * pitch + chan_reach + 1.5;
-  on_test() difference() {
-    slab([-track_w - num_gap - w_one - 2, (len(test_bumps) - 1) * test_dx + hp + c + 2],
-         [-test_v0, h - test_v0], 0, back_t);
-    for (k = [0 : len(test_bumps) - 1]) translate([k * test_dx, 0, 0]) {
-      track_cut(test_n, test_bumps[k]);
-      track_labels(test_n, 1, eps);
+module panel(name, lid = false) {
+  intersection() {
+    if (lid) lid_shell();
+    else body_shell();
+    difference() {
+      union() {
+        region(name);
+        tabs(name);
+      }
+      for (o = concat(walls, ["floor", "top"])) if (o != name) tabs(o, tab_c);
     }
   }
 }
 
-// Top down, beside the body.
-module print_lid() {
-  translate([bx + 10, by, box_h]) rotate([180, 0, 0]) children();
+/* Placement */
+
+function normal(name) =
+  name == "front" ? [0, -1, 0] : name == "back" ? [0, 1, 0] :
+  name == "left" ? [-1, 0, 0] : name == "right" ? [1, 0, 0] :
+  name == "floor" ? [0, 0, -1] : [0, 0, 1];
+
+// Pulled e out along the panel's normal, the lid's panels lifted as well.
+module exploded(name, e, lift = 0) {
+  translate(e * normal(name) + [0, 0, lift]) children();
 }
 
+// On the bed, outside face down. Each wall's lid piece lies beyond its body
+// piece, the seam between them opened by lid_gap.
+lid_gap = 5;
+bed_gap = 5;
+module flat(name, lid = false) {
+  h = box_h + lid_gap;
+  g = lid ? lid_gap : 0;
+  y1 = h + bed_gap;
+  y2 = y1 + by + bed_gap;
+  x1 = bx + bed_gap;
+  if (name == "front")
+    translate([xo, h, 0]) rotate([90, 0, 0]) translate([0, 0, g]) children();
+  else if (name == "back")
+    translate([x1 + xo, 0, by]) rotate([-90, 0, 0]) translate([0, 0, g]) children();
+  else if (name == "left")
+    translate([h, y1, xo]) rotate([0, -90, 0]) translate([0, 0, g]) children();
+  else if (name == "right")
+    translate([h + bed_gap, y1, xo]) rotate([0, 90, 0]) translate([0, 0, g]) children();
+  else if (name == "floor")
+    translate([xo, y2, 0]) children();
+  else
+    translate([x1 + xo, y2 + by, box_h]) rotate([180, 0, 0]) children();
+}
+
+// Each top-level statement exports as its own object, so one per color.
 if (part == "print") {
-  color("darkgreen") body();
-  color("white") numbers();
-  color(mech_color) sliders_in_place([0]) slider();
-  color("forestgreen") print_lid() lid();
-  // New pieces go last, so a saved Orca project's parts keep their order.
-  color("white") print_lid() logo();
-  color(mech_color) sliders_in_place([1]) slider();
-  color("orange") fox();
-} else if (part == "body") {
-  body();
-} else if (part == "fox") {
-  fox();
-} else if (part == "numbers") {
-  numbers();
-} else if (part == "lid") {
-  print_lid() lid();
-} else if (part == "sliders") {
-  sliders_in_place() slider();
-} else if (part == "caps") {
-  color("orange") caps_flat(2);
-  color("royalblue") translate([0, 2 * cap_h + 30, 0]) caps_flat(2);
-} else if (part == "test_caps") {
-  color("orange") caps_flat(len(test_bumps));
-} else if (part == "test_block") {
-  color("darkgreen") test_block();
-  color("white") on_test() test_tracks() track_labels(test_n, 1);
-  color(mech_color) on_test() for (k = [0 : len(test_bumps) - 1])
-    translate([k * test_dx, 0, 0]) slider(test_bumps[k]);
-} else if (part == "open") {
-  assembly(40);
-} else if (part == "closed") {
-  assembly(0);
+  color("darkgreen") {
+    for (w = walls) flat(w) panel(w);
+    flat("floor") panel("floor");
+  }
+  color("forestgreen") {
+    for (w = walls) flat(w, true) panel(w, true);
+    flat("top") panel("top", true);
+  }
+  color("orange") flat("front") fox();
+  color("white") flat("top") logo();
+} else {
+  e = part == "exploded" ? explode : 0;
+  lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
+  color("darkgreen") {
+    for (w = walls) exploded(w, e) panel(w);
+    exploded("floor", e) panel("floor");
+  }
+  color("forestgreen") {
+    for (w = walls) exploded(w, e, lift) panel(w, true);
+    exploded("top", e, lift) panel("top", true);
+  }
+  color("orange") exploded("front", e) fox();
+  color("white") exploded("top", e, lift) logo();
+  color("silver") {
+    for (w = ["front", "back"]) exploded(w, e) intersection() { magnets(-1); region(w); }
+    for (w = ["front", "back"]) exploded(w, e, lift) intersection() { magnets(1); region(w); }
+  }
 }
