@@ -285,8 +285,8 @@ module region(name) {
   hull() {
     if (name == "front") { box(X, [-eps, 0], Z); box(x, [tf, tf + eps], z); }
     else if (name == "back") { box(X, [by, by + eps], Z); box(x, [y_back - eps, y_back], z); }
-    else if (name == "left") { box([-xo - eps, -xo], Y, Z); box([-xs - eps, -xs], y, z); }
-    else if (name == "right") { box([xo, xo + eps], Y, Z); box([xs, xs + eps], y, z); }
+    else if (name == "left") { box([-xo - eps, -xo], Y, Z); box([-xs, -xs + eps], y, z); }
+    else if (name == "right") { box([xo, xo + eps], Y, Z); box([xs - eps, xs], y, z); }
     else if (name == "floor") { box(X, Y, [-eps, 0]); box(x, y, [wall, wall + eps]); }
     else { box(X, Y, [box_h, box_h + eps]); box(x, y, [z_top - eps, z_top]); }
   }
