@@ -1,15 +1,22 @@
-"""Export a .scad file's parts as Orca projects with slicer settings baked in.
+"""Export a .scad file's parts as Orca projects that apply the settings they need.
 
 The .scad file lists its parts on an `// export:` line. An optional `// orca:`
-line holds settings for all of them, as key=value pairs, quoted where a value
-has spaces:
+line holds the slicer settings that matter for the print, as key=value pairs,
+quoted where a value has spaces:
 
     // export: print test
-    // orca: process="0.12 Fine @Snapmaker U1 (0.4 nozzle)" layer_height=0.1
+    // orca: process="0.12 Fine" layer_height=0.1
 
-`printer`, `process` and `filament` name the presets to start from; any other
-key is an Orca setting, by its name in the preset JSON files, and shows in Orca
-as changed from the preset. SETTINGS holds the ones every file starts with.
+Each key is an Orca setting, by its name in the preset JSON files. Opening the
+project applies them on top of whatever presets Orca has selected, and leaves
+everything else alone. `printer`, `process` and `filament` are not settings but
+presets, which Orca keeps as selected: those are for you to pick by hand.
+
+The whole line is also shown, as the name of the plate and of the object.
+
+This uses Orca 2.5's "published" projects, which carry only the settings they
+list. Orca reads no plate names from a project without settings, so a project
+with none to apply still carries one, unlisted.
 
 Each part becomes <out_dir>/<stem>-<part>.3mf: one object, with a part per
 OpenSCAD object and color, each color on its own filament.
@@ -17,6 +24,7 @@ OpenSCAD object and color, each color on its own filament.
 Usage: generate.py FILE.scad OUT_DIR
 """
 
+import json
 import re
 import shlex
 import struct
@@ -26,18 +34,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape, quoteattr
 
-PRESETS = Path.home() / ".config/OrcaSlicer/system"
-DEFAULTS = {
-    "printer": "Snapmaker U1 (0.4 nozzle)",
-    "process": "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
-    "filament": "Generic PLA @System",
-}
-# Orca settings for every file, unless its `// orca:` line says otherwise.
-SETTINGS = {
-    "top_surface_pattern": "concentric",
-    "bottom_surface_pattern": "concentric",
-}
+# Keys on the `// orca:` line that name presets, not settings.
+PRESETS = {"printer", "process", "filament"}
 # The U1's tool heads.
 FILAMENTS = 4
 
@@ -47,13 +47,6 @@ NS = {"m": "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"}
 def directive(text: str, name: str) -> str:
     m = re.search(rf"^// {name}:(.*)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
-
-
-def preset(kind: str, name: str) -> Path:
-    found = sorted(PRESETS.glob(f"*/{kind}/{name}.json"))
-    if not found:
-        sys.exit(f"no {kind} preset named {name!r} under {PRESETS}")
-    return found[0]
 
 
 def write_stl(path: Path, tris: list) -> None:
@@ -99,23 +92,70 @@ def split(src: Path, out: Path) -> list[tuple[Path, str]]:
     return parts
 
 
+def annotate(
+    src: Path, dst: Path, name: str, note: str, ids: list[int], settings: dict[str, str]
+) -> None:
+    """Copy an Orca project as a published one, naming its object and plate.
+
+    `ids` is the filament for each part, in order. `settings` are the ones to apply.
+    """
+    published = {
+        "orca_published": "1",
+        "orca_published_keys": json.dumps(list(settings)),
+        # Orca imports only the geometry of a published project with no settings at all.
+        "orca_published_config": "\n".join(
+            f"{k} = {v}" for k, v in (settings or {"layer_height": "0.2"}).items()
+        ),
+    }
+    # Orca escapes these values twice, and unescapes them twice.
+    tags = "".join(
+        f' <metadata name="{k}">{escape(escape(v))}</metadata>\n'
+        for k, v in published.items()
+    )
+
+    def meta(key: str, value: str) -> str:
+        return f"<metadata key={quoteattr(key)} value={quoteattr(value)}/>"
+
+    with (
+        zipfile.ZipFile(src) as zin,
+        zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            # A published project has no settings file; Orca's CLI writes its built-in defaults.
+            if item.filename == "Metadata/project_settings.config":
+                continue
+            data = zin.read(item.filename)
+            if item.filename == "3D/3dmodel.model":
+                data = (
+                    data.decode()
+                    .replace(" <resources>", tags + " <resources>", 1)
+                    .encode()
+                )
+            if item.filename == "Metadata/model_settings.config":
+                xml = data.decode()
+                # --assemble calls the one object "Assembly", and leaves the plate unnamed.
+                xml = xml.replace(
+                    meta("name", "Assembly"),
+                    meta("name", f"{name} [{note}]" if note else name),
+                    1,
+                )
+                xml = xml.replace(meta("plater_name", ""), meta("plater_name", note), 1)
+                # Orca's own --load-filament-ids only works with filament presets loaded.
+                each = iter(ids)
+                xml = re.sub(
+                    r'<metadata key="extruder" value="1"/>',
+                    lambda _, each=each: meta("extruder", str(next(each))),
+                    xml,
+                )
+                data = xml.encode()
+            zout.writestr(item, data)
+
+
 def generate(scad: Path, out_dir: Path) -> None:
     text = scad.read_text()
-    opts = dict(DEFAULTS)
-    settings = dict(SETTINGS)
-    for item in shlex.split(directive(text, "orca")):
-        key, _, value = item.partition("=")
-        (opts if key in opts else settings)[key] = value
-
-    filament = preset("filament", opts["filament"])
-    load = [
-        "--load-settings",
-        f"{preset('machine', opts['printer'])};{preset('process', opts['process'])}",
-        "--load-filaments",
-        ";".join([str(filament)] * FILAMENTS),
-    ]
-    for key, value in settings.items():
-        load += [f"--{key.replace('_', '-')}", value]
+    items = shlex.split(directive(text, "orca"))
+    note = ", ".join(items)
+    settings = dict(i.split("=", 1) for i in items if i.split("=")[0] not in PRESETS)
 
     for part in directive(text, "export").split():
         target = out_dir / f"{scad.stem}-{part}.3mf"
@@ -146,20 +186,13 @@ def generate(scad: Path, out_dir: Path) -> None:
                 order.index(c) + 1 if order.index(c) < FILAMENTS else 1
                 for _, c in parts
             ]
-            shown = [c or "#808080" for c in order[:FILAMENTS]]
-            shown += [shown[-1]] * (FILAMENTS - len(shown))
             # Orca writes result.json into its working directory.
             done = subprocess.run(
                 [
                     "orca-slicer",
-                    *load,
-                    "--filament-colour",
-                    ";".join(shown),
-                    "--load-filament-ids",
-                    ",".join(map(str, ids)),
                     "--assemble",
                     "--export-3mf",
-                    target,
+                    work / "project.3mf",
                     *[p for p, _ in parts],
                 ],
                 check=False,
@@ -167,8 +200,9 @@ def generate(scad: Path, out_dir: Path) -> None:
                 capture_output=True,
                 text=True,
             )
-            if not target.exists():
+            if not (work / "project.3mf").exists():
                 sys.exit(f"orca-slicer failed on {part}:\n{done.stdout}{done.stderr}")
+            annotate(work / "project.3mf", target, target.stem, note, ids, settings)
         print(f"{target}: {len(parts)} parts, {len(order)} colors")
 
 

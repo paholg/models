@@ -27,7 +27,7 @@
 // on the rupees.
 
 // export: print test
-// orca: process="0.12 Fine @Snapmaker U1 (0.4 nozzle)" layer_height=0.1 elefant_foot_compensation=0.15
+// orca: process="0.12 Fine" layer_height=0.1 elefant_foot_compensation=0.15
 
 /* [Output] */
 part = "assembled"; // [assembled, exploded, print, top, numbers, back, sliders, rupees, test]
