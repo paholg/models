@@ -14,6 +14,9 @@ is the current process.
 2. Open that project in Orca.
 3. Do whatever in Orca.
 
+To check what a project slices to without opening Orca, `just slice` it: the
+G-code lands in `tmp/slice/` (see `python/slice.py`).
+
 ## Python
 
 The current python project is playing with emitting G-code directly, for

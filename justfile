@@ -23,3 +23,9 @@ preview file:
 # applies and shows the settings on the file's `// orca:` line (see python/generate.py).
 generate file:
     uv --project python run python/generate.py {{file}}
+
+# Slice one of those projects with Orca's CLI, to tmp/slice/<project>.gcode, for checking what a
+# print comes out as. Takes --machine, --process and --filament preset names (see python/slice.py).
+[positional-arguments]
+slice project *args:
+    @uv --project python run python/slice.py "$@"

@@ -17,6 +17,12 @@ sandbox wrapper, so don't go looking for its files through the binary.
   `~/.config/OrcaSlicer/user`.
 * `python/generate.py` turns a .scad file into Orca projects, with settings
   for the whole print or for single parts. Its docstring has the details.
+* `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
+  settings in the G-code rather than guess. Orca's own CLI ignores a
+  project's settings, which only the GUI applies; `python/slice.py` lays them
+  on by hand.
+* `solid_infill_direction` is the direction of the first layer's lines on the
+  bed, in degrees counter-clockwise from +x: 0 runs along x, 90 along y.
 
 ## Directory structure
 
