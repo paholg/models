@@ -18,8 +18,9 @@ This uses Orca 2.5's "published" projects, which carry only the settings they
 list. Orca reads no plate names from a project without settings, so a project
 with none to apply still carries one, unlisted.
 
-Each part becomes <out_dir>/<stem>-<part>.3mf: one object, with a part per
-OpenSCAD object and color, each color on its own filament.
+Each part becomes gen/<dir>/<stem>-<part>.3mf, where <dir> is the .scad file's
+directory in this repo: one object, with a part per OpenSCAD object and color,
+each color on its own filament. The file's earlier projects are removed first.
 
 Orca's parts are numbered, unless the .scad file names them: one
 `echo(piece = "name")` for each top-level statement, in order. For instance:
@@ -27,7 +28,7 @@ Orca's parts are numbered, unless the .scad file names them: one
     module piece(name) { echo(piece = name); children(); }
     piece("lid") color("green") lid();
 
-Usage: generate.py FILE.scad OUT_DIR
+Usage: generate.py FILE.scad
 """
 
 import json
@@ -41,6 +42,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
+
+ROOT = Path(__file__).resolve().parents[1]
 
 # Keys on the `// orca:` line that name presets, not settings.
 PRESETS = {"printer", "process", "filament"}
@@ -182,7 +185,12 @@ def annotate(
             zout.writestr(item, data)
 
 
-def generate(scad: Path, out_dir: Path) -> None:
+def generate(scad: Path) -> None:
+    out_dir = ROOT / "gen" / scad.parent.relative_to(ROOT)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob(f"{scad.stem}-*.3mf"):
+        old.unlink()
+
     text = scad.read_text()
     items = shlex.split(directive(text, "orca"))
     note = ", ".join(items)
@@ -256,8 +264,8 @@ def generate(scad: Path, out_dir: Path) -> None:
                 [(label, i) for (_, _, label), i in zip(parts, ids)],
                 settings,
             )
-        print(f"{target}: {len(parts)} parts, {len(order)} colors")
+        print(f"{target.relative_to(ROOT)}: {len(parts)} parts, {len(order)} colors")
 
 
 if __name__ == "__main__":
-    generate(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
+    generate(Path(sys.argv[1]).resolve())

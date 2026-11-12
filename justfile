@@ -19,10 +19,8 @@ preview file:
         esac
     done <<< "$out"
 
-# Clear ~/3d-project-generated, then export each part a .scad file lists in its `// export:`
-# line to ~/3d-project-generated/<stem>-<part>.3mf, an Orca project with one part per color, which
+# Export each part a .scad file lists in its `// export:` line to gen/<dir>/<stem>-<part>.3mf,
+# where <dir> is the file's directory in this repo: an Orca project with one part per color, which
 # applies and shows the settings on the file's `// orca:` line (see python/generate.py).
 generate file:
-    rm -rf ~/3d-project-generated
-    mkdir ~/3d-project-generated
-    uv --project python run python/generate.py {{file}} ~/3d-project-generated
+    uv --project python run python/generate.py {{file}}
