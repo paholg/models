@@ -381,20 +381,33 @@ module flat(name, lid = false) {
 }
 
 // Each top-level statement exports as its own object, named for the slicer
-// (see python/generate.py), so one per panel and per inlay.
-module piece(name) {
-  echo(piece = name);
+// and with slicer settings of its own (see python/generate.py), so one per
+// panel and per inlay.
+module piece(name, orca = "") {
+  echo(piece = name, orca = orca);
   children();
 }
 
+// The pattern each piece's outside face prints in, on the bed.
+function bottom(pattern) = str("bottom_surface_pattern=", pattern);
+// Monotonic lines at angle a on the bed, from +x.
+function lines(a) = str(bottom("monotonic"), " solid_infill_direction=", a);
+// Front, back and top: lines up the box, or across it. Sides: along the
+// seam, which leans the other way on each as they lie on the bed.
+function face(name) =
+  name == "front" || name == "back" ? lines(90) :
+  name == "left" ? lines(atan2(1, -seam_k)) :
+  name == "right" ? lines(atan2(1, seam_k)) :
+  name == "floor" ? bottom("concentric") : lines(0);
+
 if (part == "print") {
-  for (w = walls) piece(w) color("darkgreen") flat(w) panel(w);
-  piece("floor") color("darkgreen") flat("floor") panel("floor");
-  for (w = walls) piece(str("lid ", w)) color("darkgreen") flat(w, true) panel(w, true);
-  piece("top") color("darkgreen") flat("top") panel("top", true);
-  piece("fox") color("yellow") flat("front") fox();
-  piece("forest") color("yellow") flat("back") forest_inlay();
-  piece("logo") color("yellow") flat("top") logo();
+  for (w = walls) piece(w, face(w)) color("darkgreen") flat(w) panel(w);
+  piece("floor", face("floor")) color("darkgreen") flat("floor") panel("floor");
+  for (w = walls) piece(str("lid ", w), face(w)) color("darkgreen") flat(w, true) panel(w, true);
+  piece("top", face("top")) color("darkgreen") flat("top") panel("top", true);
+  piece("fox", bottom("octagramspiral")) color("yellow") flat("front") fox();
+  piece("forest", bottom("archimedeanchords")) color("yellow") flat("back") forest_inlay();
+  piece("logo", face("top")) color("yellow") flat("top") logo();
 } else {
   e = part == "exploded" ? explode : 0;
   lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;

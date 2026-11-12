@@ -28,6 +28,12 @@ Orca's parts are numbered, unless the .scad file names them: one
     module piece(name) { echo(piece = name); children(); }
     piece("lid") color("green") lid();
 
+A piece can carry settings of its own, which Orca applies to just its parts: an
+`orca` string beside the name, written like the `// orca:` line.
+
+    module piece(name, orca = "") { echo(piece = name, orca = orca); children(); }
+    piece("lid", "bottom_surface_pattern=concentric") color("green") lid();
+
 Usage: generate.py FILE.scad
 """
 
@@ -66,10 +72,18 @@ def write_stl(path: Path, tris: list) -> None:
         )
 
 
-def split(src: Path, out: Path, names: list[str]) -> list[tuple[Path, str, str]]:
-    """Write one STL per object and color in an OpenSCAD 3MF; return each with its color and name.
+def pairs(line: str) -> dict[str, str]:
+    """The key=value pairs on an orca line."""
+    return dict(i.split("=", 1) for i in shlex.split(line))
 
-    `names` are the objects' names, if the .scad file gave one for each.
+
+def split(
+    src: Path, out: Path, pieces: list[tuple[str, str]]
+) -> list[tuple[Path, str, str, dict[str, str]]]:
+    """Write one STL per object and color in an OpenSCAD 3MF.
+
+    Returns each with its color, name and own settings. `pieces` are the objects'
+    names and orca lines, if the .scad file gave one for each.
     """
     root = ET.fromstring(zipfile.ZipFile(src).read("3D/3dmodel.model"))
     colors = [
@@ -80,11 +94,11 @@ def split(src: Path, out: Path, names: list[str]) -> list[tuple[Path, str, str]]
     objects = [
         o for o in root.iterfind(".//m:object", NS) if o.find("m:mesh", NS) is not None
     ]
-    if names and len(names) != len(objects):
+    if pieces and len(pieces) != len(objects):
         print(
-            f"  warning: {len(names)} piece names for {len(objects)} objects; numbering them"
+            f"  warning: {len(pieces)} piece names for {len(objects)} objects; numbering them"
         )
-    named = len(names) == len(objects)
+    named = len(pieces) == len(objects)
     for i, obj in enumerate(objects):
         mesh = obj.find("m:mesh", NS)
         verts = [
@@ -105,11 +119,14 @@ def split(src: Path, out: Path, names: list[str]) -> list[tuple[Path, str, str]]
         for k, tris in sorted(by_color.items()):
             color = colors[k] if k < len(colors) else ""
             label = f"{len(parts) + 1}-{color.lstrip('#') or 'plain'}"
+            own = {}
             if named:
-                label = names[i] if len(by_color) == 1 else f"{names[i]} {color}"
+                name, line = pieces[i]
+                label = name if len(by_color) == 1 else f"{name} {color}"
+                own = pairs(line)
             path = out / f"{len(parts) + 1}.stl"
             write_stl(path, tris)
-            parts.append((path, color, label))
+            parts.append((path, color, label, own))
     return parts
 
 
@@ -118,12 +135,13 @@ def annotate(
     dst: Path,
     name: str,
     note: str,
-    parts: list[tuple[str, int]],
+    parts: list[tuple[str, int, dict[str, str]]],
     settings: dict[str, str],
 ) -> None:
     """Copy an Orca project as a published one, naming its object, parts and plate.
 
-    `parts` is each part's name and filament, in order. `settings` are the ones to apply.
+    `parts` is each part's name, filament and own settings, in order. `settings` are
+    the ones to apply to everything.
     """
     published = {
         "orca_published": "1",
@@ -145,8 +163,13 @@ def annotate(
     each = iter(parts)
 
     def rename(m: re.Match) -> str:
-        label, filament = next(each)
-        return meta("name", label) + m[1] + meta("extruder", str(filament))
+        label, filament, own = next(each)
+        return (
+            meta("name", label)
+            + m[1]
+            + meta("extruder", str(filament))
+            + "".join(meta(k, v) for k, v in own.items())
+        )
 
     with (
         zipfile.ZipFile(src) as zin,
@@ -194,7 +217,7 @@ def generate(scad: Path) -> None:
     text = scad.read_text()
     items = shlex.split(directive(text, "orca"))
     note = ", ".join(items)
-    settings = dict(i.split("=", 1) for i in items if i.split("=")[0] not in PRESETS)
+    settings = {k: v for k, v in pairs(directive(text, "orca")).items() if k not in PRESETS}
 
     for part in directive(text, "export").split():
         target = out_dir / f"{scad.stem}-{part}.3mf"
@@ -225,21 +248,25 @@ def generate(scad: Path) -> None:
                     print(f"  {log[-1]}")
             if openscad.wait():
                 sys.exit(f"openscad failed on {part}")
-            names = [
-                m[1]
+            pieces = [
+                (m[1], m[2] or "")
                 for line in log
-                if (m := re.fullmatch(r'ECHO: piece = "(.*)"', line))
+                if (
+                    m := re.fullmatch(
+                        r'ECHO: piece = "(.*?)"(?:, orca = "(.*)")?', line
+                    )
+                )
             ]
-            parts = split(mesh, work, names)
+            parts = split(mesh, work, pieces)
             # Filaments in order of each color's first appearance.
-            order = list(dict.fromkeys(c for _, c, _ in parts))
+            order = list(dict.fromkeys(p[1] for p in parts))
             if len(order) > FILAMENTS:
                 print(
                     f"  warning: {len(order)} colors for {FILAMENTS} filaments; extras go on filament 1"
                 )
             ids = [
                 order.index(c) + 1 if order.index(c) < FILAMENTS else 1
-                for _, c, _ in parts
+                for _, c, _, _ in parts
             ]
             print(f"{part}: orca-slicer, assembling {len(parts)} parts")
             # Orca writes result.json into its working directory.
@@ -249,7 +276,7 @@ def generate(scad: Path) -> None:
                     "--assemble",
                     "--export-3mf",
                     work / "project.3mf",
-                    *[p for p, _, _ in parts],
+                    *[p[0] for p in parts],
                 ],
                 check=False,
                 cwd=work,
@@ -263,7 +290,7 @@ def generate(scad: Path) -> None:
                 target,
                 target.stem,
                 note,
-                [(label, i) for (_, _, label), i in zip(parts, ids)],
+                [(label, i, own) for (_, _, label, own), i in zip(parts, ids)],
                 settings,
             )
         print(f"{target.relative_to(ROOT)}: {len(parts)} parts, {len(order)} colors")
