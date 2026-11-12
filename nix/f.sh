@@ -1,13 +1,20 @@
-# Pick a .scad file with fzf, then act on it with single keys.
+# Pick a design with fzf, then act on it with single keys. A design is a .scad
+# file, which becomes Orca projects, or a script in gcode/, which writes G-code.
 cd "$(git rev-parse --show-toplevel)" || exit
 
-# Pick a .scad file into $file, starting from the query $1.
+# Moonraker and Fluidd on the printer.
+PRINTER="${PRINTER:-10.0.0.15}"
+
+# Pick a design into $file and its $kind (scad or gcode), starting from the query $1.
 pick() {
   local files rows width cols margin
-  files="$(fd --extension scad | sort)"
+  files="$({
+    fd --extension scad
+    fd --extension py . gcode
+  } | sort)"
   # Show path components as aligned columns, without the suffix;
   # the real path rides along in a hidden first field.
-  rows="$(echo "$files" | sed 's/\.scad$//' | column -t -s/ -o '  ')"
+  rows="$(echo "$files" | sed -E 's/\.(scad|py)$//' | column -t -s/ -o '  ')"
   # Only as wide as the longest row (plus fzf's gutter).
   width="$(($(echo "$rows" | wc -L) + 4))"
   cols="$(stty size </dev/tty | cut -d' ' -f2)"
@@ -19,7 +26,14 @@ pick() {
         --margin "0,$margin,0,0" --query "$1" --select-1 |
       cut -f1
   )"
-  [[ -n $file ]]
+  [[ -n $file ]] || return 1
+  if [[ $file == *.scad ]]; then
+    kind=scad
+  else
+    kind=gcode
+    # Scripts name their output after themselves.
+    output="tmp/$(basename "$file" .py).gcode"
+  fi
 }
 
 detach() {
@@ -33,13 +47,45 @@ find_projects() {
   shopt -u nullglob
 }
 
-# Describe into $fresh whether $file's projects are older than its sources:
-# the .scad and .svg files beside it, which it may include or import.
+# Describe into $fresh whether what $file generates is older than its sources,
+# and say so in $state: missing, stale or fresh.
 check_fresh() {
+  if [[ $kind == scad ]]; then
+    check_fresh_scad
+  else
+    check_fresh_gcode
+  fi
+  case "$state" in
+    missing) fresh=$'\033[33mnot generated\033[0m' ;;
+    stale) fresh=$'\033[33mstale: '"$changed"$' changed\033[0m' ;;
+    fresh) fresh=$'\033[32mfresh\033[0m' ;;
+  esac
+}
+
+# A script's sources are itself and the library it imports.
+check_fresh_gcode() {
+  local src
+  if [[ ! -e $output ]]; then
+    state=missing
+    return
+  fi
+  for src in "$file" python/lib/*.py; do
+    if [[ $src -nt $output ]]; then
+      state=stale
+      changed="$(basename "$src")"
+      return
+    fi
+  done
+  state=fresh
+}
+
+# A .scad file's sources are the .scad and .svg files beside it, which it may
+# include or import.
+check_fresh_scad() {
   local oldest project src dir
   find_projects
   if ((${#projects[@]} == 0)); then
-    fresh=$'\033[33mnot generated\033[0m'
+    state=missing
     return
   fi
   oldest="${projects[0]}"
@@ -53,12 +99,13 @@ check_fresh() {
   for src in "$dir"/*.scad "$dir"/*.svg; do
     if [[ $src -nt $oldest ]]; then
       shopt -u nullglob
-      fresh=$'\033[33mstale: '"$(basename "$src")"$' changed\033[0m'
+      state=stale
+      changed="$(basename "$src")"
       return
     fi
   done
   shopt -u nullglob
-  fresh=$'\033[32mfresh\033[0m'
+  state=fresh
 }
 
 # Draw the file and its keys: below what is on screen if $keep, or on a clear one.
@@ -71,28 +118,45 @@ draw() {
   keep=""
   check_fresh
   printf '\033[1m%s\033[0m\n\n' "$file"
-  printf '  \033[1ms\033[0m    open in OpenSCAD\n'
-  draw_generate
-  printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
+  # $below is how far the cursor ends up below the generate line.
+  if [[ $kind == scad ]]; then
+    printf '  \033[1ms\033[0m    open in OpenSCAD\n'
+    draw_generate
+    printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
+    below=4
+  else
+    draw_generate
+    printf '  \033[1mv\033[0m    view the G-code\n'
+    printf '  \033[1mh\033[0m    view the 3D preview in a browser\n'
+    printf '  \033[1mu\033[0m    upload the G-code to the printer, without printing\n'
+    printf '  \033[1mp\033[0m    open the printer'"'"'s page, to print from\n'
+    below=7
+  fi
   printf '  \033[1mesc\033[0m  pick another file\n'
   printf '  \033[1mq\033[0m    quit\n'
-  # How far the cursor ends up below the generate line.
-  below=4
   if [[ -n $status ]]; then
     printf '\n%s\n' "$status"
-    below=6
+    below=$((below + 2))
   fi
 }
 
 draw_generate() {
-  printf '  \033[1mg\033[0m    generate Orca projects (%s)\033[K\n' "$fresh"
+  local what="Orca projects"
+  if [[ $kind == gcode ]]; then
+    what="G-code"
+  fi
+  printf '  \033[1mg\033[0m    generate %s (%s)\033[K\n' "$what" "$fresh"
 }
 
-# Watch $file's sources and projects, signalling this shell when one changes.
+# Watch $file's sources and what it generates, signalling this shell when one changes.
 watch() {
+  local dirs=("$(dirname "$file")" gen)
+  if [[ $kind == gcode ]]; then
+    dirs=("$(dirname "$file")" python/lib tmp)
+  fi
   unwatch
   inotifywait --monitor --quiet --recursive \
-    --event close_write,move,create,delete "$(dirname "$file")" gen \
+    --event close_write,move,create,delete "${dirs[@]}" \
     > >(while read -r _; do kill -USR1 $$ 2>/dev/null || exit; done) 2>/dev/null &
   watcher=$!
 }
@@ -120,6 +184,10 @@ on_change() {
 }
 
 status=""
+kind=""
+output=""
+state=""
+changed=""
 # Whether to leave what is on screen, and print the keys below it.
 keep=""
 waiting=""
@@ -136,17 +204,57 @@ while true; do
   IFS= read -rsn1 key || exit 0
   waiting=""
   status=""
-  case "$key" in
-    s)
+  case "$kind:$key" in
+    scad:s)
       detach openscad "$file"
       status="Opened $file in OpenSCAD."
       ;;
-    g)
+    scad:g)
       printf '\nGenerating...\n'
       uv --project python run python/generate.py "$file" 2>&1 || status="Generation failed."
       keep=1
       ;;
-    o)
+    gcode:g)
+      printf '\nGenerating...\n'
+      uv --project python run "$file" 2>&1 || status="Generation failed."
+      keep=1
+      ;;
+    gcode:v)
+      if [[ $state == missing ]]; then
+        status="Nothing generated for $file yet; press g."
+        continue
+      fi
+      detach prusa-gcodeviewer "$output"
+      status="Opened $output in PrusaSlicer's G-code viewer."
+      ;;
+    gcode:h)
+      if [[ ! -e ${output%.gcode}.html ]]; then
+        status="No 3D preview for $file; press g, though not every script writes one."
+        continue
+      fi
+      detach xdg-open "${output%.gcode}.html"
+      status="Opened ${output%.gcode}.html in a browser."
+      ;;
+    gcode:u)
+      # Never upload G-code that isn't what the script now says.
+      if [[ $state != fresh ]]; then
+        status="$output is not up to date; press g first."
+        continue
+      fi
+      printf '\nUploading %s to %s...\n' "$output" "$PRINTER"
+      if curl --silent --show-error --fail --max-time 60 --output /dev/null \
+        --form "file=@$output" "http://$PRINTER/server/files/upload"; then
+        status="Uploaded $(basename "$output"); print it from http://$PRINTER (press p)."
+      else
+        status="Upload failed."
+        keep=1
+      fi
+      ;;
+    gcode:p)
+      detach xdg-open "http://$PRINTER"
+      status="Opened http://$PRINTER in a browser."
+      ;;
+    scad:o)
       find_projects
       if ((${#projects[@]} == 0)); then
         status="Nothing generated for $file yet; press g."
@@ -161,7 +269,7 @@ while true; do
       (cd "${TMPDIR:-/tmp}" && detach orca-slicer "$OLDPWD/$project")
       status="Opened $project in OrcaSlicer."
       ;;
-    $'\e')
+    *:$'\e')
       # Arrow and function keys send more after the escape; ignore those.
       rest=""
       IFS= read -rsn8 -t 0.05 rest || true
@@ -170,7 +278,7 @@ while true; do
         watch
       fi
       ;;
-    q)
+    *:q)
       clear
       exit 0
       ;;

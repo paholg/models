@@ -30,6 +30,10 @@ sandbox wrapper, so don't go looking for its files through the binary.
   inserts, etc.)
 * Next folder is more specific.
 * Then each .scad file for a full print.
+* `gcode/` is the exception: scripts that write G-code directly, using
+  `python/lib`, each to `tmp/<script name>.gcode`.
+* `f` (`nix/f.sh`) is a TUI over both kinds: it generates, previews and uploads
+  to the printer. It never starts a print; I do that by hand.
 
 ## Instructions
 

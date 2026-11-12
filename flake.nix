@@ -24,19 +24,23 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        # A small TUI: pick a .scad file with fzf, then open, generate or slice it.
+        # A small TUI: pick a .scad file or a G-code script with fzf, then open,
+        # generate, preview or upload it.
         f = pkgs.writeShellApplication {
           name = "f";
           # orca-slicer comes from the system.
           runtimeInputs = with pkgs; [
+            curl
             fd
             fzf
             git
             inotify-tools
             ncurses
             openscad-unstable
+            prusa-slicer
             util-linux
             uv
+            xdg-utils
           ];
           text = builtins.readFile ./nix/f.sh;
         };

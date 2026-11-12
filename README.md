@@ -17,7 +17,11 @@ is the current process.
 To check what a project slices to without opening Orca, `just slice` it: the
 G-code lands in `tmp/slice/` (see `python/slice.py`).
 
-## Python
+## G-code
 
-The current python project is playing with emitting G-code directly, for
-interesting lattices. Not sure if it will work at all yet.
+The scripts in `gcode/` emit G-code directly, with the library in `python/lib`,
+for interesting lattices. Not sure if it will work at all yet.
+
+Each writes `tmp/<script name>.gcode`, and most a 3D preview beside it. Run `f`
+and pick one to generate it, view it, and upload it to the printer; printing is
+then started by hand, from the printer's page.

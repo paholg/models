@@ -135,10 +135,9 @@ def tool_change(
         fc.ManualGcode(
             text=f"""\
 ;===== tool change -> T{tool} =====
-M104 S{nozzle} T{tool}
+M109 S{nozzle} T{tool}
 M400
 T{tool}
-M109 T{tool} S{nozzle} ; not in stock profile: avoid cold extrusion
 SM_PRINT_PREEXTRUDE_FILAMENT INDEX={tool}
 G90
 G0 Z{safe_z:.4f} F8000

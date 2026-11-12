@@ -21,7 +21,8 @@ lattice = Lattice(
     apex=CENTER,
     height=HEIGHT,
     diamonds_per_face=DIAMONDS_PER_FACE,
-    z_start=BOTTOM_LAYERS * LH + STRAND_DIAMETER,
+    # Half a strand above the floor, so the first troughs are pressed into it.
+    z_start=BOTTOM_LAYERS * LH + STRAND_DIAMETER / 2,
 )
 
 steps = [
@@ -33,5 +34,5 @@ steps = [
 ]
 
 if __name__ == "__main__":
-    print(u1.gcode(steps, "lattice_pyramid", S))
-    print(preview(steps, "lattice_pyramid", S))
+    print(u1.gcode(steps, "pyramid", S))
+    print(preview(steps, "pyramid", S))

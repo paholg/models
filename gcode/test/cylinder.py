@@ -31,4 +31,4 @@ top = helix(bottom[-1].z, HEIGHT / 2)
 
 steps = [*bottom, *u1.tool_change(1, bottom[-1], S), *top[1:]]
 
-print(u1.gcode(steps, "cylinder_test", S))
+print(u1.gcode(steps, "cylinder", S))
