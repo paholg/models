@@ -34,10 +34,28 @@
         "type": "github"
       }
     },
+    "orca-source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794015873,
+        "narHash": "sha256-WL3tXUkj/XIltcUSSnHGbOXWWLuYZ/hEeZ6L94w72c0=",
+        "owner": "OrcaSlicer",
+        "repo": "OrcaSlicer",
+        "rev": "40ecc66f78ed72dc368e0c1ebe40d77f00cc8a19",
+        "type": "github"
+      },
+      "original": {
+        "owner": "OrcaSlicer",
+        "ref": "v2.5.0",
+        "repo": "OrcaSlicer",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "orca-source": "orca-source"
       }
     },
     "systems": {

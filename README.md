@@ -2,7 +2,7 @@
 
 ## OpenSCAD
 
-I have not found a good way to fully go from OpenSCAD -> Snapmaker Orca, so this
+I have not found a good way to fully go from OpenSCAD -> OrcaSlicer, so this
 is the current process.
 
 **Initial Setup**

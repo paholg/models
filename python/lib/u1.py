@@ -216,7 +216,7 @@ def gcode(
     """Wrap design steps with U1 start/end G-code and save to tmp/<name>.gcode.
 
     `tool` is the starting tool. With orca_compat, add a header and config block
-    so Snapmaker Orca's viewer previews tool changes and filament usage; the
+    so Orca's viewer previews tool changes and filament usage; the
     printer may also read these.
     """
     s = settings
