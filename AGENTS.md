@@ -2,6 +2,8 @@ This repo is for 3d models with OpenSCAD for printing with a Snapmaker U1.
 
 I use OrcaSlicer, not Snapmaker Orca, and the Extended firmware.
 
+The printer is available at 10.0.0.15.
+
 ## Directory structure
 
 * First is general scope (home for home products, game for mostly boardgame
