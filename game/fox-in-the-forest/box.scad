@@ -16,6 +16,9 @@
 // the lid. Hidden tabs inside the mitres line the panels up for gluing.
 
 // export: print
+// Layers that the 0.6 mm inlays and the 0.8 mm magnet skins are whole numbers
+// of, from the bed up.
+// orca: layer_height=0.2 initial_layer_print_height=0.2
 
 /* [Output] */
 // "print" is every panel on the bed, outside down, one object per color.
@@ -46,9 +49,16 @@ chamfer = 0.6;
 
 /* [Magnets] */
 // Bar magnets in the seam: length along the wall, height, thickness.
-mag = [20, 10, 3];
-// Pocket clearance, on the length and the thickness.
+mag = [18.4, 9, 2.5];
+// Pocket clearance on the thickness.
 mag_c = 0.2;
+// Gap for excess glue, past each end of a magnet and past its far edge from
+// the seam. Crush ribs and stop pads cross it to hold the magnet in place.
+mag_glue = 0.4;
+// How far each end's crush ribs bite into the magnet's length.
+mag_crush = 0.1;
+// Width of a crush rib at its root.
+mag_rib_w = 1;
 // Plastic outside a pocket; with the magnet, the front and back walls'
 // thickness.
 mag_skin = 0.8;
@@ -89,6 +99,14 @@ fox_depth = 0.6;
 // Center height of the fox on the front.
 fox_z = 31;
 
+/* [Forest] */
+// Forest entrance inlaid flush in the body's back, stretched to fill it up
+// to the seam.
+forest_depth = 0.6;
+// Left clear around the forest, to the back's edges and the seam; 0 is full
+// bleed.
+forest_margin = 2;
+
 /* [View] */
 // How far the panels pull apart in the exploded view.
 explode = 12;
@@ -113,9 +131,9 @@ z_sf = z_sb - seam_drop;
 seam_k = seam_drop / cav.y;
 function seam_z(y) = max(z_sf, min(z_sf + seam_k * (y - tf), z_sb));
 mag_d = mag.y + mag_recess;
-assert(z_top - z_sb >= mag_d + 1, "lid too short at the back for its magnets");
-assert(mag_x - mag.x / 2 - 1 >= key_w / 2 + key_c, "magnets crowd the key");
-assert(mag_x + mag.x / 2 + 1 <= xs, "magnets run into the corners");
+assert(z_top - z_sb >= mag_d + mag_glue + 1, "lid too short at the back for its magnets");
+assert(mag_x - mag.x / 2 - mag_glue - 1 >= key_w / 2 + key_c, "magnets crowd the key");
+assert(mag_x + mag.x / 2 + mag_glue + 1 <= xs, "magnets run into the corners");
 
 module box(x, y, z) {
   translate([x[0], y[0], z[0]]) cube([x[1] - x[0], y[1] - y[0], z[1] - z[0]]);
@@ -170,18 +188,35 @@ module below_seam(g = 0) {
 // Magnets as [x center, y of the cavity-side face, seam z, into the wall].
 mag_at = [for (sx = [-1, 1], p = [[tf, z_sf, -1], [y_back, z_sb, 1]]) [sx * mag_x, p[0], p[1], p[2]]];
 
-// A magnet at m, in the body (dir = -1) or the lid (1): l long, t thick from
-// the wall's inside face, from z0 to z1 off the seam.
-module mag_box(m, dir, l, t, z0, z1) {
-  translate([m[0], m[1], m[2]]) scale([1, m[3], dir]) box([-l / 2, l / 2], [-eps, t], [z0, z1]);
+// Magnet m's frame, in the body (dir = -1) or the lid (1): x along the wall,
+// y into it from its inside face, z away from the seam.
+module at_mag(m, dir) {
+  translate([m[0], m[1], m[2]]) scale([1, m[3], dir]) children();
+}
+
+// A pocket in that frame: oversize by mag_glue at both ends and at the far
+// edge, with two crush ribs on each end, pointed, running the way the magnet
+// drops in, and two pads at the far edge for it to seat against.
+module mag_pocket() {
+  l = mag.x / 2 + mag_glue;
+  t = mag.z + mag_c / 2;
+  difference() {
+    box([-l, l], [-eps, t], [-eps, mag_d + mag_glue]);
+    for (sx = [-1, 1], zc = [0.25, 0.75] * mag_d)
+      translate([0, -2 * eps, 0]) rotate([-90, 0, 0]) linear_extrude(t + 4 * eps)
+        polygon([for (q = [[l + eps, zc - mag_rib_w / 2], [l + eps, zc + mag_rib_w / 2],
+                           [l - mag_glue - mag_crush, zc]]) [sx * q[0], -q[1]]]);
+    for (sx = [-1, 1])
+      box([sx * mag.x / 4 - 1, sx * mag.x / 4 + 1], [-2 * eps, t + eps], [mag_d, mag_d + mag_glue + eps]);
+  }
 }
 
 module mag_pockets(dir) {
-  for (m = mag_at) mag_box(m, dir, mag.x + mag_c, mag.z + mag_c / 2, -eps, mag_d);
+  for (m = mag_at) at_mag(m, dir) mag_pocket();
 }
 
 module magnets(dir) {
-  for (m = mag_at) mag_box(m, dir, mag.x, mag.z, mag_recess, mag_d);
+  for (m = mag_at) at_mag(m, dir) box([-mag.x / 2, mag.x / 2], [-eps, mag.z], [mag_recess, mag_d]);
 }
 
 // Reads from the front.
@@ -189,6 +224,23 @@ module fox(above = 0) {
   translate([0, 0, fox_z]) rotate([90, 0, 0])
     translate([0, 0, -fox_depth]) linear_extrude(fox_depth + above, convexity = 10)
       resize([0, fox_h], auto = true) import("fox.svg", center = true);
+}
+
+// Reads from the back. Kept to the back panel, inside its mitres.
+module forest(above = 0) {
+  intersection() {
+    region("back");
+    translate([0, by, z_sb / 2]) rotate([90, 0, 180])
+      translate([0, 0, -forest_depth]) linear_extrude(forest_depth + above, convexity = 10)
+        resize([bx - 2 * forest_margin, z_sb - 2 * forest_margin])
+          import("forest.svg", center = true);
+  }
+}
+
+// The inlay itself, trimmed to the box's chamfers. Rendered, as the preview
+// otherwise paints it over the whole box.
+module forest_inlay() {
+  render(convexity = 10) intersection() { forest(); outer(); }
 }
 
 // Reads from the front, looking down on the lid.
@@ -207,6 +259,7 @@ module body_shell() {
     cavity();
     mag_pockets(-1);
     fox(eps);
+    forest(eps);
   }
 }
 
@@ -338,6 +391,7 @@ if (part == "print") {
     flat("top") panel("top", true);
   }
   color("orange") flat("front") fox();
+  color("white") flat("back") forest_inlay();
   color("white") flat("top") logo();
 } else {
   e = part == "exploded" ? explode : 0;
@@ -351,6 +405,7 @@ if (part == "print") {
     exploded("top", e, lift) panel("top", true);
   }
   color("orange") exploded("front", e) fox();
+  color("white") exploded("back", e) forest_inlay();
   color("white") exploded("top", e, lift) logo();
   color("silver") {
     for (w = ["front", "back"]) exploded(w, e) intersection() { magnets(-1); region(w); }
