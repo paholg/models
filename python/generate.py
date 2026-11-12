@@ -201,8 +201,9 @@ def generate(scad: Path) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             mesh = work / "mesh.3mf"
+            print(f"{part}: openscad")
             # Not --quiet, which would drop the echoes.
-            done = subprocess.run(
+            openscad = subprocess.Popen(
                 [
                     "openscad",
                     "--enable=lazy-union",
@@ -212,18 +213,18 @@ def generate(scad: Path) -> None:
                     mesh,
                     scad,
                 ],
-                check=False,
-                capture_output=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 text=True,
             )
-            log = done.stderr.splitlines()
-            print(
-                *[f"  {line}" for line in log if re.match("WARNING|ERROR|TRACE", line)],
-                sep="\n",
-                end="",
-            )
-            if done.returncode:
-                sys.exit(f"openscad failed on {part}:\n{done.stderr}")
+            # Show the log as it comes.
+            log = []
+            for line in openscad.stderr:
+                log.append(line.rstrip("\n"))
+                if log[-1]:
+                    print(f"  {log[-1]}")
+            if openscad.wait():
+                sys.exit(f"openscad failed on {part}")
             names = [
                 m[1]
                 for line in log
@@ -240,6 +241,7 @@ def generate(scad: Path) -> None:
                 order.index(c) + 1 if order.index(c) < FILAMENTS else 1
                 for _, c, _ in parts
             ]
+            print(f"{part}: orca-slicer, assembling {len(parts)} parts")
             # Orca writes result.json into its working directory.
             done = subprocess.run(
                 [
@@ -268,4 +270,6 @@ def generate(scad: Path) -> None:
 
 
 if __name__ == "__main__":
+    # Show each line as it is printed, even into a pipe.
+    sys.stdout.reconfigure(line_buffering=True)
     generate(Path(sys.argv[1]).resolve())
