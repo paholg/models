@@ -9,7 +9,7 @@ has spaces:
 
 `printer`, `process` and `filament` name the presets to start from; any other
 key is an Orca setting, by its name in the preset JSON files, and shows in Orca
-as changed from the preset.
+as changed from the preset. SETTINGS holds the ones every file starts with.
 
 Each part becomes <out_dir>/<stem>-<part>.3mf: one object, with a part per
 OpenSCAD object and color, each color on its own filament.
@@ -32,6 +32,11 @@ DEFAULTS = {
     "printer": "Snapmaker U1 (0.4 nozzle)",
     "process": "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
     "filament": "Generic PLA @System",
+}
+# Orca settings for every file, unless its `// orca:` line says otherwise.
+SETTINGS = {
+    "top_surface_pattern": "concentric",
+    "bottom_surface_pattern": "concentric",
 }
 # The U1's tool heads.
 FILAMENTS = 4
@@ -97,7 +102,7 @@ def split(src: Path, out: Path) -> list[tuple[Path, str]]:
 def generate(scad: Path, out_dir: Path) -> None:
     text = scad.read_text()
     opts = dict(DEFAULTS)
-    settings = {}
+    settings = dict(SETTINGS)
     for item in shlex.split(directive(text, "orca")):
         key, _, value = item.partition("=")
         (opts if key in opts else settings)[key] = value
