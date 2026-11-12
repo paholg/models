@@ -380,19 +380,21 @@ module flat(name, lid = false) {
     translate([x1 + xo, y2 + by, box_h]) rotate([180, 0, 0]) children();
 }
 
-// Each top-level statement exports as its own object, so one per color.
+// Each top-level statement exports as its own object, named for the slicer
+// (see python/generate.py), so one per panel and per inlay.
+module piece(name) {
+  echo(piece = name);
+  children();
+}
+
 if (part == "print") {
-  color("darkgreen") {
-    for (w = walls) flat(w) panel(w);
-    flat("floor") panel("floor");
-  }
-  color("forestgreen") {
-    for (w = walls) flat(w, true) panel(w, true);
-    flat("top") panel("top", true);
-  }
-  color("orange") flat("front") fox();
-  color("white") flat("back") forest_inlay();
-  color("white") flat("top") logo();
+  for (w = walls) piece(w) color("darkgreen") flat(w) panel(w);
+  piece("floor") color("darkgreen") flat("floor") panel("floor");
+  for (w = walls) piece(str("lid ", w)) color("darkgreen") flat(w, true) panel(w, true);
+  piece("top") color("darkgreen") flat("top") panel("top", true);
+  piece("fox") color("yellow") flat("front") fox();
+  piece("forest") color("yellow") flat("back") forest_inlay();
+  piece("logo") color("yellow") flat("top") logo();
 } else {
   e = part == "exploded" ? explode : 0;
   lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;

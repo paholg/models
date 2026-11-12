@@ -21,6 +21,12 @@ with none to apply still carries one, unlisted.
 Each part becomes <out_dir>/<stem>-<part>.3mf: one object, with a part per
 OpenSCAD object and color, each color on its own filament.
 
+Orca's parts are numbered, unless the .scad file names them: one
+`echo(piece = "name")` for each top-level statement, in order. For instance:
+
+    module piece(name) { echo(piece = name); children(); }
+    piece("lid") color("green") lid();
+
 Usage: generate.py FILE.scad OUT_DIR
 """
 
@@ -57,18 +63,27 @@ def write_stl(path: Path, tris: list) -> None:
         )
 
 
-def split(src: Path, out: Path) -> list[tuple[Path, str]]:
-    """Write one STL per object and color in an OpenSCAD 3MF; return each with its color."""
+def split(src: Path, out: Path, names: list[str]) -> list[tuple[Path, str, str]]:
+    """Write one STL per object and color in an OpenSCAD 3MF; return each with its color and name.
+
+    `names` are the objects' names, if the .scad file gave one for each.
+    """
     root = ET.fromstring(zipfile.ZipFile(src).read("3D/3dmodel.model"))
     colors = [
         b.get("displaycolor", "")[:7]
         for b in root.iterfind(".//m:basematerials/m:base", NS)
     ]
     parts = []
-    for obj in root.iterfind(".//m:object", NS):
+    objects = [
+        o for o in root.iterfind(".//m:object", NS) if o.find("m:mesh", NS) is not None
+    ]
+    if names and len(names) != len(objects):
+        print(
+            f"  warning: {len(names)} piece names for {len(objects)} objects; numbering them"
+        )
+    named = len(names) == len(objects)
+    for i, obj in enumerate(objects):
         mesh = obj.find("m:mesh", NS)
-        if mesh is None:
-            continue
         verts = [
             (float(v.get("x")), float(v.get("y")), float(v.get("z")))
             for v in mesh.iterfind("m:vertices/m:vertex", NS)
@@ -86,18 +101,26 @@ def split(src: Path, out: Path) -> list[tuple[Path, str]]:
             )
         for k, tris in sorted(by_color.items()):
             color = colors[k] if k < len(colors) else ""
-            path = out / f"{len(parts) + 1}-{color.lstrip('#') or 'plain'}.stl"
+            label = f"{len(parts) + 1}-{color.lstrip('#') or 'plain'}"
+            if named:
+                label = names[i] if len(by_color) == 1 else f"{names[i]} {color}"
+            path = out / f"{len(parts) + 1}.stl"
             write_stl(path, tris)
-            parts.append((path, color))
+            parts.append((path, color, label))
     return parts
 
 
 def annotate(
-    src: Path, dst: Path, name: str, note: str, ids: list[int], settings: dict[str, str]
+    src: Path,
+    dst: Path,
+    name: str,
+    note: str,
+    parts: list[tuple[str, int]],
+    settings: dict[str, str],
 ) -> None:
-    """Copy an Orca project as a published one, naming its object and plate.
+    """Copy an Orca project as a published one, naming its object, parts and plate.
 
-    `ids` is the filament for each part, in order. `settings` are the ones to apply.
+    `parts` is each part's name and filament, in order. `settings` are the ones to apply.
     """
     published = {
         "orca_published": "1",
@@ -115,6 +138,12 @@ def annotate(
 
     def meta(key: str, value: str) -> str:
         return f"<metadata key={quoteattr(key)} value={quoteattr(value)}/>"
+
+    each = iter(parts)
+
+    def rename(m: re.Match) -> str:
+        label, filament = next(each)
+        return meta("name", label) + m[1] + meta("extruder", str(filament))
 
     with (
         zipfile.ZipFile(src) as zin,
@@ -140,12 +169,14 @@ def annotate(
                     1,
                 )
                 xml = xml.replace(meta("plater_name", ""), meta("plater_name", note), 1)
-                # Orca's own --load-filament-ids only works with filament presets loaded.
-                each = iter(ids)
+                # Orca names each part after its file, and its own --load-filament-ids only
+                # works with filament presets loaded.
                 xml = re.sub(
+                    r'<metadata key="name" value="\d+\.stl"/>((?:(?!<part ).)*?)'
                     r'<metadata key="extruder" value="1"/>',
-                    lambda _, each=each: meta("extruder", str(next(each))),
+                    rename,
                     xml,
+                    flags=re.DOTALL,
                 )
                 data = xml.encode()
             zout.writestr(item, data)
@@ -162,10 +193,10 @@ def generate(scad: Path, out_dir: Path) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             mesh = work / "mesh.3mf"
-            subprocess.run(
+            # Not --quiet, which would drop the echoes.
+            done = subprocess.run(
                 [
                     "openscad",
-                    "-q",
                     "--enable=lazy-union",
                     "-D",
                     f'part="{part}"',
@@ -173,18 +204,33 @@ def generate(scad: Path, out_dir: Path) -> None:
                     mesh,
                     scad,
                 ],
-                check=True,
+                check=False,
+                capture_output=True,
+                text=True,
             )
-            parts = split(mesh, work)
+            log = done.stderr.splitlines()
+            print(
+                *[f"  {line}" for line in log if re.match("WARNING|ERROR|TRACE", line)],
+                sep="\n",
+                end="",
+            )
+            if done.returncode:
+                sys.exit(f"openscad failed on {part}:\n{done.stderr}")
+            names = [
+                m[1]
+                for line in log
+                if (m := re.fullmatch(r'ECHO: piece = "(.*)"', line))
+            ]
+            parts = split(mesh, work, names)
             # Filaments in order of each color's first appearance.
-            order = list(dict.fromkeys(c for _, c in parts))
+            order = list(dict.fromkeys(c for _, c, _ in parts))
             if len(order) > FILAMENTS:
                 print(
                     f"  warning: {len(order)} colors for {FILAMENTS} filaments; extras go on filament 1"
                 )
             ids = [
                 order.index(c) + 1 if order.index(c) < FILAMENTS else 1
-                for _, c in parts
+                for _, c, _ in parts
             ]
             # Orca writes result.json into its working directory.
             done = subprocess.run(
@@ -193,7 +239,7 @@ def generate(scad: Path, out_dir: Path) -> None:
                     "--assemble",
                     "--export-3mf",
                     work / "project.3mf",
-                    *[p for p, _ in parts],
+                    *[p for p, _, _ in parts],
                 ],
                 check=False,
                 cwd=work,
@@ -202,7 +248,14 @@ def generate(scad: Path, out_dir: Path) -> None:
             )
             if not (work / "project.3mf").exists():
                 sys.exit(f"orca-slicer failed on {part}:\n{done.stdout}{done.stderr}")
-            annotate(work / "project.3mf", target, target.stem, note, ids, settings)
+            annotate(
+                work / "project.3mf",
+                target,
+                target.stem,
+                note,
+                [(label, i) for (_, _, label), i in zip(parts, ids)],
+                settings,
+            )
         print(f"{target}: {len(parts)} parts, {len(order)} colors")
 
 
