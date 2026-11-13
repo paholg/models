@@ -11,18 +11,20 @@
 //   the bed so every slot and channel wall prints as a wall.
 // - back: drops into a recess inside the top's rim and closes the channels,
 //   with pins into holes in the top. Glue it on away from the channels;
-//   grooves around each channel catch squeeze-out.
+//   two grooves around each channel catch squeeze-out.
 // - sliders: a plate riding in the channel, with a stem up through the slot,
 //   keyed long so the slider can't twist. Printed plate down. It clicks into
 //   each position one of two ways (detent):
 //   - magnets: a disc magnet glued into the plate's underside, over one
-//     glued into the back at each position. Glue every magnet in the back
-//     the same way up, and the sliders' to attract them.
+//     captured in the back at each position: the print pauses with the
+//     back's pockets open, to drop the magnets in, then roofs them over. Put
+//     every magnet in the back the same way up, and glue the sliders' to
+//     attract them; wells around the sliders' pockets take the excess glue.
 //   - arms: a spring arm down each side of the plate, fixed at both ends and
 //     bent into a round hump in the middle that clicks into scallops in the
 //     channel walls.
-// - rupees: press onto the stems from above after the back is glued on.
-//   Printed flat, socket down.
+// - rupees: press onto the stems from above after the back is glued on, each
+//   pointing at its track's labels. Printed flat, socket down.
 // Assembly: drop the sliders into the top's channels, glue on the back, press
 // on the rupees.
 
@@ -54,8 +56,8 @@ c = 0.3;
 side_c = 0.2;
 // Total up-and-down play of the plate in its channel.
 z_play = 0.4;
-// Thick enough for a floor under the magnets.
-back_t = 1.4;
+// Thick enough for a floor under the magnets and a roof over them.
+back_t = 1.7;
 // The top's rim around the back, which drops into the recess it leaves.
 rim_w = 1.2;
 fit_c = 0.15;
@@ -66,7 +68,12 @@ pin_h = 1.5;
 // slider.
 moat_in = 0.5;
 moat_w = 0.5;
-moat_d = 0.5;
+moat_d = 0.7;
+// A second groove this far outside the first, wherever there's room for it,
+// gives glue on the wider lands somewhere nearer to go.
+moat_gap = 1;
+// The land left between any groove and the back's edge.
+moat_edge = 0.3;
 plate_t = 1.5;
 // Plate size across and along the track.
 plate_w = 11;
@@ -102,11 +109,18 @@ foot = 0.3;
 mag = [5, 1];
 // Pocket clearance on the diameter.
 mag_c = 0.2;
-// How far the back's magnets sit below the channel floor.
-mag_recess = 0.1;
+// The channel floor over the back's magnets, printed after the pause. Whole
+// layers, so the pause falls on a layer's top.
+mag_roof = 0.3;
+// Height of the back's pockets over the magnets, so the nozzle clears them.
+mag_slack = 0.1;
 // How far the slider's magnet sits above the plate's underside. With the
-// recess, the gap between the magnets: more is a softer click.
-mag_lift = 0.1;
+// roof, and the slack if the magnet stays down, the gap between the magnets:
+// more is a softer click.
+mag_lift = 0.2;
+// Wells around the slider's magnet pocket, for excess glue.
+mag_well_d = 1.6;
+mag_wells = 4;
 
 /* [Rupee] */
 rupee_l = 5.5;
@@ -115,6 +129,8 @@ rupee_p = 2.5;
 rupee_t = 3.5;
 rupee_wall = 1.2;
 rupee_bevel = 1.5;
+// Rounds the outline's corners.
+rupee_r = 1;
 rupee_lift = 0.5;
 socket_d = 2.5;
 // Socket clearance around the stem; the ribs then take up rib_press.
@@ -130,7 +146,7 @@ well_extra = 0.4;
 /* [Test] */
 test_bumps = [0.25, 0.35, 0.45];
 // The sliders' mag_lift on each track, for magnets.
-test_lifts = [0.1, 0.2, 0.3];
+test_lifts = [0.2, 0.2, 0.2];
 test_n = 3;
 
 /* [Hidden] */
@@ -152,9 +168,9 @@ y_core = hw - arm_t - slit_w;
 function bump_hh(e) = side_c + e;
 arms = detent == "arms";
 assert(arm_h <= plate_t, "arms taller than the plate");
-assert(back_t - mag.y - mag_recess >= 0.3 - eps, "back too thin under the magnets");
+assert(back_t - mag_roof - mag.y - mag_slack >= 0.3 - eps, "back too thin under the magnets");
 assert(plate_t - mag.y - max(test_lifts) >= 0.2 - eps, "plate too thin over the magnet");
-assert(mag.x + mag_c + 2 <= min(pitch, plate_w), "magnets crowd each other or the plate's sides");
+assert(mag.x + mag_c + mag_well_d + 2 <= min(pitch, plate_w), "magnets crowd each other or the plate's sides");
 assert(slit_w >= max(test_bumps) + 0.15, "slits too narrow for the arms to flex");
 assert(y_core >= hs + key_c + 1.2, "plate core too narrow to bear on the face");
 assert(rupee_t - socket_d >= 0.8, "rupee too thin over the socket");
@@ -264,6 +280,13 @@ module mag_pocket(depth) {
   translate([0, 0, -eps]) cylinder(d = mag.x + mag_c, h = depth + eps);
 }
 
+// Wells around a magnet pocket's edge, as deep: glue pushed out from under
+// the magnet ends up here, not on the plate's underside.
+module mag_wells(depth) {
+  for (i = [0 : mag_wells - 1]) rotate(45 + i * 360 / mag_wells)
+    translate([(mag.x + mag_c) / 2, 0, -eps]) cylinder(d = mag_well_d, h = depth + eps, $fn = 16);
+}
+
 // Slider at its rest height, plate on the back. marks dimples go in the
 // plate's top beside the key, clear of the arms and magnet, to tell test
 // sliders apart.
@@ -275,7 +298,7 @@ module slider(e = engage, marks = 0, lift = mag_lift) {
     difference() {
       linear_extrude(plate_t) plate_2d(e);
       if (arms) over_arms();
-      else mag_pocket(mag.y + lift);
+      else { mag_pocket(mag.y + lift); mag_wells(mag.y + lift); }
       for (j = [0 : 1 : marks - 1]) translate([(j - (marks - 1) / 2) * 2, y_mark, plate_t - 0.4])
         cylinder(d = 1, h = 1);
     }
@@ -332,8 +355,12 @@ module chan_2d(n) {
   translate([-hl - c, -cw]) square([(n - 1) * pitch + plate_l + 2 * c, 2 * cw]);
 }
 
+// Grooves around the children, all a back's channels: one around each, and
+// a second further out, around them all, which drops out where channels are
+// too close for it.
 module moat_2d() {
-  difference() { offset(delta = moat_in + moat_w) children(); offset(delta = moat_in) children(); }
+  for (d = [moat_in, moat_in + moat_w + moat_gap])
+    difference() { offset(delta = d + moat_w) children(); offset(delta = d) children(); }
 }
 
 // The top's body, size outline, with the recess for its back, pin holes, and
@@ -348,7 +375,7 @@ module top_body(size, r, pin_xy = []) {
 }
 
 // The back, dropping into the top's recess, with its pins, and the 2D
-// children grooved into it as glue moats.
+// children grooved into it as glue moats, short of its edge and its pins.
 module back_plate(size, r, pin_xy = []) {
   in = rim_w + fit_c;
   difference() {
@@ -356,7 +383,13 @@ module back_plate(size, r, pin_xy = []) {
       linear_extrude(eps) rrect(size - 2 * [in + foot, in + foot], r - rim_w);
       translate([0, 0, foot]) linear_extrude(back_t - foot) rrect(size - 2 * [in, in], r - rim_w);
     }
-    translate([0, 0, back_t - moat_d]) linear_extrude(moat_d + eps) children();
+    translate([0, 0, back_t - moat_d]) linear_extrude(moat_d + eps) difference() {
+      intersection() {
+        children();
+        rrect(size - 2 * [in + moat_edge, in + moat_edge], r - rim_w);
+      }
+      for (p = pin_xy) translate(p) circle(d = pin_d + 2 * moat_in);
+    }
   }
   for (p = pin_xy) translate([p.x, p.y, back_t - eps]) {
     cylinder(d = pin_d, h = pin_h - 0.4 + eps);
@@ -371,25 +404,30 @@ module top() {
   }
 }
 
-// Magnet pockets in the back's channel floor, under each of a track's n
+// Where the print pauses for the back's magnets: the top of their pockets.
+z_pause = back_t - mag_roof;
+
+// Magnet pockets closed inside the back, under each of a track's n
 // positions, from position 0.
 module back_pockets(n) {
-  if (!arms) for (i = [0 : n - 1]) translate([i * pitch, 0, back_t]) mirror([0, 0, 1])
-    mag_pocket(mag.y + mag_recess);
+  if (!arms) for (i = [0 : n - 1]) translate([i * pitch, 0, z_pause]) mirror([0, 0, 1])
+    cylinder(d = mag.x + mag_c, h = mag.y + mag_slack);
 }
 
 module back() {
   difference() {
-    back_plate(card, card_r, both_pins()) both() at_tracks() moat_2d() chan_2d($n);
+    back_plate(card, card_r, both_pins()) moat_2d() both() at_tracks() chan_2d($n);
     both() at_tracks() back_pockets($n);
   }
 }
 
+// Pointed at -y, toward its track's labels, and square at +y, so there's no
+// mistaking which labels it reads against. Corners rounded at every inset.
 module rupee_2d(inset = 0) {
   l = rupee_l;
   h = rupee_h;
-  offset(delta = -inset)
-    polygon([[0, -l], [h, -l + rupee_p], [h, l - rupee_p], [0, l], [-h, l - rupee_p], [-h, -l + rupee_p]]);
+  offset(r = rupee_r) offset(delta = -inset - rupee_r)
+    polygon([[0, -l], [h, -l + rupee_p], [h, l], [-h, l], [-h, -l + rupee_p]]);
 }
 
 // Long axis across the track (y), underside at z = 0.
@@ -427,8 +465,31 @@ module rupees_in_place(p) {
 
 /* Print layout */
 
+// Each top-level statement of a layout is a piece: a part in Orca, with a
+// name and slicer settings of its own (see python/generate.py).
+module piece(name, orca = "") {
+  echo(piece = name, orca = orca);
+  children();
+}
+
+// The layouts are drawn with the tracks along x and the back toward +x, then
+// turned onto the bed: tracks front to back, and the back at the front of the
+// printer, to reach its magnet pockets at the pause.
+module bed() {
+  rotate(-90) children();
+}
+
+// Lines along the tracks, so along y on the bed: on the top's face, which
+// prints on the bed, and on the back's channel floor, its top. Angles follow
+// the model, so that turning it in Orca turns the lines too.
+turned = " align_infill_direction_to_model=1";
+orca_top = str("bottom_surface_pattern=monotonic bottom_layer_direction=90", turned);
+orca_back = str("bottom_surface_pattern=concentric top_surface_pattern=monotonic top_layer_direction=90", turned);
+orca_rupee = "top_surface_pattern=concentric";
+
+// Turned over, not mirrored, which would print the numbers backwards.
 module print_top() {
-  translate([0, 0, top_h]) mirror([0, 0, 1]) children();
+  translate([0, 0, top_h]) rotate([180, 0, 0]) children();
 }
 
 // The layouts are spelled out at the top level, at the end of the file, one
@@ -463,42 +524,51 @@ module test_top() {
 }
 
 module test_back() {
-  translate([0, test_w + 4, 0]) difference() {
+  translate([test_l + 4, 0, 0]) difference() {
     back_plate([test_l, test_w], 2, test_pins)
-      for (k = [0 : 2]) translate([x0(test_n), test_y(k)]) moat_2d() chan_2d(test_n);
+      moat_2d() for (k = [0 : 2]) translate([x0(test_n), test_y(k)]) chan_2d(test_n);
     for (k = [0 : 2]) translate([x0(test_n), test_y(k)]) back_pockets(test_n);
   }
 }
 
 module test_sliders() {
-  for (k = [0 : 2]) translate([test_l / 2 + 12, test_y(k), -back_t])
+  for (k = [0 : 2]) translate([-test_l / 2 - 12, test_y(k), -back_t])
     slider(test_bumps[k], k + 1, test_lifts[k]);
 }
 
 module test_rupees() {
-  for (k = [0 : 2]) translate([test_l / 2 + 26, test_y(k) * 0.7, 0]) rupee();
+  for (k = [0 : 2]) translate([-test_l / 2 - 26, test_y(k) * 0.7, 0]) rupee();
 }
+
+// One color per filament, shared by every view and layout: generate.py gives
+// each color a filament, in the order a layout first uses them.
+c_body = "darkgreen";
+c_slider = "darkgreen";
+c_number = "yellow";
+c_rupee = ["magenta", "cyan"];
 
 if (part == "assembled" || part == "exploded") {
   e = part == "exploded" ? 8 : 0;
-  color("darkgreen") translate([0, 0, -e]) back();
-  color("darkkhaki") sliders_in_place() slider();
-  color("darkgreen", part == "exploded" ? 0.4 : 1) translate([0, 0, e]) top();
-  color("white") translate([0, 0, e]) numbers();
-  color("orange") translate([0, 0, 2 * e]) rupees_in_place(0);
-  color("royalblue") translate([0, 0, 2 * e]) rupees_in_place(1);
+  color(c_body) translate([0, 0, -e]) back();
+  color(c_slider) sliders_in_place() slider();
+  color(c_body, part == "exploded" ? 0.4 : 1) translate([0, 0, e]) top();
+  color(c_number) translate([0, 0, e]) numbers();
+  color(c_rupee[0]) translate([0, 0, 2 * e]) rupees_in_place(0);
+  color(c_rupee[1]) translate([0, 0, 2 * e]) rupees_in_place(1);
 } else if (part == "print") {
-  color("darkgreen") print_top() top();
-  color("white") print_top() numbers();
-  color("darkgreen") translate([card.x + 5, 0, 0]) back();
-  color("darkkhaki") print_sliders();
-  color("orange") print_rupees([0, 1]);
-  color("royalblue") print_rupees([2, 3]);
+  if (!arms) echo(pause = z_pause);
+  piece("top", orca_top) color(c_body) bed() print_top() top();
+  piece("numbers", orca_top) color(c_number) bed() print_top() numbers();
+  piece("back", orca_back) color(c_body) bed() translate([card.x + 5, 0, 0]) back();
+  piece("sliders") color(c_slider) bed() print_sliders();
+  piece("rupees 0", orca_rupee) color(c_rupee[0]) bed() print_rupees([0, 1]);
+  piece("rupees 1", orca_rupee) color(c_rupee[1]) bed() print_rupees([2, 3]);
 } else if (part == "test") {
-  color("darkgreen") print_top() test_top();
-  color("darkgreen") test_back();
-  color("darkkhaki") test_sliders();
-  color("orange") test_rupees();
+  if (!arms) echo(pause = z_pause);
+  piece("top", orca_top) color(c_body) bed() print_top() test_top();
+  piece("back", orca_back) color(c_body) bed() test_back();
+  piece("sliders") color(c_slider) bed() test_sliders();
+  piece("rupees", orca_rupee) color(c_rupee[0]) bed() test_rupees();
 }
 else if (part == "top") top();
 else if (part == "numbers") numbers();
