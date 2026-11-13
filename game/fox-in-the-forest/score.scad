@@ -38,6 +38,10 @@ part = "assembled"; // [assembled, exploded, print, top, numbers, back, sliders,
 // A sleeved card, a little under the box's cavity.
 card = [66, 92];
 card_r = 3;
+// Roundovers on the card's outside edges: around the face, and around the
+// rim's underside, which has to stay under rim_w.
+face_round = 1.5;
+rim_round = 0.6;
 
 /* [Face] */
 face_t = 1.6;
@@ -167,6 +171,8 @@ y_core = hw - arm_t - slit_w;
 // Hump height off the plate side, for engagement e.
 function bump_hh(e) = side_c + e;
 arms = detent == "arms";
+assert(rim_round < rim_w, "rim rounded away");
+assert(face_round < face_t, "face roundover reaches the channels");
 assert(arm_h <= plate_t, "arms taller than the plate");
 assert(back_t - mag_roof - mag.y - mag_slack >= 0.3 - eps, "back too thin under the magnets");
 assert(plate_t - mag.y - max(test_lifts) >= 0.2 - eps, "plate too thin over the magnet");
@@ -363,11 +369,24 @@ module moat_2d() {
     difference() { offset(delta = d + moat_w) children(); offset(delta = d) children(); }
 }
 
+// A slab of the size outline, h tall, its bottom edge rounded over by r_bot
+// and its top edge by r_top.
+module round_slab(size, r, h, r_bot, r_top) {
+  n = 12;
+  hull() for (i = [0 : n]) {
+    a = 90 * i / n;
+    in_b = r_bot * (1 - cos(a));
+    in_t = r_top * (1 - cos(a));
+    translate([0, 0, r_bot * (1 - sin(a))]) linear_extrude(eps) rrect(size - 2 * [in_b, in_b], r - in_b);
+    translate([0, 0, h - r_top * (1 - sin(a)) - eps]) linear_extrude(eps) rrect(size - 2 * [in_t, in_t], r - in_t);
+  }
+}
+
 // The top's body, size outline, with the recess for its back, pin holes, and
 // the children cut out.
 module top_body(size, r, pin_xy = []) {
   difference() {
-    linear_extrude(top_h) rrect(size, r);
+    round_slab(size, r, top_h, rim_round, face_round);
     translate([0, 0, -eps]) linear_extrude(back_t + eps) rrect(size - 2 * [rim_w, rim_w], r - rim_w);
     for (p = pin_xy) translate([p.x, p.y, back_t - eps]) cylinder(d = pin_d + 2 * fit_c, h = pin_h + 0.3);
     children();
