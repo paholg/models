@@ -6,8 +6,8 @@ The printer is available at 10.0.0.15.
 
 ## OrcaSlicer
 
-`orca-slicer` comes from the system, not this repo's flake: an AppImage in a
-sandbox wrapper, so don't go looking for its files through the binary.
+`orca-slicer` comes from this repo's flake: an AppImage in a sandbox wrapper,
+so don't go looking for its files through the binary.
 
 * `$ORCA_SOURCE` is its source, at the same version. Look settings up in
   `$ORCA_SOURCE/src/libslic3r/PrintConfig.cpp`; a setting's key is its name
