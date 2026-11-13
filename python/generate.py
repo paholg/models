@@ -34,6 +34,10 @@ A piece can carry settings of its own, which Orca applies to just its parts: an
     module piece(name, orca = "") { echo(piece = name, orca = orca); children(); }
     piece("lid", "bottom_surface_pattern=concentric") color("green") lid();
 
+A print can pause, to put something inside it: `echo(pause = z)` pauses once
+the print is z high, before the layer above. That takes a `layer_height` on the
+`// orca:` line, to find that layer.
+
 Usage: generate.py FILE.scad
 """
 
@@ -137,11 +141,12 @@ def annotate(
     note: str,
     parts: list[tuple[str, int, dict[str, str]]],
     settings: dict[str, str],
+    pauses: list[float],
 ) -> None:
     """Copy an Orca project as a published one, naming its object, parts and plate.
 
     `parts` is each part's name, filament and own settings, in order. `settings` are
-    the ones to apply to everything.
+    the ones to apply to everything. `pauses` are the heights to pause at.
     """
     published = {
         "orca_published": "1",
@@ -206,6 +211,21 @@ def annotate(
                 )
                 data = xml.encode()
             zout.writestr(item, data)
+        if pauses:
+            # Orca gives each of these to the layer whose top is nearest, and runs it
+            # before that layer: so name the layer above the pause. Type 1 is a pause.
+            layer = float(settings["layer_height"])
+            zout.writestr(
+                "Metadata/custom_gcode_per_layer.xml",
+                '<?xml version="1.0" encoding="utf-8"?>\n<custom_gcodes_per_layer>\n'
+                '<plate>\n<plate_info id="1"/>\n'
+                + "".join(
+                    f'<layer top_z="{z + layer:.4f}" type="1" extruder="1" color=""'
+                    ' extra="" gcode=""/>\n'
+                    for z in pauses
+                )
+                + '<mode value="MultiExtruder"/>\n</plate>\n</custom_gcodes_per_layer>\n',
+            )
 
 
 def generate(scad: Path) -> None:
@@ -257,6 +277,13 @@ def generate(scad: Path) -> None:
                     )
                 )
             ]
+            pauses = [
+                float(m[1])
+                for line in log
+                if (m := re.fullmatch(r"ECHO: pause = ([\d.]+)", line))
+            ]
+            if pauses and "layer_height" not in settings:
+                sys.exit(f"{part} pauses, which takes a layer_height on the orca line")
             parts = split(mesh, work, pieces)
             # Filaments in order of each color's first appearance.
             order = list(dict.fromkeys(p[1] for p in parts))
@@ -292,8 +319,12 @@ def generate(scad: Path) -> None:
                 note,
                 [(label, i, own) for (_, _, label, own), i in zip(parts, ids)],
                 settings,
+                pauses,
             )
-        print(f"{target.relative_to(ROOT)}: {len(parts)} parts, {len(order)} colors")
+        print(
+            f"{target.relative_to(ROOT)}: {len(parts)} parts, {len(order)} colors"
+            + "".join(f", pause at {z:g} mm" for z in pauses)
+        )
 
 
 if __name__ == "__main__":
