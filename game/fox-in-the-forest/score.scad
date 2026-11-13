@@ -24,7 +24,7 @@
 //     bent into a round hump in the middle that clicks into scallops in the
 //     channel walls.
 // - rupees: press onto the stems from above after the back is glued on, each
-//   pointing at its track's labels. Printed flat, socket down.
+//   with a point over the end of its label. Printed flat, socket down.
 // Assembly: drop the sliders into the top's channels, glue on the back, press
 // on the rupees.
 
@@ -49,7 +49,9 @@ font = "TeX Gyre Bonum:style=Bold";
 num_h = 4;
 num_depth = 0.6;
 pitch = 9;
-// Between a label and the rupee band beside it.
+// Half the band each track takes up across the card, and from there to its
+// labels' ends. The rupee's point reaches past both, over the label.
+band = 5.5;
 num_gap = 1;
 
 /* [Slider] */
@@ -127,9 +129,9 @@ mag_well_d = 1.6;
 mag_wells = 4;
 
 /* [Rupee] */
-rupee_l = 5.5;
-rupee_h = 4;
-rupee_p = 2.5;
+// From the stem to its point, and the radius of its round end.
+rupee_l = 7.5;
+rupee_h = 4.5;
 rupee_t = 3.5;
 rupee_wall = 1.2;
 rupee_bevel = 1.5;
@@ -190,12 +192,12 @@ n_sixes = 6;
 n_ones = 6;
 // Track rows in player 0's half, from its edge: [y, positions, step].
 // Reading from the long edge, the sixes come first, nearer the card's end,
-// then the ones. Each row is its labels, then its rupee band. The gaps at the
-// end, between the rows, and between the players (shared) are all equal.
-row_gap = (card.y / 2 - 2 * (num_len + num_gap + 2 * rupee_l)) / 2.5;
+// then the ones. Each row is its labels, then its track's band. The gaps at
+// the end, between the rows, and between the players (shared) are all equal.
+row_gap = (card.y / 2 - 2 * (num_len + num_gap + 2 * band)) / 2.5;
 assert(row_gap >= 1.5, "rows too crowded");
-y_sixes = -card.y / 2 + row_gap + num_len + num_gap + rupee_l;
-y_ones = y_sixes + rupee_l + row_gap + num_len + num_gap + rupee_l;
+y_sixes = -card.y / 2 + row_gap + num_len + num_gap + band;
+y_ones = y_sixes + band + row_gap + num_len + num_gap + band;
 tracks = [[y_ones, n_ones, 1], [y_sixes, n_sixes, 6]];
 
 function x0(n) = -(n - 1) * pitch / 2;
@@ -336,8 +338,8 @@ module track_cut(n, e = engage) {
 
 module labels_2d() {
   both() at_tracks() for (i = [0 : $n - 1])
-    translate([i * pitch, -rupee_l - num_gap - num_len / 2]) mirror([1, 0, 0]) rotate(90)
-      text(str(i * $step), size = num_size, font = font, halign = "center", valign = "center");
+    translate([i * pitch, -band - num_gap]) mirror([1, 0, 0]) rotate(90)
+      text(str(i * $step), size = num_size, font = font, halign = "right", valign = "center");
 }
 
 module numbers(above = 0) {
@@ -353,7 +355,7 @@ pins = [
 ];
 assert(pins[2].y + pin_d / 2 + fit_c + 1 < y_sixes - cw - moat_in - moat_w, "pin crowds the sixes track");
 // The two players' middle channels, with a moat each and some glue land.
-assert(row_gap - 2 * (cw - rupee_l) >= 2 * (moat_in + moat_w) + 0.4, "middle channels too close");
+assert(row_gap - 2 * (cw - band) >= 2 * (moat_in + moat_w) + 0.4, "middle channels too close");
 function both_pins() = [for (i = [0, 1], p = pins) player_xy(i, p)];
 
 // A channel's outline, for position 0.
@@ -440,13 +442,18 @@ module back() {
   }
 }
 
-// Pointed at -y, toward its track's labels, and square at +y, so there's no
-// mistaking which labels it reads against. Corners rounded at every inset.
+// An arrow across the track: a circle around the stem, wide enough to cover
+// the socket's glue wells under the bevel, drawn out to a point at -y, which
+// sits over the end of its label. The point is rounded at every inset.
 module rupee_2d(inset = 0) {
   l = rupee_l;
   h = rupee_h;
-  offset(r = rupee_r) offset(delta = -inset - rupee_r)
-    polygon([[0, -l], [h, -l + rupee_p], [h, l], [-h, l], [-h, -l + rupee_p]]);
+  // How far out the sharp point is, for its rounded tip to land at -l.
+  d = (l - rupee_r) / (1 - rupee_r / h);
+  offset(r = rupee_r) offset(delta = -inset - rupee_r) hull() {
+    circle(r = h, $fn = 96);
+    translate([0, -d]) square(eps, center = true);
+  }
 }
 
 // Long axis across the track (y), underside at z = 0.
@@ -520,7 +527,7 @@ module print_sliders() {
 
 // Rupees ks of the four.
 module print_rupees(ks) {
-  for (k = ks) translate([-card.x / 2 - 28, -card.y / 2 + 8 + k * (2 * rupee_l + 4), 0]) rupee();
+  for (k = ks) translate([-card.x / 2 - 28, -card.y / 2 + 8 + k * (rupee_l + rupee_h + 4), 0]) rupee();
 }
 
 /* Test: three short tracks, with different hump engagements (test_bumps) for
