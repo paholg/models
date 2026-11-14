@@ -92,15 +92,15 @@ xxx
  x
  x
 
-xx
- xxx
+  xx
+xxx
 
 xx
 xx
- x
+x
 
 x
-xxxxx
+xxxx
 
  x
 xxx
@@ -173,7 +173,7 @@ x x
 xxxxx
 
 xxxx
- xxx
+xxx
  xx
  xx
 
