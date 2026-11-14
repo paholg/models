@@ -5,24 +5,35 @@
 // x is across the cards, y is front (0) to back, z is up. The seam is level
 // across the front and back walls and slopes up between them along the sides.
 //
-// The box is ten flat panels, mitred and glued: floor, top, and a body and a
-// lid piece of each wall. Every panel prints with its outside face on the
-// bed, and the mitres meet on the box's edges, so no joint shows on a face.
+// The box is ten flat panels, glued: floor, top, and a body and a lid piece
+// of each wall. Every panel prints with its outside face on the bed. They
+// join in mitred rabbets (lib/panel_box.scad), whose seams fall on the box's
+// edges, so no joint shows on a face. The front and back drop between the
+// sides, and the floor and top into all four walls. To glue the body, or the
+// lid: tape its panels up dry, outside, then run thin CA along the inside
+// corners.
 //
 // Bar magnets stand on edge in the front and back walls, in pockets open to
 // the inside and to the seam, each meeting its partner edge to edge across
 // the seam. They're magnetized through their thickness, so glue one of each
 // pair in flipped, to attract. A trapezoid key on each wall's seam locates
-// the lid. Hidden tabs inside the mitres line the panels up for gluing.
+// the lid.
 
-// export: print
-// Layers that the 0.6 mm inlays and the 0.8 mm magnet skins are whole numbers
-// of, from the bed up.
-// orca: layer_height=0.2 initial_layer_print_height=0.2
+// export: print seam magnets
+// The 0.08 High Quality process, for joints that fit as drawn. The 0.6 mm
+// inlays, the 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front
+// and back all end on whole layers, from the bed up.
+// orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2
+
+use <../../lib/panel_box.scad>
 
 /* [Output] */
 // "print" is every panel on the bed, outside down, one object per color.
-part = "closed"; // [closed, open, exploded, print]
+// "seam" is a test: three short lengths of the front wall across the seam,
+// each with the key and one magnet pocket, at the fits in seam_fits.
+// "magnets" is a smaller one: one strip of wall with a magnet pocket at each
+// crush in mag_crushes.
+part = "closed"; // [closed, open, exploded, print, seam, magnets]
 
 /* [Contents] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
@@ -39,7 +50,7 @@ top_clear = 0.5;
 
 /* [Box] */
 // Side walls, floor and top.
-wall = 2;
+wall = 2.04;
 // How far the seam drops from back to front.
 seam_drop = 25;
 // Height of the lid at the back, top plate included.
@@ -50,34 +61,26 @@ chamfer = 0.6;
 /* [Magnets] */
 // Bar magnets in the seam: length along the wall, height, thickness.
 mag = [18.4, 9, 2.5];
-// Pocket clearance on the thickness.
-mag_c = 0.2;
+// Pocket clearance on the thickness, where the pocket is open to the inside.
+mag_c = 0.12;
 // Gap for excess glue, past each end of a magnet and past its far edge from
 // the seam. Crush ribs and stop pads cross it to hold the magnet in place.
 mag_glue = 0.4;
 // How far each end's crush ribs bite into the magnet's length.
 mag_crush = 0.1;
 // Width of a crush rib at its root.
-mag_rib_w = 1;
+mag_rib_w = 1.2;
+// Width of its tip: flat, and wide enough to print at its full height. A
+// pointed rib came out about 0.1 mm short, rounded off by the nozzle, and a
+// 0.15 mm crush gripped nothing.
+mag_rib_tip = 0.4;
 // Plastic outside a pocket; with the magnet, the front and back walls'
 // thickness.
-mag_skin = 0.8;
+mag_skin = 0.84;
 // How far each magnet sits below its seam face, so the plastic bears.
 mag_recess = 0.05;
 // Magnets sit this far either side of center, on the front and the back.
 mag_x = 20;
-
-/* [Mitre tabs] */
-// Hidden tabs along every mitre, alternating between the two panels: each
-// reaches across the mitre's inner part into a notch in the other panel, so
-// the panels register. Rough tab length.
-tab_len = 12;
-// Where along the mitre, outside to inside, the tabs start.
-tab_start = 0.6;
-// Least plastic left outside a notch.
-tab_skin = 0.6;
-// Clearance around a tab in its notch.
-tab_c = 0.1;
 
 /* [Seam keys] */
 // Width at the base, height, and how far each flank leans in.
@@ -85,7 +88,21 @@ key_w = 14;
 key_h = 2.5;
 key_lean = 1.25;
 // Clearance around a key in the lid.
-key_c = 0.15;
+key_c = 0.05;
+
+/* [Seam test] */
+// Each coupon's [key clearance, magnet crush]; its notches count its place
+// here.
+seam_fits = [[0.05, 0.05], [0.05, 0.1], [0.05, 0.2]];
+// A coupon's reach along the wall, and either side of the seam.
+seam_test_x = [-9, 31];
+seam_test_h = 14;
+
+/* [Magnet test] */
+// Each pocket's crush; its notches count its place here.
+mag_crushes = [0.05, 0.1, 0.2];
+// Plastic around each pocket, along the wall and away from the seam.
+mag_test_rim = 3;
 
 /* [Logo] */
 // Title traced from the Deluxe box front, inlaid flush in the lid top.
@@ -114,6 +131,10 @@ explode = 12;
 /* [Hidden] */
 $fn = 48;
 eps = 0.01;
+
+// The seam test's coupons set these two for themselves.
+function fit_key_c() = is_undef($key_c) ? key_c : $key_c;
+function fit_mag_crush() = is_undef($mag_crush) ? mag_crush : $mag_crush;
 
 // Front and back wall thickness.
 tf = mag.z + mag_c / 2 + mag_skin;
@@ -195,7 +216,7 @@ module at_mag(m, dir) {
 }
 
 // A pocket in that frame: oversize by mag_glue at both ends and at the far
-// edge, with two crush ribs on each end, pointed, running the way the magnet
+// edge, with two crush ribs on each end, flat-tipped, running the way the magnet
 // drops in, and two pads at the far edge for it to seat against.
 module mag_pocket() {
   l = mag.x / 2 + mag_glue;
@@ -205,7 +226,8 @@ module mag_pocket() {
     for (sx = [-1, 1], zc = [0.25, 0.75] * mag_d)
       translate([0, -2 * eps, 0]) rotate([-90, 0, 0]) linear_extrude(t + 4 * eps)
         polygon([for (q = [[l + eps, zc - mag_rib_w / 2], [l + eps, zc + mag_rib_w / 2],
-                           [l - mag_glue - mag_crush, zc]]) [sx * q[0], -q[1]]]);
+                           [l - mag_glue - fit_mag_crush(), zc + mag_rib_tip / 2],
+                           [l - mag_glue - fit_mag_crush(), zc - mag_rib_tip / 2]]) [sx * q[0], -q[1]]]);
     for (sx = [-1, 1])
       box([sx * mag.x / 4 - 1, sx * mag.x / 4 + 1], [-2 * eps, t + eps], [mag_d, mag_d + mag_glue + eps]);
   }
@@ -250,7 +272,8 @@ module logo(above = 0) {
       resize([logo_w, 0], auto = true) import("logo.svg", center = true);
 }
 
-module body_shell() {
+// The shells before their inlays are cut.
+module body_blank() {
   difference() {
     intersection() {
       outer();
@@ -258,6 +281,21 @@ module body_shell() {
     }
     cavity();
     mag_pockets(-1);
+  }
+}
+
+module lid_blank() {
+  difference() {
+    outer();
+    below_seam(fit_key_c());
+    cavity();
+    mag_pockets(1);
+  }
+}
+
+module body_shell() {
+  difference() {
+    body_blank();
     fox(eps);
     forest(eps);
   }
@@ -265,82 +303,77 @@ module body_shell() {
 
 module lid_shell() {
   difference() {
-    outer();
-    below_seam(key_c);
-    cavity();
-    mag_pockets(1);
+    lid_blank();
     logo(eps);
   }
 }
 
-/* Panels: each is the part of a shell inside its region, which runs from
-   its outside face of the box in to its face of the cavity. The regions meet
-   in mitres along every edge. */
+/* The seam test: the front wall across the seam, cut short, body and lid.
+   Each lies outside down with its seam face to the front of the bed, so
+   that Orca's seams, at the back, keep off it. */
+
+module seam_coupon(i, lid) {
+  $key_c = seam_fits[i][0];
+  $mag_crush = seam_fits[i][1];
+  x = seam_test_x;
+  z = lid ? [z_sf - key_h - 1, z_sf + seam_test_h] : [z_sf - seam_test_h, z_sf + key_h + 1];
+  difference() {
+    intersection() {
+      if (lid) lid_blank();
+      else body_blank();
+      box(x, [-1, tf], z);
+    }
+    // Notches in the end away from the magnet.
+    for (n = [0 : i]) translate([x[0], -1, z_sf + (lid ? 1 : -1) * (4 + 3.5 * n)])
+      rotate([-90, 0, 0]) cylinder(d = 2, h = tf + 2);
+  }
+}
+
+module seam_test() {
+  w = seam_test_x[1] - seam_test_x[0];
+  for (i = [0 : len(seam_fits) - 1]) translate([i * (w + bed_gap), 0, 0]) {
+    // The body's seam face is its top, so stood down toward the front.
+    translate([-seam_test_x[0], z_sf + key_h + 1, 0]) rotate([90, 0, 0]) seam_coupon(i, false);
+    // The lid's is its bottom, so turned about as well.
+    translate([seam_test_x[1], 2 * (key_h + 1) + seam_test_h + bed_gap - z_sf, 0])
+      rotate([0, 0, 180]) rotate([90, 0, 0]) seam_coupon(i, true);
+  }
+}
+
+/* The magnet test: a strip of the front wall's thickness with a row of
+   pockets, open to the seam and to the inside as in the box. It lies outside
+   down, seam face to the front of the bed. */
+
+module mag_test() {
+  r = mag_test_rim;
+  pitch = mag.x + 2 * mag_glue + r;
+  d = mag_d + mag_glue + r;
+  n = len(mag_crushes);
+  translate([r + mag.x / 2 + mag_glue, 0, tf]) rotate([-90, 0, 0]) difference() {
+    box([-pitch / 2 - r / 2, (n - 0.5) * pitch + r / 2], [0, tf], [0, d]);
+    for (i = [0 : n - 1]) translate([i * pitch, 0, 0]) {
+      $mag_crush = mag_crushes[i];
+      mag_pocket();
+      // Notches in the edge away from the seam.
+      for (k = [0 : i]) translate([(k - i / 2) * 3.5, -1, d]) rotate([-90, 0, 0]) cylinder(d = 2, h = tf + 2);
+    }
+  }
+}
+
+/* Panels: each is the part of a shell inside its region, its whole face of
+   the box. The regions meet in mitred rabbets along every edge. */
 
 walls = ["front", "back", "left", "right"];
 
 module region(name) {
-  X = [-xo, xo]; Y = [0, by]; Z = [0, box_h];
-  x = [-xs, xs]; y = [tf, y_back]; z = [wall, z_top];
-  hull() {
-    if (name == "front") { box(X, [-eps, 0], Z); box(x, [tf, tf + eps], z); }
-    else if (name == "back") { box(X, [by, by + eps], Z); box(x, [y_back - eps, y_back], z); }
-    else if (name == "left") { box([-xo - eps, -xo], Y, Z); box([-xs, -xs + eps], y, z); }
-    else if (name == "right") { box([xo, xo + eps], Y, Z); box([xs - eps, xs], y, z); }
-    else if (name == "floor") { box(X, Y, [-eps, 0]); box(x, y, [wall, wall + eps]); }
-    else { box(X, Y, [box_h, box_h + eps]); box(x, y, [z_top - eps, z_top]); }
-  }
-}
-
-function thk(name) = name == "front" || name == "back" ? tf : wall;
-
-// Mitres as [panel A, panel B, a point on the outside edge, direction along
-// it, ranges along it to fill with tabs]. The upright ones are cut up
-// separately either side of the seam.
-mitres = concat(
-  [for (a = ["front", "back"], b = ["left", "right"]) let (zc = a == "front" ? z_sf : z_sb)
-    [a, b, [b == "left" ? -xo : xo, a == "front" ? 0 : by, 0], [0, 0, 1], [[wall, zc], [zc, z_top]]]],
-  [for (p = ["floor", "top"], w = walls) let (z = p == "floor" ? 0 : box_h)
-    w == "front" || w == "back"
-      ? [p, w, [0, w == "front" ? 0 : by, z], [1, 0, 0], [[-xs, xs]]]
-      : [p, w, [w == "left" ? -xo : xo, 0, z], [0, 1, 0], [[tf, y_back]]]]);
-
-// A tab's outline, in depth below its own panel's outside face (t thick) and
-// below the other's (to thick). From tab_start along the mitre its underside
-// climbs toward the other panel's face at 45° as printed, or steeper to
-// leave tab_skin, and it ends level with its own panel's inside face.
-module tab_2d(t, to, g) {
-  k = tab_start;
-  offset(delta = g)
-    polygon([[k * t, k * to], [t, to], [t, max(k * to - (1 - k) * t, tab_skin)]]);
-}
-
-// The tabs panel name owns, grown by g.
-module tabs(name, g = 0) {
-  for (m = mitres) if (m[0] == name || m[1] == name) {
-    a = m[0]; b = m[1]; c = m[2]; e = m[3];
-    na = normal(a); nb = normal(b);
-    mine = name == a ? 0 : 1;
-    // (depth below a, depth below b, along the edge) to box coordinates.
-    multmatrix([for (i = [0 : 2]) [-na[i], -nb[i], e[i], c[i]]])
-      for (r = m[4]) let (n = max(2, round((r[1] - r[0]) / tab_len)), l = (r[1] - r[0]) / n)
-        for (i = [mine : 2 : n - 1]) translate([0, 0, r[0] + i * l - g]) linear_extrude(l + 2 * g)
-          if (mine == 0) tab_2d(thk(a), thk(b), g);
-          else mirror([1, -1]) tab_2d(thk(b), thk(a), g);
-  }
+  translate([-xo, 0, 0]) pb_panel(name, [bx, by, box_h], [wall, tf, wall]);
 }
 
 module panel(name, lid = false) {
   intersection() {
     if (lid) lid_shell();
     else body_shell();
-    difference() {
-      union() {
-        region(name);
-        tabs(name);
-      }
-      for (o = concat(walls, ["floor", "top"])) if (o != name) tabs(o, tab_c);
-    }
+    region(name);
   }
 }
 
@@ -400,7 +433,11 @@ function face(name) =
   name == "right" ? lines(atan2(1, seam_k)) :
   name == "floor" ? bottom("concentric") : lines(0);
 
-if (part == "print") {
+if (part == "seam") {
+  piece("seam test") color("darkgreen") seam_test();
+} else if (part == "magnets") {
+  piece("magnet test") color("darkgreen") mag_test();
+} else if (part == "print") {
   for (w = walls) piece(w, face(w)) color("darkgreen") flat(w) panel(w);
   piece("floor", face("floor")) color("darkgreen") flat("floor") panel("floor");
   for (w = walls) piece(str("lid ", w), face(w)) color("darkgreen") flat(w, true) panel(w, true);
@@ -423,7 +460,7 @@ if (part == "print") {
   color("white") exploded("back", e) forest_inlay();
   color("white") exploded("top", e, lift) logo();
   color("silver") {
-    for (w = ["front", "back"]) exploded(w, e) intersection() { magnets(-1); region(w); }
-    for (w = ["front", "back"]) exploded(w, e, lift) intersection() { magnets(1); region(w); }
+    for (w = ["front", "back"]) exploded(w, e) render() intersection() { magnets(-1); region(w); }
+    for (w = ["front", "back"]) exploded(w, e, lift) render() intersection() { magnets(1); region(w); }
   }
 }
