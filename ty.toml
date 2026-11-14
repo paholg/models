@@ -1,0 +1,6 @@
+# The scripts' dependencies are in uv's environment for python/.
+[environment]
+python = "python/.venv"
+
+[src]
+include = ["python", "gcode"]
