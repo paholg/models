@@ -40,6 +40,12 @@ A piece can carry settings of its own, which Orca applies to just its parts: an
     module piece(name, orca = "") { echo(piece = name, orca = orca); children(); }
     piece("lid", "bottom_surface_pattern=concentric") color("green") lid();
 
+Orca keeps some settings for a whole object, not a part: a brim or a raft, say.
+A piece with one of those becomes an object of its own, where it is, beside the
+object of everything else:
+
+    piece("feet", "brim_type=outer_only brim_width=3") feet();
+
 A print can pause, to put something inside it: `echo(pause = z)` pauses once
 the print is z high, before the layer above. That takes a `layer_height` on the
 `// orca:` line, to find that layer.
@@ -60,9 +66,11 @@ be from one plate to the next, in the order of the lines.
 Usage: generate.py FILE.scad
 """
 
+import functools
 import io
 import json
 import math
+import os
 import random
 import re
 import shlex
@@ -119,7 +127,7 @@ def directive(text: str, name: str) -> str:
 
 @dataclass
 class Built:
-    """A part, as Orca assembled it: one object, still unnamed."""
+    """A part, as Orca assembled it: its objects, the first still unnamed."""
 
     project: bytes  # Orca's 3MF
     parts: list[tuple[str, str, dict[str, str]]]  # each one's name, color and settings
@@ -171,11 +179,11 @@ def color_values(names: list[str]) -> dict[str, str]:
 
 def split(
     src: Path, out: Path, pieces: list[tuple[str, str]], by_color_name: dict[str, str]
-) -> tuple[list[tuple[Path, str, str, dict[str, str]]], tuple]:
+) -> tuple[list[tuple[Path, str, str, dict[str, str], str]], tuple]:
     """Write one STL per object and color in an OpenSCAD 3MF.
 
-    Returns each with its color, name and own settings, and the corners of the box
-    round them all. `pieces` are the objects' names and orca lines, if the .scad
+    Returns each with its color, name, own settings and piece's name, and the corners
+    of the box round them all. `pieces` are the objects' names and orca lines, if the .scad
     file gave one for each; `by_color_name` the names it gave by color.
     """
     root = ET.fromstring(zipfile.ZipFile(src).read("3D/3dmodel.model"))
@@ -223,7 +231,7 @@ def split(
                 own = pairs(line)
             path = out / f"{len(parts) + 1}.stl"
             write_stl(path, tris)
-            parts.append((path, color, label, own))
+            parts.append((path, color, label, own, pieces[i][0] if named else ""))
             points += [v for t in tris for v in t]
     box = tuple(tuple(f(v[k] for v in points) for k in range(3)) for f in (min, max))
     return parts, box
@@ -253,27 +261,114 @@ def published_tags(settings: dict[str, str]) -> str:
 def name_parts(xml: str, parts: list[tuple[str, int, dict[str, str]]]) -> str:
     """Give the parts in Orca's model settings their names, filaments and settings.
 
-    Orca names each part after its file, and its own --load-filament-ids only works
-    with filament presets loaded.
+    Orca names each part after its file, which is its number, and its own
+    --load-filament-ids only works with filament presets loaded.
     """
-    each = iter(parts)
 
     def rename(m: re.Match) -> str:
-        label, filament, own = next(each)
+        label, filament, own = parts[int(m[1]) - 1]
         return (
             meta("name", label)
-            + m[1]
+            + m[2]
             + meta("extruder", str(filament))
             + "".join(meta(k, v) for k, v in own.items())
         )
 
     return re.sub(
-        r'<metadata key="name" value="\d+\.stl"/>((?:(?!<part ).)*?)'
+        r'<metadata key="name" value="(\d+)\.stl"/>((?:(?!<part ).)*?)'
         r'<metadata key="extruder" value="1"/>',
         rename,
         xml,
         flags=re.DOTALL,
     )
+
+
+@functools.cache
+def object_keys() -> frozenset[str]:
+    """The settings Orca keeps for a whole object, which a part can't carry."""
+    if "ORCA_SOURCE" not in os.environ:
+        sys.exit("a piece has settings, which takes $ORCA_SOURCE to sort them")
+    header = Path(os.environ["ORCA_SOURCE"]) / "src/libslic3r/PrintConfig.hpp"
+    block = re.search(
+        r"^PRINT_CONFIG_CLASS_DEFINE\(\s*PrintObjectConfig,(.*?)^\)",
+        header.read_text(),
+        re.DOTALL | re.MULTILINE,
+    )[1]
+    return frozenset(re.findall(r"\(\(\s*ConfigOption[^,]*,\s*(\w+)\)\)", block))
+
+
+def separate(project: Path, apart: list[tuple[str, dict[str, str], list[int]]]) -> None:
+    """Give some of an assembled project's parts objects of their own, where they are.
+
+    `apart` is each such object's name, settings and parts, numbered from 1. Orca's
+    --assemble makes one object of everything, called "Assembly"; that keeps the
+    parts left, if any are.
+    """
+    with zipfile.ZipFile(project) as zin:
+        files = {i: zin.read(i.filename) for i in zin.infolist()}
+    by_name = {i.filename: i for i in files}
+    model = files[by_name["3D/3dmodel.model"]].decode()
+    config = files[by_name["Metadata/model_settings.config"]].decode()
+
+    whole = re.search(r'  <object id="(\d+)".*?  </object>\n', model, re.DOTALL)
+    main = int(whole[1])
+    comps = {
+        int(m[1]): m[0]
+        for m in re.finditer(r'    <component [^>]*objectid="(\d+)"[^>]*/>\n', whole[0])
+    }
+    item = re.search(r"  <item [^>]*/>\n", model)[0]
+    block = re.search(r"  <object id=.*?</object>\n", config, re.DOTALL)[0]
+    part_xml = {
+        int(m[1]): m[0]
+        for m in re.finditer(r'    <part id="(\d+)".*?</part>\n', block, re.DOTALL)
+    }
+    instance = re.search(
+        r"    <model_instance>.*?</model_instance>\n", config, re.DOTALL
+    )[0]
+    ident = int(re.search(r'"identify_id" value="(\d+)"', instance)[1])
+
+    taken = {n for _, _, ns in apart for n in ns}
+    objects = [("Assembly", {}, [n for n in comps if n not in taken]), *apart]
+    resources, items, blocks, instances = [], [], [], []
+    for k, (name, settings, ns) in enumerate(objects):
+        if not ns:
+            continue
+        oid = main + k
+        resources.append(
+            f'  <object id="{oid}" p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, f"object {oid}")}"'
+            ' type="model">\n   <components>\n'
+            + "".join(comps[n] for n in ns)
+            + "   </components>\n  </object>\n"
+        )
+        items.append(
+            re.sub(
+                r' p:UUID="[^"]*"',
+                f' p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, f"item {oid}")}"',
+                item.replace(f'objectid="{main}"', f'objectid="{oid}"'),
+            )
+        )
+        blocks.append(
+            f'  <object id="{oid}" auto_drop="1">\n    {meta("name", name)}\n'
+            + "".join(f"    {meta(key, v)}\n" for key, v in settings.items())
+            + "".join(part_xml[n] for n in ns)
+            + "  </object>\n"
+        )
+        instances.append(
+            instance.replace(
+                meta("object_id", str(main)), meta("object_id", str(oid))
+            ).replace(
+                meta("identify_id", str(ident)), meta("identify_id", str(ident + k))
+            )
+        )
+    model = model.replace(whole[0], "".join(resources)).replace(item, "".join(items))
+    config = config.replace(block, "".join(blocks)).replace(
+        instance, "".join(instances)
+    )
+    files[by_name["3D/3dmodel.model"]] = model.encode()
+    files[by_name["Metadata/model_settings.config"]] = config.encode()
+    with zipfile.ZipFile(project, "w", zipfile.ZIP_DEFLATED) as zout:
+        for i, data in files.items():
+            zout.writestr(i, data)
 
 
 def annotate(
@@ -309,7 +404,7 @@ def annotate(
                 )
             if item.filename == "Metadata/model_settings.config":
                 xml = data.decode()
-                # --assemble calls the one object "Assembly", and leaves the plate unnamed.
+                # --assemble calls its object "Assembly", and leaves the plate unnamed.
                 xml = xml.replace(
                     meta("name", "Assembly"),
                     meta("name", f"{name} [{note}]" if note else name),
@@ -473,11 +568,10 @@ def combine(
     first = zipfile.ZipFile(io.BytesIO(next(iter(built.values())).project))
     # An object for every copy of a part: Orca's GUI won't slice a plate that has
     # only further instances of an object on another plate.
-    objects: dict[tuple, int] = {}
+    objects: dict[tuple, list[int]] = {}
     copies: dict[str, int] = {}
     next_id = 1
     models, resources, configs, items, plate_xml = {}, [], [], [], []
-    made: dict[int, int] = {}  # instances so far, by object
     for i, plate in enumerate(plates):
         origin = (
             i % cols * BED[0] * PLATE_STRIDE,
@@ -490,41 +584,41 @@ def combine(
             copy = copies[part] = copies.get(part, 0) + 1
             if (part, copy) not in objects:
                 zin = zipfile.ZipFile(io.BytesIO(b.project))
+                # Every id, of a part or an object, moves up by the same.
                 base = next_id
-                oid = objects[part, copy] = base + len(b.parts)
-                next_id = oid + 1
 
                 def moved(m: re.Match, base: int = base) -> str:
                     return f'{m[1]}"{base - 1 + int(m[2])}"'
 
-                path = f"3D/Objects/{part}_{oid}.model"
+                tops = re.findall(
+                    r'  <object id="(\d+)"[^>]*>\n(.*?)  </object>\n',
+                    zin.read("3D/3dmodel.model").decode(),
+                    re.DOTALL,
+                )
+                oids = objects[part, copy] = [base - 1 + int(i) for i, _ in tops]
+                next_id = max(oids) + 1
+                path = f"3D/Objects/{part}_{oids[0]}.model"
                 models[path] = re.sub(
                     r'(<object id=)"(\d+)"',
                     moved,
                     zin.read("3D/Objects/Assembly_1.model").decode(),
                 )
-                comps = re.findall(
-                    r"<component [^>]*/>", zin.read("3D/3dmodel.model").decode()
-                )
-                comps = [
-                    re.sub(r'( objectid=)"(\d+)"', moved, c).replace(
+                for oid, (_, body) in zip(oids, tops):
+                    body = re.sub(r'( objectid=)"(\d+)"', moved, body).replace(
                         "/3D/Objects/Assembly_1.model", "/" + path
                     )
-                    for c in comps
-                ]
-                resources.append(
-                    f'  <object id="{oid}" p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, path)}" type="model">\n'
-                    "   <components>\n"
-                    + "".join(f"    {c}\n" for c in comps)
-                    + "   </components>\n  </object>\n"
+                    resources.append(
+                        f'  <object id="{oid}" p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, f"{path} {oid}")}"'
+                        f' type="model">\n{body}  </object>\n'
+                    )
+                config = "".join(
+                    re.findall(
+                        r"  <object id=.*?</object>\n",
+                        zin.read("Metadata/model_settings.config").decode(),
+                        re.DOTALL,
+                    )
                 )
-                config = re.search(
-                    r"  <object id=.*?</object>\n",
-                    zin.read("Metadata/model_settings.config").decode(),
-                    re.DOTALL,
-                )[0]
-                config = re.sub(r'(<object id=)"(\d+)"', f'\\1"{oid}"', config, count=1)
-                config = re.sub(r'(<part id=)"(\d+)"', moved, config)
+                config = re.sub(r'(<(?:object|part) id=)"(\d+)"', moved, config)
                 config = config.replace(
                     meta("name", "Assembly"),
                     meta("name", part if copy == 1 else f"{part} {copy}"),
@@ -536,20 +630,19 @@ def combine(
                         [(label, k, own) for (label, _, own), k in zip(b.parts, ids)],
                     )
                 )
-            oid = objects[part, copy]
             # The box's corner to (x, y) on the plate, its bottom to the bed.
             (x0, y0, z0), (_x1, y1, _z1) = b.box
             if turned:
                 at = "0 1 0 -1 0 0 0 0 1", origin[0] + x + y1, origin[1] + y - x0
             else:
                 at = "1 0 0 0 1 0 0 0 1", origin[0] + x - x0, origin[1] + y - y0
-            n = len(items)
-            items.append(
-                f'  <item objectid="{oid}" p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, f"item {n}")}"'
-                f' transform="{at[0]} {at[1]:.4f} {at[2]:.4f} {-z0:.4f}" printable="1"/>\n'
-            )
-            instances.append((oid, made.get(oid, 0), 1000 + n))
-            made[oid] = made.get(oid, 0) + 1
+            for oid in objects[part, copy]:
+                n = len(items)
+                items.append(
+                    f'  <item objectid="{oid}" p:UUID="{uuid.uuid5(uuid.NAMESPACE_OID, f"item {n}")}"'
+                    f' transform="{at[0]} {at[1]:.4f} {at[2]:.4f} {-z0:.4f}" printable="1"/>\n'
+                )
+                instances.append((oid, 0, 1000 + n))
         count: dict[str, int] = {}
         for part, *_ in plate:
             count[part] = count.get(part, 0) + 1
@@ -643,7 +736,9 @@ def combine(
             if m := re.fullmatch(r"(Metadata/\w*?)1((?:_small)?\.png)", name):
                 for k in range(len(plates)):
                     zout.writestr(f"{m[1]}{k + 1}{m[2]}", first.read(name))
-    print(f"{dst.relative_to(ROOT)}: {len(plates)} plates, {len(objects)} objects")
+    print(
+        f"{dst.relative_to(ROOT)}: {len(plates)} plates, {sum(map(len, objects.values()))} objects"
+    )
 
 
 def generate(scad: Path) -> None:
@@ -744,8 +839,14 @@ def generate(scad: Path) -> None:
                 )
             ids = [
                 order.index(c) + 1 if order.index(c) < FILAMENTS else 1
-                for _, c, _, _ in parts
+                for _, c, *_ in parts
             ]
+            # A piece with settings Orca keeps for a whole object: one of its own.
+            whole = object_keys() if any(p[3] for p in parts) else frozenset()
+            apart: dict[str, tuple[dict[str, str], list[int]]] = {}
+            for n, (_, _, _, own, piece) in enumerate(parts):
+                if of_object := {k: own.pop(k) for k in list(own) if k in whole}:
+                    apart.setdefault(piece, (of_object, []))[1].append(n + 1)
             print(f"{part}: orca-slicer, assembling {len(parts)} parts")
             # Orca writes result.json into its working directory.
             done = subprocess.run(
@@ -763,9 +864,10 @@ def generate(scad: Path) -> None:
             )
             if not (work / "project.3mf").exists():
                 sys.exit(f"orca-slicer failed on {part}:\n{done.stdout}{done.stderr}")
+            separate(work / "project.3mf", [(n, s, ns) for n, (s, ns) in apart.items()])
             built[part] = Built(
                 (work / "project.3mf").read_bytes(),
-                [(label, color, own) for _, color, label, own in parts],
+                [(label, color, own) for _, color, label, own, _ in parts],
                 box,
             )
             if part not in exports:
@@ -775,12 +877,13 @@ def generate(scad: Path) -> None:
                 target,
                 target.stem,
                 note,
-                [(label, i, own) for (_, _, label, own), i in zip(parts, ids)],
+                [(label, i, own) for (_, _, label, own, _), i in zip(parts, ids)],
                 settings,
                 pauses,
             )
         print(
             f"{target.relative_to(ROOT)}: {len(parts)} parts, {len(order)} colors"
+            + (f", {len(apart)} objects apart" if apart else "")
             + "".join(f", pause at {z:g} mm" for z in pauses)
         )
     if groups:
