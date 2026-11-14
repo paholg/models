@@ -66,6 +66,7 @@ be from one plate to the next, in the order of the lines.
 Usage: generate.py FILE.scad
 """
 
+import io
 import math
 import shlex
 import sys
@@ -105,7 +106,8 @@ def combine(
     `filaments` names the filament a color stands for, for the plates' names.
     """
     sizes = {
-        p: tuple(a.box[1][k] - a.box[0][k] for k in (0, 1)) for p, a in built.items()
+        p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
+        for p, a in built.items()
     }
     packed = [plate for g in groups for plate in layout.pack(g, sizes)]
     colors = [
@@ -219,5 +221,6 @@ def generate(file: Path) -> None:
 
 if __name__ == "__main__":
     # Show each line as it is printed, even into a pipe.
-    sys.stdout.reconfigure(line_buffering=True)
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     generate(Path(sys.argv[1]).resolve())

@@ -18,6 +18,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape, unescape
 
 from .scad import CORE, Solid
+from .tree import attr, child
 
 PRODUCTION = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
 # Orca reads these names as they're written, prefix and all, whatever they're bound to.
@@ -104,8 +105,10 @@ def object_keys() -> frozenset[str]:
         r"^PRINT_CONFIG_CLASS_DEFINE\(\s*PrintObjectConfig,(.*?)^\)",
         header.read_text(),
         re.DOTALL | re.MULTILINE,
-    )[1]
-    return frozenset(re.findall(r"\(\(\s*ConfigOption[^,]*,\s*(\w+)\)\)", block))
+    )
+    if not block:
+        sys.exit(f"no PrintObjectConfig in {header}")
+    return frozenset(re.findall(r"\(\(\s*ConfigOption[^,]*,\s*(\w+)\)\)", block[1]))
 
 
 def metadata(parent: ET.Element, key: str) -> ET.Element:
@@ -156,21 +159,21 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
     objects = {"": Object("", {}, [])}
     for part in config.iterfind("object/part"):
         # Orca names each part after its file, which is its number.
-        number = int(Path(metadata(part, "name").get("value")).stem)
+        number = int(Path(attr(metadata(part, "name"), "value")).stem)
         solid = solids[number - 1]
         of_object = {k: v for k, v in solid.settings.items() if k in whole}
         own = {k: v for k, v in solid.settings.items() if k not in whole}
         obj = objects.setdefault(
             solid.piece if of_object else "", Object(solid.piece, of_object, [])
         )
-        i = part.get("id")
+        i = attr(part, "id")
         obj.volumes.append(
             Volume(number, solid.name, solid.color, own, mesh[i], component[i], part)
         )
     return Assembly(
         [o for o in objects.values() if o.volumes],
         box,
-        model.find(f"{core('build')}/{core('item')}").get("transform"),
+        attr(child(model, f"{core('build')}/{core('item')}"), "transform"),
         meshes,
         archive,
     )
@@ -186,7 +189,7 @@ def publish(model: ET.Element, settings: dict[str, str]) -> None:
             f"{k} = {v}" for k, v in (settings or {"layer_height": "0.2"}).items()
         ),
     }
-    at = list(model).index(model.find(core("resources")))
+    at = list(model).index(child(model, core("resources")))
     for i, (name, value) in enumerate(published.items()):
         tag = ET.Element(core("metadata"), name=name)
         # Orca unescapes these values twice: once more than XML has it.
@@ -244,10 +247,10 @@ def write(
     """
     src = zipfile.ZipFile(io.BytesIO(plates[0].placed[0].assembly.archive))
     model = ET.fromstring(src.read(MODEL))
-    resources, build = model.find(core("resources")), model.find(core("build"))
+    resources, build = child(model, core("resources")), child(model, core("build"))
     for parent in (resources, build):
-        for child in list(parent):
-            parent.remove(child)
+        for old in list(parent):
+            parent.remove(old)
     publish(model, settings)
 
     config = ET.Element("config")

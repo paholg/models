@@ -13,6 +13,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .tree import attr, child
+
 # The 3MF core namespace.
 CORE = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
 NS = {"m": CORE}
@@ -101,7 +103,7 @@ def color_values(names: set[str]) -> dict[str, str]:
             colors, objects = meshes(mesh)
         # A color is on the object's triangles, if not the object.
         for n, o in zip(new, objects):
-            triangle = o.find(".//m:triangle", NS)
+            triangle = child(o, ".//m:triangle", NS)
             _values[n] = colors[int(triangle.get("p1", o.get("pindex", "0")))]
     return {n: _values[n] for n in names}
 
@@ -124,16 +126,16 @@ def split(
         )
     named = len(pieces) == len(objects)
     for i, obj in enumerate(objects):
-        mesh = obj.find("m:mesh", NS)
+        mesh = child(obj, "m:mesh", NS)
         verts = [
-            (float(v.get("x")), float(v.get("y")), float(v.get("z")))
+            tuple(float(attr(v, k)) for k in "xyz")
             for v in mesh.iterfind("m:vertices/m:vertex", NS)
         ]
         tris_by_color: dict[int, list] = {}
         for t in mesh.iterfind("m:triangles/m:triangle", NS):
             k = int(t.get("p1", obj.get("pindex", "0")))
             tris_by_color.setdefault(k, []).append(
-                [verts[int(t.get(v))] for v in ("v1", "v2", "v3")]
+                [verts[int(attr(t, v))] for v in ("v1", "v2", "v3")]
             )
         if len(tris_by_color) > 1:
             print(
@@ -171,6 +173,7 @@ def render(scad: Path, part: str, work: Path) -> Render:
         stderr=subprocess.PIPE,
         text=True,
     )
+    assert openscad.stderr is not None  # a pipe, as asked for
     # Show the log as it comes.
     log = []
     for line in openscad.stderr:
