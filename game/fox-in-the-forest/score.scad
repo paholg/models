@@ -28,11 +28,11 @@
 // Assembly: drop the sliders into the top's channels, glue on the back, press
 // on the rupees.
 
-// export: print test
+// export: print print_rupees test
 // orca: process="0.12 Fine" layer_height=0.1 elefant_foot_compensation=0.15
 
 /* [Output] */
-part = "assembled"; // [assembled, exploded, print, top, numbers, back, sliders, rupees, test]
+part = "assembled"; // [assembled, exploded, print, print_rupees, top, numbers, back, sliders, rupees, test]
 
 /* [Card] */
 // A sleeved card, a little under the box's cavity.
@@ -511,7 +511,8 @@ module bed() {
 turned = " align_infill_direction_to_model=1";
 orca_top = str("bottom_surface_pattern=monotonic bottom_layer_direction=90", turned);
 orca_back = str("bottom_surface_pattern=concentric top_surface_pattern=monotonic top_layer_direction=90", turned);
-orca_rupee = "top_surface_pattern=concentric";
+// A brim, for so little on the bed: of the object, so the rupees are their own.
+orca_rupee = "top_surface_pattern=concentric brim_type=outer_only brim_width=3";
 
 // Turned over, not mirrored, which would print the numbers backwards.
 module print_top() {
@@ -587,6 +588,10 @@ if (part == "assembled" || part == "exploded") {
   piece("numbers", orca_top) color(c_number) bed() print_top() numbers();
   piece("back", orca_back) color(c_body) bed() translate([card.x + 5, 0, 0]) back();
   piece("sliders") color(c_slider) bed() print_sliders();
+  piece("rupees 0", orca_rupee) color(c_rupee[0]) bed() print_rupees([0, 1]);
+  piece("rupees 1", orca_rupee) color(c_rupee[1]) bed() print_rupees([2, 3]);
+} else if (part == "print_rupees") {
+  // The rupees alone, to print them again.
   piece("rupees 0", orca_rupee) color(c_rupee[0]) bed() print_rupees([0, 1]);
   piece("rupees 1", orca_rupee) color(c_rupee[1]) bed() print_rupees([2, 3]);
 } else if (part == "test") {
