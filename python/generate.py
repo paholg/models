@@ -14,6 +14,10 @@ presets, which Orca keeps as selected: those are for you to pick by hand.
 
 The whole line is also shown, as the name of the plate and of the object.
 
+A part can have a line to itself, which it takes in place of that one:
+
+    // orca test: process="0.20 Standard" layer_height=0.2
+
 This uses Orca 2.5's "published" projects, which carry only the settings they
 list. Orca reads no plate names from a project without settings, so a project
 with none to apply still carries one, unlisted.
@@ -164,10 +168,11 @@ def generate(file: Path) -> None:
         old.unlink()
 
     text = file.read_text()
-    note = ", ".join(shlex.split(directive(text, "orca")))
-    settings = {
-        k: v for k, v in scad.pairs(directive(text, "orca")).items() if k not in PRESETS
-    }
+
+    def line_settings(line: str) -> dict[str, str]:
+        return {k: v for k, v in scad.pairs(line).items() if k not in PRESETS}
+
+    shared = line_settings(directive(text, "orca"))
 
     exports = directive(text, "export").split()
     # Each `// plate:` line's parts, a copy at a time.
@@ -184,6 +189,10 @@ def generate(file: Path) -> None:
     filaments: dict[str, str] = {}  # the filament each color the file names stands for
     for part in dict.fromkeys(exports + [p for g in groups for p in g]):
         target = out_dir / f"{file.stem}-{part}.3mf"
+        # The part's own line, or the file's.
+        line = directive(text, f"orca {part}") or directive(text, "orca")
+        note = ", ".join(shlex.split(line))
+        settings = line_settings(line)
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             print(f"{part}: openscad")
@@ -213,7 +222,7 @@ def generate(file: Path) -> None:
             + "".join(f", pause at {z:g} mm" for z in render.pauses)
         )
     if groups:
-        combine(out_dir / f"{file.stem}-all.3mf", settings, groups, built, filaments)
+        combine(out_dir / f"{file.stem}-all.3mf", shared, groups, built, filaments)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,12 @@
 // x is across the cards, y is front (0) to back, z is up. The seam is level
 // across the front and back walls and slopes up between them along the sides.
 //
-// The box is ten flat panels, glued: floor, top, and a body and a lid piece
+// It comes two ways. "simple" is two prints, the body and the lid, each in
+// one piece: the body standing, the lid top down. "panels" is the same box
+// cut into flat panels, for faces off the bed all round and inlays that
+// print flat.
+//
+// That box is ten flat panels, glued: floor, top, and a body and a lid piece
 // of each wall. Every panel prints with its outside face on the bed. They
 // join in mitred rabbets (lib/panel_box.scad), whose seams fall on the box's
 // edges, so no joint shows on a face. The front and back drop between the
@@ -19,21 +24,24 @@
 // pair in flipped, to attract. A trapezoid key on each wall's seam locates
 // the lid.
 
-// export: print seam magnets
+// export: panels simple seam magnets
 // The 0.08 High Quality process, for joints that fit as drawn. The 0.6 mm
 // inlays, the 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front
 // and back all end on whole layers, from the bed up.
 // orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2
+// "simple" has no joints to fit, so prints coarser. Its logo is three layers.
+// orca simple: process="0.20 Standard" layer_height=0.2 initial_layer_print_height=0.2
 
 use <../../lib/panel_box.scad>
 
 /* [Output] */
-// "print" is every panel on the bed, outside down, one object per color.
+// "panels" is every panel on the bed, outside down, one object per color.
+// "simple" is the body and the lid on the bed, each in one piece.
 // "seam" is a test: three short lengths of the front wall across the seam,
 // each with the key and one magnet pocket, at the fits in seam_fits.
 // "magnets" is a smaller one: one strip of wall with a magnet pocket at each
 // crush in mag_crushes.
-part = "closed"; // [closed, open, exploded, print, seam, magnets]
+part = "closed"; // [closed, open, exploded, panels, simple, seam, magnets]
 
 /* [Contents] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
@@ -125,6 +133,8 @@ forest_depth = 0.6;
 forest_margin = 2;
 
 /* [View] */
+// Show closed, open and exploded as the one-piece box, not the panels.
+whole = false;
 // How far the panels pull apart in the exploded view.
 explode = 12;
 
@@ -413,6 +423,11 @@ module flat(name, lid = false) {
     translate([x1 + xo, y2 + by, box_h]) rotate([180, 0, 0]) children();
 }
 
+// The lid in one piece, on the bed beside the body, top down.
+module lid_down() {
+  translate([xo + bed_gap + xo, 0, 0]) pb_top_down([bx, by, box_h]) children();
+}
+
 // Each top-level statement exports as its own object, named for the slicer
 // and with slicer settings of its own (see python/generate.py), so one per
 // panel and per inlay.
@@ -437,7 +452,13 @@ if (part == "seam") {
   piece("seam test") color("darkgreen") seam_test();
 } else if (part == "magnets") {
   piece("magnet test") color("darkgreen") mag_test();
-} else if (part == "print") {
+} else if (part == "simple") {
+  piece("body", face("floor")) color("darkgreen") body_shell();
+  piece("lid", face("top")) color("darkgreen") lid_down() lid_shell();
+  piece("fox") color("yellow") fox();
+  piece("forest") color("yellow") forest_inlay();
+  piece("logo", face("top")) color("yellow") lid_down() logo();
+} else if (part == "panels") {
   for (w = walls) piece(w, face(w)) color("darkgreen") flat(w) panel(w);
   piece("floor", face("floor")) color("darkgreen") flat("floor") panel("floor");
   for (w = walls) piece(str("lid ", w), face(w)) color("darkgreen") flat(w, true) panel(w, true);
@@ -445,6 +466,17 @@ if (part == "seam") {
   piece("fox", bottom("octagramspiral")) color("yellow") flat("front") fox();
   piece("forest", bottom("archimedeanchords")) color("yellow") flat("back") forest_inlay();
   piece("logo", face("top")) color("yellow") flat("top") logo();
+} else if (whole) {
+  // Exploded pulls the inlays out of their faces.
+  e = part == "exploded" ? explode : 0;
+  lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
+  color("darkgreen") render(convexity = 10) body_shell();
+  color("forestgreen") translate([0, 0, lift]) render(convexity = 10) lid_shell();
+  color("orange") exploded("front", e) fox();
+  color("white") exploded("back", e) forest_inlay();
+  color("white") exploded("top", e, lift) logo();
+  color("silver") render() magnets(-1);
+  color("silver") translate([0, 0, lift]) render() magnets(1);
 } else {
   e = part == "exploded" ? explode : 0;
   lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
