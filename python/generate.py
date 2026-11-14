@@ -14,9 +14,11 @@ presets, which Orca keeps as selected: those are for you to pick by hand.
 
 The whole line is also shown, as the name of the plate and of the object.
 
-A part can have a line to itself, which it takes in place of that one:
+A part can have a line to itself, which it takes in place of that one. An
+empty one leaves the part with no settings, all as selected in Orca:
 
     // orca test: process="0.20 Standard" layer_height=0.2
+    // orca draft:
 
 This uses Orca 2.5's "published" projects, which carry only the settings they
 list. Orca reads no plate names from a project without settings, so a project
@@ -190,7 +192,7 @@ def generate(file: Path) -> None:
     for part in dict.fromkeys(exports + [p for g in groups for p in g]):
         target = out_dir / f"{file.stem}-{part}.3mf"
         # The part's own line, or the file's.
-        line = directive(text, f"orca {part}") or directive(text, "orca")
+        line = next(iter(directives(text, f"orca {part}")), directive(text, "orca"))
         note = ", ".join(shlex.split(line))
         settings = line_settings(line)
         with tempfile.TemporaryDirectory() as tmp:

@@ -29,8 +29,9 @@
 // inlays, the 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front
 // and back all end on whole layers, from the bed up.
 // orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2
-// "simple" has no joints to fit, so prints coarser. Its logo is three layers.
-// orca simple: process="0.20 Standard" layer_height=0.2 initial_layer_print_height=0.2
+// "simple" has no joints to fit, so prints at whatever is selected in Orca.
+// Its logo is 0.6 mm deep, from the bed up.
+// orca simple:
 
 use <../../lib/panel_box.scad>
 
