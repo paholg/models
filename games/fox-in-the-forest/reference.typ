@@ -6,9 +6,9 @@
 //
 // Letter sheet for a copy shop, 2 copies of each: print duplex at 100%,
 // flip on the LONG edge, then cut on the crop marks (6 guillotine cuts):
-//   typst compile game/fox-in-the-forest/reference.typ tmp/fox-reference.pdf
+//   typst compile games/fox-in-the-forest/reference.typ tmp/fox-reference.pdf
 // Individual card-size pages (A front, A back, B front, B back):
-//   typst compile --input layout=cards game/fox-in-the-forest/reference.typ tmp/fox-reference-cards.pdf
+//   typst compile --input layout=cards games/fox-in-the-forest/reference.typ tmp/fox-reference-cards.pdf
 
 #let layout = sys.inputs.at("layout", default: "sheet")
 

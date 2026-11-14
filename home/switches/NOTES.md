@@ -5,7 +5,7 @@ measured yet: every force, field and coil figure below is an estimate.
 
 ## Idea
 
-The magnet-detent sliders in `game/fox-in-the-forest/score.scad` feel great.
+The magnet-detent sliders in `games/fox-in-the-forest/score.scad` feel great.
 Use the same mechanism as wall-switch-sized sliders for Home Assistant, read by
 an ESP32 (ESPHome). Ideally the slider also moves itself to follow state
 changed elsewhere.

@@ -28,7 +28,7 @@ so don't go looking for its files through the binary.
 
 ## Directory structure
 
-* First is general scope (home for home products, game for mostly boardgame
+* First is general scope (home for home products, games for mostly boardgame
   inserts, etc.)
 * Next folder is more specific.
 * Then each .scad file for a full print.

@@ -1,6 +1,6 @@
 """Lay the special tiles out on their two boards and write special_layout.scad.
 
-Run: just python game/feast-for-odin/pack_special.py
+Run: just python games/feast-for-odin/pack_special.py
 
 The forge board sits left of the others, side by side; both boards' sizes are
 fixed. The shapes are read from manifest.md.
