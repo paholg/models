@@ -40,6 +40,67 @@ detach() {
   setsid --fork "$@" >/dev/null 2>&1 </dev/null
 }
 
+# The programs launched from here, by name: {"openscad": {"pid": 1, "started": "2"}}.
+# Absolute, as Orca is launched from another directory.
+PIDS="$PWD/tmp/pids.json"
+
+# Print when process $1 started, in the kernel's ticks since boot: this tells
+# it from a later process that was given the same PID.
+started() {
+  local stat
+  stat="$(cat "/proc/$1/stat" 2>/dev/null)" || return 1
+  # Count fields from after the command's name, which may hold spaces.
+  stat="${stat##*) }"
+  cut -d' ' -f20 <<<"$stat"
+}
+
+# Print what $PIDS holds, or an empty object if it is missing or broken.
+known_pids() {
+  jq --compact-output --exit-status 'objects' "$PIDS" 2>/dev/null || echo '{}'
+}
+
+# Terminate the process $1 that started at $2, failing if it is no longer running.
+stop() {
+  [[ -n $2 && "$(started "$1")" == "$2" ]] || return 1
+  # Each launch leads its own process group, so this reaches what it started
+  # too: Orca runs inside a sandbox wrapper.
+  kill -TERM -- "-$1" 2>/dev/null
+}
+
+# Terminate every program launched from here, listing into $closed those that
+# were still running.
+close_all() {
+  local name pid start
+  closed=()
+  while read -r name pid start; do
+    if stop "$pid" "$start"; then
+      closed+=("$name")
+    fi
+  done < <(known_pids | jq --raw-output 'to_entries[] | "\(.key) \(.value.pid) \(.value.started)"')
+  rm -f "$PIDS"
+}
+
+# Run a program detached under the name $1, first terminating the one last
+# launched under that name, if it is still running.
+launch() {
+  local name="$1" known old pid start
+  shift
+  known="$(known_pids)"
+  old="$(jq --raw-output --arg name "$name" \
+    '.[$name] // empty | "\(.pid) \(.started)"' <<<"$known")"
+  if [[ -n $old ]]; then
+    read -r pid start <<<"$old"
+    stop "$pid" "$start" || true
+  fi
+  # In the background, setsid needn't fork, so $! is the program itself.
+  setsid "$@" >/dev/null 2>&1 </dev/null &
+  pid=$!
+  start="$(started "$pid")" || start=""
+  jq --arg name "$name" --argjson pid "$pid" --arg started "$start" \
+    '.[$name] = {pid: $pid, started: $started}' <<<"$known" >"$PIDS.new"
+  mv "$PIDS.new" "$PIDS"
+}
+
 # List $file's generated projects into $projects.
 find_projects() {
   shopt -s nullglob
@@ -123,15 +184,16 @@ draw() {
     printf '  \033[1ms\033[0m    open in OpenSCAD\n'
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
-    below=4
+    below=5
   else
     draw_generate
     printf '  \033[1mv\033[0m    view the G-code\n'
     printf '  \033[1mh\033[0m    view the 3D preview in a browser\n'
     printf '  \033[1mu\033[0m    upload the G-code to the printer, without printing\n'
     printf '  \033[1mp\033[0m    open the printer'"'"'s page, to print from\n'
-    below=7
+    below=8
   fi
+  printf '  \033[1mc\033[0m    close the programs opened from here\n'
   printf '  \033[1mesc\033[0m  pick another file\n'
   printf '  \033[1mq\033[0m    quit\n'
   if [[ -n $status ]]; then
@@ -190,6 +252,7 @@ state=""
 changed=""
 # Whether to leave what is on screen, and print the keys below it.
 keep=""
+closed=()
 waiting=""
 watcher=""
 trap on_change USR1
@@ -206,25 +269,31 @@ while true; do
   status=""
   case "$kind:$key" in
     scad:s)
-      detach openscad "$file"
+      launch openscad openscad "$file"
       status="Opened $file in OpenSCAD."
       ;;
     scad:g)
       printf '\nGenerating...\n'
-      uv --project python run python/generate.py "$file" 2>&1 || status="Generation failed."
-      keep=1
+      # Leave the log on screen only if there is a failure in it to read.
+      if ! uv --project python run python/generate.py "$file" 2>&1; then
+        status="Generation failed."
+        keep=1
+      fi
       ;;
     gcode:g)
       printf '\nGenerating...\n'
-      uv --project python run "$file" 2>&1 || status="Generation failed."
-      keep=1
+      # Leave the log on screen only if there is a failure in it to read.
+      if ! uv --project python run "$file" 2>&1; then
+        status="Generation failed."
+        keep=1
+      fi
       ;;
     gcode:v)
       if [[ $state == missing ]]; then
         status="Nothing generated for $file yet; press g."
         continue
       fi
-      detach prusa-gcodeviewer "$output"
+      launch gcodeviewer prusa-gcodeviewer "$output"
       status="Opened $output in PrusaSlicer's G-code viewer."
       ;;
     gcode:h)
@@ -266,8 +335,16 @@ while true; do
           fzf --delimiter / --with-nth -1 --height '~40%' --reverse --select-1
       )" || continue
       # Orca writes a result.json into its working directory.
-      (cd "${TMPDIR:-/tmp}" && detach orca-slicer "$OLDPWD/$project")
+      (cd "${TMPDIR:-/tmp}" && launch orca orca-slicer "$OLDPWD/$project")
       status="Opened $project in OrcaSlicer."
+      ;;
+    *:c)
+      close_all
+      if ((${#closed[@]} == 0)); then
+        status="Nothing open to close."
+      else
+        status="Closed ${closed[*]}."
+      fi
       ;;
     *:$'\e')
       # Arrow and function keys send more after the escape; ignore those.

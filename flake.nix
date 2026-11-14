@@ -69,6 +69,7 @@
               fzf
               git
               inotify-tools
+              jq
               ncurses
               openscad-unstable
               prusa-slicer
