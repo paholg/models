@@ -55,8 +55,9 @@ socket_depth = 11;
 // Around the pencil's corners.
 socket_c = 0.15;
 // Each spring is a wall across the socket, held at its ends, with room behind
-// to bend into. They stand this high, short of the pencil's dipped end.
-spring_h = 6;
+// to bend into. They stand the socket's whole depth: the pencil goes
+// in by its plain end, its dipped end out.
+spring_h = socket_depth;
 spring_t = 0.5;
 spring_span = 8;
 spring_gap = 0.6;
