@@ -1,3 +1,10 @@
+# Lint, check the formatting of, and type-check the Python in python/ and gcode/.
+check:
+    ruff check python gcode
+    ruff format --check python gcode
+    # By way of uv, to make the environment ty.toml points at.
+    uv --project python run ty check
+
 up:
     nix flake update
     uv --project python lock --upgrade
