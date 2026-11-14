@@ -31,10 +31,10 @@
         orca-slicer =
           let
             pname = "orca-slicer";
-            version = "2.5.0";
+            version = "2.5.1";
             src = pkgs.fetchurl {
               url = "https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v${version}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${version}.AppImage";
-              hash = "sha256-0T6wqc1hjtCAq2uCxkwKYMRQGqyR6I1awsO1JvsUGnw=";
+              hash = "sha256-BzuBBckoNWFB2w3bzoi4HVLHqeJEL5uq4KkInIn/BOs=";
             };
             contents = pkgs.appimageTools.extract { inherit pname version src; };
           in
