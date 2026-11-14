@@ -4,32 +4,34 @@
 //
 // Bottom to top:
 // 1: the big boards, in a frame that fills the box round them.
-// 2: the special tiles' boards.
-// 3: two identical half trays of the small, often-used tiles and money, one
+// 2: two identical half trays of the small, often-used tiles and money, one
 //    per end of the table, side by side.
-// 4: cardboard: in-game buildings, setup buildings (with the dice, moose and
-//    cube), mountain strips (one stack, the long one on top), vikings.
+// 3: the special tiles' boards.
+// 4: cardboard: the buildings, a stack per kind; the vikings, two colors to a
+//    tray; the mountain strips (one stack, the long one on top);
+//    and a bin for the dice, moose and cube.
 // 5, 6: the top layer, as tall as the card trays, so that what stands above
 //    the box's rim still reaches well down into it.
 //    front strip: the card trays (not ours: see card-trays/README.md), and
-//    the VP and penalty tokens beside them.
-//    back, two tiers: the big tiles and the wooden goods below (5); the
-//    islands and the boat market above (6).
+//    beside them the VP and penalty tokens and the 2x5 money, under a
+//    spare bin.
+//    back, two tiers: the islands and the big tiles below (5); the wooden
+//    goods, the boat market and two discard bins for cards above (6).
 //
 // Tile bins are shallow, each with a curved scoop up the front wall to slide
 // tiles out on; each reports how many tiles it holds stacked neatly.
 // Cardboard stacks sit in wells with finger notches to lift them out whole.
 
-// export: half_a half_b big boats vp vikings islands wood buildings setup_buildings strips frame_half deck_setup deck_occupations deck_weapons special_forge special_others special_test
+// export: half_a half_b big boats vp vikings_a vikings_b islands wood buildings_3 buildings_5 setup_buildings misc strips discard spare frame_half deck_setup deck_occupations deck_weapons special_forge special_others special_test
 
 include <special_layout.scad>
 
-part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings, islands, wood, buildings, setup_buildings, strips, frame, frame_half, boards, special, special_forge, special_others, special_test, decks, deck_setup, deck_occupations, deck_weapons]
+part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings_a, vikings_b, islands, wood, buildings_3, buildings_5, setup_buildings, misc, strips, discard, spare, frame, frame_half, boards, special, special_forge, special_others, special_test, decks, deck_setup, deck_occupations, deck_weapons]
 // Vertical gap between layers in the assembly view.
 explode = 30;
 // Assembly: show layers up to this one, bottom up (0 = all). 1: boards and
-// frame; 2: special boards; 3: half trays; 4: cardboard trays; 5: card trays,
-// VP, big tiles, wood; 6: islands, boats.
+// frame; 2: half trays; 3: special boards; 4: cardboard trays; 5: card trays,
+// VP, islands, big tiles; 6: wood, boats.
 layer = 0; // [0:6]
 // Show only that layer, not the ones under it.
 layer_only = false;
@@ -101,6 +103,8 @@ tilt_r = 1.1;
 special_floor = 0.8;
 // 2, not 3: so the two boards fit the box side by side.
 special_margin = 2;
+// The boards' corners are rounded by special_corner_r, for room to lift them
+// out; pack_special.py sets it, and keeps the pockets clear of them.
 // Test board: [tile index in special_tiles, [x, y]] of a few doubtful tiles.
 special_test_tiles = [[1, [0, 0]], [13, [0, 24.8]], [3, [57.8, 0]]];
 // The pocket floors, both levels and the step between, are c_floor this deep.
@@ -137,7 +141,6 @@ tier_h = up_h / 2;
 decks_x = sum([for (d = deck_trays) d[3].y + gap]) - gap;
 // Behind the front strip.
 back_y = box.y - 1 - front_y - gap;
-islands = [129 + 1.5 + 2 * post_t, back_y];
 
 c_food = "orange";
 c_equip = "seagreen";
@@ -191,36 +194,43 @@ money_rows = [
 // scooped front and back. The 2-wide tiles stand on edge, long side down,
 // leaning, in a stack running front to back. The 3x4 are too tall for that:
 // they lie flat, in two stacks, one behind the other.
-big_clear = 1.6;
+// The islands' tray, beside it, is just the islands' size; the big tiles' bins
+// share out the rest of the box's length, which is where big_clear comes from.
+// Room round a cardboard stack in its well.
+stack_clear = 1.5;
+island = 129;
+island_n = 8;
+islands = [island + stack_clear + 2 * post_t, back_y];
+big = [box.x - 1 - islands.x - gap, back_y];
+big_clear = (big.x - 4 * wall - 13 * unit) / 3;
 function big_w(n) = n * unit + big_clear;
 // [name, tile, stacks deep (0: on edge)]
 big_kinds = [["2x4", t(4, 2), 0], ["3x4", t(4, 3), 2], ["2x5", t(5, 2), 0]];
 big_cols = [for (k = big_kinds) big_w(k[1].x / unit)];
-// A bin's footprint is what lies on its floor: every flat stack.
+// A bin's footprint is what lies on its floor: every flat stack. Its icon is
+// the tile's shape, shown once per column on the tray's front face.
 function big_row(c, p, n) = [-1, [
     for (ki = [0:len(big_kinds) - 1]) let (k = big_kinds[ki])
-        [str(p, k[0]), big_cols[ki], [k[1].x, k[1].y * max(1, k[2])], n[ki], c],
+        [str(p, k[0]), big_cols[ki], [k[1].x, k[1].y * max(1, k[2])], n[ki], c,
+         grid(k[1].x / unit, k[1].y / unit)],
 ]];
 big_rows = [
     big_row(c_animal, "A", [18, 15, 21]),
     big_row(c_equip, "E", [20, 15, 14]),
 ];
-// Fills the depth behind the front strip.
-big = [sum(big_cols) + (len(big_cols) + 1) * wall, back_y];
-// The wooden goods, beside it.
-wood = [box.x - 1 - big.x - gap, back_y];
+assert(abs(sum(big_cols) + (len(big_cols) + 1) * wall - big.x) < 0.01, "the big tiles' columns don't fill their tray");
 
 // Boats: a market of stacks, like mini decks. Each well fits its tile
 // lengthwise (long side front to back), with a pinch slot through the front
 // and back walls. The slots leave a lip each side to hold the stack in.
-// [label, tile footprint, count], left to right.
-// The last is the 2x5 money, kept with them in a stack of its own.
+// [label, tile footprint, count], left to right. The twelve of one 2x4 kind
+// are split in two, so no stack is taller than the tier.
 boats = [
     ["1x4", t(1, 4), 8],
     ["2x3", t(2, 3), 10],
-    ["2x4", t(2, 4), 12],
+    ["2x4", t(2, 4), 6],
+    ["2x4", t(2, 4), 6],
     ["2x4", t(2, 4), 10],
-    ["2x5", t(2, 5), 5],
 ];
 boat_clear = 1;
 // Between its sides; the round-overs widen it at the rim.
@@ -237,10 +247,11 @@ boat_well_y = max([for (w = boat_well) w.y]);
 boat_h = floor_t + max([for (b = boats) b[2]]) * tile_t;
 // Each well's floor is raised so its full stack comes flush with the top.
 function boat_floor(i) = max(floor_t, boat_h - boats[i][2] * tile_t);
-function boat_x(i) = wall + sum([for (j = [0:1:i - 1]) boat_well[j].x + wall]);
-boats_x = boat_x(len(boats));
-
-boat = [boats_x, boat_well_y + 2 * wall];
+// It lies turned 90 degrees, along the end of the box, so it's as long as the
+// tier is deep: the walls between wells take up the slack.
+boat = [back_y, boat_well_y + 2 * wall];
+boat_wall = (boat.x - sum([for (w = boat_well) w.x])) / (len(boats) + 1);
+function boat_x(i) = boat_wall + sum([for (j = [0:1:i - 1]) boat_well[j].x + boat_wall]);
 
 // The boat market: its own piece, with the pinch slots open front and back.
 module boat_tray() {
@@ -259,7 +270,7 @@ module boat_tray() {
             // through the outer side wall instead.
             wy = boat.y - wall - w.y;
             if (i == 0) translate([0, wy + w.y / 2, 0]) rotate(-90)
-                pinch_slot(boat_side_slot_w, boat_floor(i) + boat_slot_bottom, boat_h, 0, wall, [[0, 1], [wall, -1]], boat_slot_r);
+                pinch_slot(boat_side_slot_w, boat_floor(i) + boat_slot_bottom, boat_h, 0, boat_wall, [[0, 1], [boat_wall, -1]], boat_slot_r);
             else translate([boat_x(i) + w.x / 2, 0, 0])
                 pinch_slot(sw, boat_floor(i) + boat_slot_bottom, boat_h, 0, boat.y,
                        [[0, 1], [wy, -1], [wy + w.y, 1], [boat.y, -1]], boat_slot_r);
@@ -270,13 +281,13 @@ module boat_tray() {
         rotate(90) linear_extrude(0.4) text(boats[i][0], size = 3.5, halign = "right", valign = "center");
 }
 
-// The VP tray, in the pocket beside the card trays.
+// The VP tray, filling the pocket beside the card trays.
 // VP tokens, 25 mm square: 2x 4 VP, 6x 3 VP, 8x 2 VP, standing on edge in one
 // row, biggest first at the front (x = 0), as you only ever need the next one.
 // A well per value, walls as tall as the tokens; one pinch slot runs through
 // the front face and every divider, to slide the front token up and out.
-// Beside them (behind, in y), a round well holds the 7 penalty tokens (30 mm
-// round) in a stack, with pinch slots through its other three sides.
+// Behind them, a round well holds the 7 penalty tokens (30 mm round) in a
+// stack, with pinch slots out the side and the back.
 vp_token = 25;
 vp_counts = [2, 6, 8];
 vp_slack = 1.5; // per value, so the tokens can lean
@@ -292,18 +303,28 @@ function vp_x(i) = wall + sum([for (j = [0:1:i - 1]) vp_group(j) + wall]);
 vp_in_y = vp_token + vp_clear;
 // The stacks' block, front to back; the penalty well shares its back wall.
 vp_block_y = vp_in_y + 2 * wall;
-vp = [max(vp_x(len(vp_counts)), 2 * (pen_r + wall)), vp_block_y + 2 * pen_r + wall];
-pen_c = [vp.x / 2, vp_block_y + pen_r];
+// The 2x5 money, in a stack of its own down the tray's other side, like a
+// boat's.
+money_n = 5;
+money_well = t(2, 5) + [1, 1];
+money_slot_w = 25;
+// The tray fills the pocket beside the card trays.
+vp = [box.x - 1 - decks_x - gap, front_y];
+vp_need = [vp_x(len(vp_counts)) + money_well.x + wall, max(vp_block_y + 2 * pen_r + wall, money_well.y + 2 * wall)];
+assert(vp_need.x <= vp.x && vp_need.y <= vp.y, str("the VP tray needs ", vp_need, " of ", vp));
+pen_c = [vp_x(len(vp_counts)) / 2, vp_block_y + pen_r];
 vp_h = floor_t + vp_wall_h;
 module vp_tray() {
     n = len(vp_counts);
     back = vp.y - pen_c.y;
     bz = floor_t + vp_slot_bottom;
-    // The penalty well's slots: across through both sides, and out the back.
+    // The penalty well's slots: out the side, and out the back.
     module pen_slots(side_faces, back_faces) {
-        translate([0, pen_c.y, 0]) rotate(-90) pinch_slot(vp_slot_w, bz, vp_h, 0, vp.x, side_faces, vp_slot_r);
+        translate([0, pen_c.y, 0]) rotate(-90) pinch_slot(vp_slot_w, bz, vp_h, 0, pen_c.x, side_faces, vp_slot_r);
         translate([pen_c.x, pen_c.y, 0]) pinch_slot(vp_slot_w, bz, vp_h, 0, back, back_faces, vp_slot_r);
     }
+    money_at = [vp.x - wall - money_well.x, (vp.y - money_well.y) / 2];
+    money_floor = vp_h - money_n * tile_t;
     body() difference() {
         cbox(vp, vp_h);
         for (i = [0:n - 1]) translate([vp_x(i), wall, 0]) {
@@ -318,7 +339,7 @@ module vp_tray() {
         // The flat outer faces get pinch_slot's chamfers; the round inner one a
         // bevel from an octahedron run round the opening.
         translate([pen_c.x, pen_c.y, 0]) round_well(pen_r, floor_t, vp_h);
-        pen_slots([[0, 1], [vp.x, -1]], [[back, -1]]);
+        pen_slots([[0, 1]], [[back, -1]]);
         minkowski() {
             intersection() {
                 translate([pen_c.x, pen_c.y, 0]) difference() {
@@ -329,7 +350,56 @@ module vp_tray() {
             }
             octahedron(chamfer_out);
         }
+        // The money: its floor raised so the stack comes flush, and a pinch
+        // slot through the outside wall.
+        translate([money_at.x, money_at.y, 0]) {
+            well(money_well, money_floor, vp_h);
+            rim(money_well, vp_h);
+        }
+        translate([vp.x - wall, vp.y / 2, 0]) rotate(-90)
+            pinch_slot(money_slot_w, money_floor + 2, vp_h, 0, wall, [[0, 1], [wall, -1]], vp_slot_r);
     }
+}
+// A spare bin over the VP tray, filling its pocket up to the layer's top,
+// scooped up all four walls.
+spare = [vp.x, vp.y];
+spare_h = up_h - vp_h;
+spare_scoop = 12;
+module spare_bin() body() difference() {
+    cbox(spare, spare_h);
+    in = spare - 2 * [wall, wall];
+    translate([wall, wall, 0]) {
+        intersection() {
+            well(in, floor_t, spare_h, spare_scoop, spare_scoop);
+            multmatrix([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]])
+                well([in.y, in.x], floor_t, spare_h, spare_scoop, spare_scoop);
+        }
+        rim(in, spare_h);
+    }
+}
+// Discard bins for the weapon and occupation cards: a floor, a back wall and
+// side walls half its depth, open at the front. A card lies in it lengthwise,
+// with discard_clear to spare across; the floor is a little shorter than the
+// card, which just overhangs the open front. They're empty in the box, and
+// sit one behind the other beside the boat market.
+discard_clear = 2;
+discard = [46 + discard_clear + 2 * wall, (back_y - gap) / 2];
+discard_h = tier_h;
+// The wooden goods take the rest of the upper tier.
+wood = [box.x - 1 - boat.y - discard.x - 2 * gap, back_y];
+module discard_bin() body() difference() {
+    cbox(discard, discard_h);
+    // Inside, running out the front.
+    translate([wall, -10, 0]) {
+        well([discard.x - 2 * wall, discard.y - wall + 10], floor_t, discard_h);
+        rim([discard.x - 2 * wall, discard.y - wall + 10], discard_h);
+    }
+    // The front half of the side walls: a pinch slot's side, rounded over at
+    // the top and filleted into the floor.
+    w = 2 * discard.y;
+    translate([0, discard.y / 2 - w / 2, 0]) rotate(-90)
+        pinch_slot(w, floor_t, discard_h, 0, discard.x,
+                   [[0, 1], [wall, -1], [discard.x - wall, 1], [discard.x, -1]], 8, fillet_r);
 }
 // A round well, floor at z0, open past h: floor edge filleted, rim chamfered.
 module round_well(r, z0, h, f = fillet_r, c = chamfer) rotate_extrude($fn = 96) polygon(concat(
@@ -343,117 +413,112 @@ module octahedron(c) polyhedron(
 
 wood_rows = [
     [-1, [
-        ["ore", 44, [11, 11], 0, c_wood],
-        ["stone", 46, [20, 13], 0, c_wood],
+        ["ore", 60, [11, 11], 0, c_wood],
+        ["stone", 63, [20, 13], 0, c_wood],
         ["wood", -1, [21, 14], 0, c_wood],
     ]],
 ];
 module wood_tray() let ($back_scoop = true) bin_tray("wood", wood, tier_h, wood_rows);
 
-// Cardboard trays are open: a hex-grid floor and an L-shaped post at each
+// Cardboard trays are open: a plain floor and an L-shaped post at each
 // well corner, no walls between. Stacks lift straight out, gripped from the
 // open sides. Wells of one inner size, one above another in y, centered.
-stack_clear = 1.5;
 post_l = 15; // each leg, past the corner
-hex_f = 12; // hole, across flats
-hex_rib = 1.6;
-hex_margin = 3; // solid floor inside each well edge
 function stack_tray_size(well, n) = [well.x + stack_clear + 2 * post_t, n * (well.y + stack_clear + post_t) + post_t];
 module stack_tray(size, h, well, labels, c) {
     n = len(labels);
     in = well + [stack_clear, stack_clear];
     x0 = (size.x - in.x) / 2;
     y0 = (size.y - (n * (in.y + post_t) - post_t)) / 2;
-    body() open_tray(size, h, [for (i = [0:n - 1]) [[x0, y0 + i * (in.y + post_t)], in]]);
+    // The posts thicken to reach the tray's edges.
+    body() open_tray(size, h, [for (i = [0:n - 1]) [[x0, y0 + i * (in.y + post_t)], in]], undef, x0, y0);
 }
 
-// A floor size.x by size.y, holed in a hex grid inside each well ([corner,
-// size]), with corner posts h tall round each well.
+// A floor size.x by size.y, with corner posts h tall round each well
+// ([corner, size]).
 // h_end is the height of the posts' legs along y, if not h.
-module open_tray(size, h, wells, h_end) {
-    render() difference() {
-        cbox(size, floor_t, 0.4);
-        translate([0, 0, -1]) linear_extrude(floor_t + 2) hex_holes(size, wells);
-        rim_2d(floor_t) hex_holes(size, wells);
-        translate([0, 0, chamfer]) mirror([0, 0, 1]) rim_2d(chamfer) hex_holes(size, wells);
+// $tray_floor is the floor's thickness. t_end is the thickness of the posts'
+// legs along y, and t_side of those along x, if not post_t.
+$tray_floor = floor_t;
+module open_tray(size, h, wells, h_end, t_end = post_t, t_side = post_t) {
+    // The floor: chamfered round the bottom only, so its sides run flush into
+    // the posts'.
+    intersection() {
+        cbox(size, $tray_floor + 1, 0.4);
+        cube([size.x, size.y, $tray_floor]);
     }
     for (w = wells, sx = [0, 1], sy = [0, 1])
-        translate(w[0] + [sx * w[1].x, sy * w[1].y]) mirror([sx, 0, 0]) mirror([0, sy, 0]) corner_post(h, is_undef(h_end) ? h : h_end);
-}
-module hex_holes(size, wells) intersection() {
-    p = hex_f + hex_rib;
-    for (i = [0:size.x / (p * cos(30)) + 1], j = [-1:size.y / p + 1])
-        translate([i * p * cos(30), (j + (i % 2) / 2) * p]) circle(r = hex_f / sqrt(3), $fn = 6);
-    for (w = wells) translate(w[0] + [hex_margin, hex_margin]) square(w[1] - 2 * [hex_margin, hex_margin]);
+        translate(w[0] + [sx * w[1].x, sy * w[1].y]) mirror([sx, 0, 0]) mirror([0, sy, 0])
+            corner_post(h, is_undef(h_end) ? h : h_end, t_end, t_side);
 }
 // An L round the corner at the origin of a well lying in +x, +y. Each leg's
 // free end is one side of a pinch slot: rounded over at the top on a radius
 // of half its reach, leaving a flat on top, and filleted into the floor.
 // Every edge is rounded.
-module corner_post(h, h_y) {
+module corner_post(h, h_y, t_y = post_t, t_x = post_t) {
     r = 0.6;
-    len = post_l + post_t;
-    f = pinch_fillet;
     gap_w = 100; // the opening: only its near side matters
-    module side(h) difference() {
-        R = min(post_l / 2, h - 2); // leaves len - R flat on top
+    // A leg's side, len long past the corner. On a short post (over a thick
+    // floor) the fillet and the round-over shrink to fit one above the other.
+    module side(h, len) difference() {
+        up = h - $tray_floor;
+        f = min(pinch_fillet, up / 3);
+        R = min(post_l / 2, up - f - 1); // leaves len - R flat on top
         square([len + f, h]);
-        translate([len + gap_w / 2, 0]) pinch_2d(gap_w, floor_t, h, R, f);
+        translate([len + gap_w / 2, 0]) pinch_2d(gap_w, $tray_floor, h, R, f);
     }
-    module leg(h) minkowski() {
-        translate([-post_t, -r, 0]) rotate([90, 0, 0]) linear_extrude(post_t - 2 * r) offset(delta = -r) side(h);
+    // A leg along x, t thick, reaching c back past the corner to cover the
+    // other leg's end.
+    module leg(h, t, c) minkowski() {
+        translate([-c, -r, 0]) rotate([90, 0, 0]) linear_extrude(t - 2 * r) offset(delta = -r) side(h, post_l + c);
         sphere(r, $fn = 12);
     }
-    leg(h);
-    multmatrix([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]]) leg(is_undef(h_y) ? h : h_y);
+    leg(h, t_x, t_y);
+    multmatrix([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]]) leg(is_undef(h_y) ? h : h_y, t_y, t_x);
 }
 
-// Islands, one stack, on the wood tray's tier.
-island = 129;
-module islands_tray() stack_tray(islands, tier_h, [island, island], ["islands"], "lightsteelblue");
+// Islands, one stack, beside the big tiles.
+// Its floor is thick, to bring the stack flush with the tier's top.
+module islands_tray() let ($tray_floor = tier_h - island_n * card_t)
+    stack_tray(islands, tier_h, [island, island], ["islands"], "lightsteelblue");
 
-// Layer 3, cardboard: buildings, mountain strips, and the vikings.
-card_h = tray_h;
+// The cardboard layer: three rows, and behind them a row for the strips. Each
+// row starts with a stack of buildings, a stack per kind (the in-game ones
+// come 3, 3 and 5 of a kind). Beside the first two are the vikings; beside the
+// third, the 6 setup buildings, in their own tray: nothing setup-only shares a
+// piece with in-game pieces. Every tray is the layer's height, for the next to
+// sit level on; the buildings' floors are thick, to bring each stack flush.
 building = [139, 54.5];
-// In-game types stacked 3 on 3, then 5. The 6 setup buildings get their own
-// tray: nothing setup-only shares a piece with in-game pieces.
-building_labels = ["buildings 3 + 3", "buildings 5"];
-buildings = stack_tray_size(building, len(building_labels));
-module buildings_tray() stack_tray(buildings, card_h, building, building_labels, "sienna");
-// The setup buildings, with a bin at their end for the moose (35 x 30 x 11),
-// the d8 and d12, and the cube: all setup-only.
-misc_in = [36, building.y + stack_clear + 2 * post_t - 2 * wall];
-misc_rows = [[-1, [["", -1, [16, 16], 0, "lightgray"]]]];
-setup_buildings = [misc_in.x + wall + building.x + stack_clear + 2 * post_t, misc_in.y + 2 * wall];
-module setup_buildings_tray() {
-    $setup = true;
-    sz = setup_buildings;
-    h = card_h;
-    in = building + [stack_clear, stack_clear];
-    bin = [misc_in.x + 2 * wall, sz.y];
-    // The buildings' posts stand against the bin's wall.
-    x0 = sz.x - post_t - in.x;
-    body() {
-        open_tray(sz, h, [[[x0, post_t], in]]);
-        difference() {
-            cbox(bin, h);
-            bin_cuts(bin, h, misc_rows);
-        }
-    }
-}
+// Front to back, these stacks get less room than stack_clear, to fit the box.
+card_clear_y = 1;
+bld = [building.x + stack_clear + 2 * post_t, building.y + card_clear_y + 2 * post_t];
+// What's left of the row beside a building tray.
+bld_beside = [box.x - 1 - bld.x - gap, bld.y];
 // 9 mountain strips in one stack: the eight 169 mm ones, and the 192 mm one on
 // top. The well is the long one's length. A ledge at one end fills it in
 // beside the short ones, level with their top, for the long one to rest on;
 // the short ones' well has its own posts there, as though the tray ended at
-// the ledge, and the side walls run on past them to the real end.
+// the ledge, and the side walls run on past them to the real end. Both end
+// walls are solid.
 strip = [169, 30];
 long_strip = [192, 30];
-strips = stack_tray_size(long_strip, 1);
+strips = [long_strip.x + stack_clear + 2 * post_t, long_strip.y + card_clear_y + 2 * post_t];
 strips_ledge_h = floor_t + 8 * card_t;
 strips_h = strips_ledge_h + card_t;
+// The layer is as tall as the strips.
+card_layer_h = strips_h;
+assert(3 * (bld.y + gap) + strips.y <= box.y - 1, "the cardboard layer is too deep");
+// A tray for a stack of n buildings, size across: the end walls thicken to
+// take up any more than bld.
+module building_tray(n, size = bld) {
+    $tray_floor = card_layer_h - n * card_t;
+    in = building + [stack_clear, card_clear_y];
+    body() open_tray(size, card_layer_h, [[[(size.x - in.x) / 2, post_t], in]], undef, (size.x - in.x) / 2);
+}
+module setup_buildings_tray() let ($setup = true) building_tray(6, bld_beside);
 module strips_tray() {
-    in = long_strip + [stack_clear, stack_clear];
-    short = strip + [stack_clear, stack_clear];
+    in = long_strip + [stack_clear, card_clear_y];
+    short = strip + [stack_clear, card_clear_y];
     ledge = in.x - short.x;
     x1 = post_t + short.x; // where the ledge starts
     body() {
@@ -465,17 +530,27 @@ module strips_tray() {
             corner_post(strips_h, strips_ledge_h);
         // The side walls over the ledge, between those posts and the end ones.
         for (y = [0, post_t + in.y]) translate([x1, y, 0]) cube([ledge, post_t, strips_h]);
+        // The end walls are solid, edges rounded like the posts'.
+        for (x = [0, strips.x - post_t]) translate([x, 0, 0]) minkowski() {
+            r = 0.6;
+            translate([r, r, 0]) cube([post_t - 2 * r, strips.y - 2 * r, strips_h - r]);
+            sphere(r, $fn = 12);
+        }
     }
 }
-// The cardboard layer is as tall as its tallest tray.
-card_layer_h = max(card_h, strips_h);
-// Left of the vikings: the widest of the trays there.
-card_left_x = max(buildings.x, setup_buildings.x, strips.x);
-// Vikings: a bin per player color, one layer deep, scooped up both ends.
-vik = [box.x - 1 - card_left_x - gap, box.y - 1];
+// Beside the strips, a bin for the moose (35 x 30 x 11), the d8 and d12, and
+// the cube: all setup-only.
+misc = [box.x - 1 - strips.x - gap, strips.y];
+misc_rows = [[-1, [["", -1, [16, 16], 0, "lightgray"]]]];
+module misc_tray() let ($setup = true) body() difference() {
+    cbox(misc, card_layer_h);
+    bin_cuts(misc, card_layer_h, misc_rows);
+}
+// Vikings: a bin per player color, two colors to a tray, scooped up both ends.
 // No label: the colors say whose they are, and a fifth filament won't fit.
-vik_rows = [for (c = vik_colors) [-1, [["", -1, [13, 21], 0, c]]]];
-module vik_tray() let ($side_scoop = true, $back_scoop = true) bin_tray("vikings", vik, card_h, vik_rows);
+vik = bld_beside;
+function vik_rows(i) = [[-1, [for (c = [vik_colors[2 * i], vik_colors[2 * i + 1]]) ["", -1, [13, 21], 0, c]]]];
+module vik_tray(i) let ($side_scoop = true, $back_scoop = true) bin_tray("vikings", vik, card_layer_h, vik_rows(i));
 
 function sum(v) = len(v) == 0 ? 0 : v[0] + sum([for (i = [1:1:len(v) - 1]) v[i]]);
 function cumsum(v, i) = sum([for (j = [0:1:i - 1]) v[j]]);
@@ -803,16 +878,18 @@ module big_tray() {
     bin_paint(big, big_rows) difference() {
         cbox(big, tier_h);
         bin_cuts(big, tier_h, big_rows);
+        bin_front_icons(big, tier_h, big_rows);
     }
-    paint("black") bin_labels(big, big_rows);
+    paint("black") bin_front_icons(big, tier_h, big_rows);
 }
 
 // The special tiles' boards: a pocket per tile, the forge tiles on their
 // own board. Layout from pack_special.py.
 special_h = special_floor + tilt_d + pocket_d;
 special_others_x0 = special_forge_w + special_gap;
-special_forge = [special_forge_w, special_size.y] + 2 * [special_margin, special_margin];
-special_others = [special_size.x - special_others_x0, special_size.y] + 2 * [special_margin, special_margin];
+// As deep as the box, so they can't slide; the pockets are centered.
+special_forge = [special_forge_w + 2 * special_margin, box.y - 1];
+special_others = [special_size.x - special_others_x0 + 2 * special_margin, box.y - 1];
 // A tile's pocket outline, in board coordinates: outside corners rounded by
 // the clearance, inside corners sharp.
 module pocket_2d(st) offset(r = pocket_clear) translate(st[2]) for (c = st[1]) translate(c * unit) square(unit);
@@ -876,8 +953,19 @@ module tilt_cut(st) intersection() {
 }
 // A board with a pocket for each of tiles, moved by at. The skin of each
 // pocket's floor is its own color.
-module special_solid(size, tiles, at) render() difference() {
-    cbox(size, special_h);
+// corner_r rounds the board's corners, to leave room in the box's to get a
+// finger under it.
+module special_solid(size, tiles, at, corner_r = 0) render() difference() {
+    if (corner_r > 0) hull() {
+        // A circle per corner, so the radius can be half the board's width.
+        for (x = [corner_r, size.x - corner_r], y = [corner_r, size.y - corner_r]) translate([x, y, 0]) {
+            cylinder(r1 = corner_r - chamfer_out, r2 = corner_r, h = chamfer_out, $fn = 128);
+            translate([0, 0, chamfer_out]) cylinder(r = corner_r, h = special_h - 2 * chamfer_out, $fn = 128);
+            translate([0, 0, special_h - chamfer_out])
+                cylinder(r1 = corner_r, r2 = corner_r - chamfer_out, h = chamfer_out, $fn = 128);
+        }
+    }
+    else cbox(size, special_h);
     for (st = tiles) translate(at) {
         // Straight walls, so the tile has its full clearance all the way down.
         translate([0, 0, special_h - pocket_d]) linear_extrude(pocket_d + eps) pocket_2d(st);
@@ -897,13 +985,13 @@ module special_floors(tiles, at) {
         }
     }
 }
-module special_plate(size, tiles, at) {
+module special_plate(size, tiles, at, corner_r = 0) {
     body() render() difference() {
-        special_solid(size, tiles, at);
+        special_solid(size, tiles, at, corner_r);
         special_floors(tiles, at);
     }
     paint(c_floor) render() intersection() {
-        special_solid(size, tiles, at);
+        special_solid(size, tiles, at, corner_r);
         special_floors(tiles, at);
     }
 }
@@ -911,7 +999,8 @@ module special_board(section) {
     m = special_margin;
     size = section == "forge" ? special_forge : special_others;
     x0 = section == "forge" ? 0 : special_others_x0;
-    special_plate(size, [for (st = special_tiles) if (st[0] == section) st], [m - x0, m, 0]);
+    special_plate(size, [for (st = special_tiles) if (st[0] == section) st], [m - x0, (size.y - special_size.y) / 2, 0],
+                  special_corner_r);
 }
 // A few doubtful tiles on a small board, to try the fit and the tip.
 module special_test() {
@@ -974,33 +1063,40 @@ module assembly() {
         board_stack(explode / 6);
     }
     z2 = board_stack_h + explode + board_layers * explode / 6;
-    if (show(2)) translate([(box.x - special_forge.x - gap - special_others.x) / 2, (box.y - special_forge.y) / 2, z2])
+    if (show(2)) for (i = [0, 1]) translate([0.5, 0.5 + i * (half.y + gap), z2]) half_tray();
+    z3 = z2 + half_h + explode;
+    if (show(3)) translate([(box.x - special_forge.x - gap - special_others.x) / 2, 0.5, z3])
         special_boards();
-    z3 = z2 + special_h + explode;
-    if (show(3)) for (i = [0, 1]) translate([0.5, 0.5 + i * (half.y + gap), z3]) half_tray();
-    z4 = z3 + half_h + explode;
+    z4 = z3 + special_h + explode;
     if (show(4)) translate([0.5, 0.5, z4]) {
-        buildings_tray();
-        translate([0, buildings.y + gap, 0]) setup_buildings_tray();
-        translate([0, buildings.y + setup_buildings.y + 2 * gap, 0]) strips_tray();
-        translate([card_left_x + gap, 0, 0]) vik_tray();
+        for (r = [0:2]) translate([0, r * (bld.y + gap), 0]) {
+            building_tray([3, 3, 5][r]);
+            translate([bld.x + gap, 0, 0]) if (r < 2) vik_tray(r); else setup_buildings_tray();
+        }
+        translate([0, 3 * (bld.y + gap), 0]) {
+            strips_tray();
+            translate([strips.x + gap, 0, 0]) misc_tray();
+        }
     }
     z5 = z4 + card_layer_h + explode;
     translate([0.5, 0.5, z5]) {
         if (show(5)) {
             deck_holders();
             translate([decks_x + gap, 0, 0]) vp_tray();
+            translate([decks_x + gap, 0, vp_h + explode / 2]) spare_bin();
         }
         translate([0, front_y + gap, 0]) {
             // Lower tier.
             if (show(5)) {
-                big_tray();
-                translate([big.x + gap, 0, 0]) wood_tray();
-            }
-            // Upper tier.
-            if (show(6)) translate([0, 0, tier_h + explode / 2]) {
                 islands_tray();
-                translate([islands.x + gap, back_y - boat.y, 0]) boat_tray();
+                translate([islands.x + gap, 0, 0]) big_tray();
+            }
+            // Upper tier: the wood, the discard bins, and the boats turned to
+            // lie along the end.
+            if (show(6)) translate([0, 0, tier_h + explode / 2]) {
+                wood_tray();
+                for (i = [0, 1]) translate([wood.x + gap, i * (discard.y + gap), 0]) discard_bin();
+                translate([box.x - 1, 0, 0]) rotate(90) boat_tray();
             }
         }
     }
@@ -1014,7 +1110,7 @@ echo(total_h = total_h, over_box = total_h - box.z);
 bed = 270;
 for (s = [["half a", half_a], ["half b", half_b], ["big", big],
           ["boats", boat], ["vp", vp], for (d = deck_trays) [d[0], d[3]], ["wood", wood], ["vikings", vik],
-          ["islands", islands], ["buildings", buildings], ["setup buildings", setup_buildings], ["strips", strips],
+          ["islands", islands], ["buildings", bld], ["misc", misc], ["strips", strips], ["discard", discard], ["spare", spare],
           ["special forge", special_forge], ["special others", special_others], ["frame half", frame_half]])
     assert(max(s[1]) <= bed, str(s[0], " is too big for the bed: ", s[1]));
 
@@ -1026,13 +1122,18 @@ module the_part() {
     else if (part == "boats") boat_tray();
     else if (part == "vp") vp_tray();
     else if (part == "islands") islands_tray();
-    else if (part == "buildings") buildings_tray();
+    else if (part == "buildings_3") building_tray(3);
+    else if (part == "buildings_5") building_tray(5);
+    else if (part == "misc") misc_tray();
+    else if (part == "discard") discard_bin();
+    else if (part == "spare") spare_bin();
     else if (part == "setup_buildings") setup_buildings_tray();
     else if (part == "strips") strips_tray();
     else if (part == "frame") board_frame();
     else if (part == "frame_half") frame_half();
     else if (part == "wood") wood_tray();
-    else if (part == "vikings") vik_tray();
+    else if (part == "vikings_a") vik_tray(0);
+    else if (part == "vikings_b") vik_tray(1);
     else if (part == "special") special_boards();
     else if (part == "special_forge") special_board("forge");
     else if (part == "special_others") special_board("others");
