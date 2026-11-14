@@ -471,8 +471,10 @@ def combine(
     cols = math.ceil(math.sqrt(len(plates)))
 
     first = zipfile.ZipFile(io.BytesIO(next(iter(built.values())).project))
-    # An object for each part and each set of tool heads it prints with.
+    # An object for every copy of a part: Orca's GUI won't slice a plate that has
+    # only further instances of an object on another plate.
     objects: dict[tuple, int] = {}
+    copies: dict[str, int] = {}
     next_id = 1
     models, resources, configs, items, plate_xml = {}, [], [], [], []
     made: dict[int, int] = {}  # instances so far, by object
@@ -485,10 +487,11 @@ def combine(
         for part, x, y, turned in plate:
             b = built[part]
             ids = tuple(heads[i].get(c, 1) for _, c, _ in b.parts)
-            if (part, ids) not in objects:
+            copy = copies[part] = copies.get(part, 0) + 1
+            if (part, copy) not in objects:
                 zin = zipfile.ZipFile(io.BytesIO(b.project))
                 base = next_id
-                oid = objects[part, ids] = base + len(b.parts)
+                oid = objects[part, copy] = base + len(b.parts)
                 next_id = oid + 1
 
                 def moved(m: re.Match, base: int = base) -> str:
@@ -522,14 +525,18 @@ def combine(
                 )[0]
                 config = re.sub(r'(<object id=)"(\d+)"', f'\\1"{oid}"', config, count=1)
                 config = re.sub(r'(<part id=)"(\d+)"', moved, config)
-                config = config.replace(meta("name", "Assembly"), meta("name", part), 1)
+                config = config.replace(
+                    meta("name", "Assembly"),
+                    meta("name", part if copy == 1 else f"{part} {copy}"),
+                    1,
+                )
                 configs.append(
                     name_parts(
                         config,
                         [(label, k, own) for (label, _, own), k in zip(b.parts, ids)],
                     )
                 )
-            oid = objects[part, ids]
+            oid = objects[part, copy]
             # The box's corner to (x, y) on the plate, its bottom to the bed.
             (x0, y0, z0), (_x1, y1, _z1) = b.box
             if turned:
