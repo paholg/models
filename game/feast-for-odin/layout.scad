@@ -105,6 +105,12 @@ special_floor = 0.8;
 special_margin = 2;
 // The boards' corners are rounded by special_corner_r, for room to lift them
 // out; pack_special.py sets it, and keeps the pockets clear of them.
+// The forge board's icon, inlaid in its top face: width, depth, center and
+// rotation.
+forge_icon_w = 32;
+forge_icon_d = 0.6;
+forge_icon_at = [45, 28];
+forge_icon_rot = 180;
 // Test board: [tile index in special_tiles, [x, y]] of a few doubtful tiles.
 special_test_tiles = [[1, [0, 0]], [13, [0, 24.8]], [3, [57.8, 0]]];
 // The pocket floors, both levels and the step between, are c_floor this deep.
@@ -119,11 +125,13 @@ floor_skin = 0.4;
 c_game = "lightsteelblue";
 c_setup = "tan";
 c_floor = "darkslategray";
+c_forge = "darkorange";
 vik_colors = ["red", "blue", "yellow", "white"];
 $only = undef;
 $setup = false;
+$labels = true;
 function role_color(c) =
-    c == "black" || c == c_floor ? c
+    c == "black" || c == c_floor || c == c_forge ? c
     : len([for (v = vik_colors) if (v == c) 1]) > 0 ? c
     : $setup ? c_setup : c_game;
 module paint(c) let (rc = role_color(c)) if (is_undef($only) || $only == rc) color(rc) children();
@@ -276,9 +284,6 @@ module boat_tray() {
                        [[0, 1], [wy, -1], [wy + w.y, 1], [boat.y, -1]], boat_slot_r);
         }
     }
-    for (i = [0:len(boats) - 1]) paint("black")
-        translate([boat_x(i) + boat_well[i].x / 2, boat.y - wall - 3, boat_floor(i)])
-        rotate(90) linear_extrude(0.4) text(boats[i][0], size = 3.5, halign = "right", valign = "center");
 }
 
 // The VP tray, filling the pocket beside the card trays.
@@ -418,7 +423,7 @@ wood_rows = [
         ["wood", -1, [21, 14], 0, c_wood],
     ]],
 ];
-module wood_tray() let ($back_scoop = true) bin_tray("wood", wood, tier_h, wood_rows);
+module wood_tray() let ($back_scoop = true, $labels = false) bin_tray("wood", wood, tier_h, wood_rows);
 
 // Cardboard trays are open: a plain floor and an L-shaped post at each
 // well corner, no walls between. Stacks lift straight out, gripped from the
@@ -762,8 +767,8 @@ module column_icons(size, h, rows, cut = false) {
         }
     }
 }
-// Labels, raised on the floor, for bins without an icon.
-module bin_labels(size, rows) for_bins(size, rows) if (len($b) <= 5)
+// Labels, raised on the floor, for bins without an icon; none if !$labels.
+module bin_labels(size, rows) if ($labels) for_bins(size, rows) if (len($b) <= 5)
     translate([$pos.x + $wd.x / 2, $pos.y + ($wd.y + ($back_scoop ? 0 : $s)) / 2, floor_t])
         rotate($wd.x < 25 ? 90 : 0)
         linear_extrude(0.4) text($b[0], size = 3.5, halign = "center", valign = "center");
@@ -985,10 +990,12 @@ module special_floors(tiles, at) {
         }
     }
 }
+// Children are cut from the body, for inlays.
 module special_plate(size, tiles, at, corner_r = 0) {
     body() render() difference() {
         special_solid(size, tiles, at, corner_r);
         special_floors(tiles, at);
+        children();
     }
     paint(c_floor) render() intersection() {
         special_solid(size, tiles, at, corner_r);
@@ -1000,7 +1007,21 @@ module special_board(section) {
     size = section == "forge" ? special_forge : special_others;
     x0 = section == "forge" ? 0 : special_others_x0;
     special_plate(size, [for (st = special_tiles) if (st[0] == section) st], [m - x0, (size.y - special_size.y) / 2, 0],
-                  special_corner_r);
+                  special_corner_r)
+        if (section == "forge") for (id = ["black", "orange"]) forge_icon(id, eps);
+    if (section == "forge") {
+        paint("black") forge_icon("black");
+        paint(c_forge) forge_icon("orange");
+    }
+}
+// One color of forge.svg (id "black" or "orange"), let into the forge
+// board's top face. At dpi 25.4 an SVG unit is 1 mm, the viewBox's bottom
+// left the origin of x; the icon spans [5.67, -38.23] to [168, 100.81].
+module forge_icon(id, above = 0) {
+    s = forge_icon_w / 162.33;
+    translate([forge_icon_at.x, forge_icon_at.y, special_h - forge_icon_d])
+        linear_extrude(forge_icon_d + above, convexity = 6)
+            rotate(forge_icon_rot) scale(s) translate([-86.83, -31.29]) import("forge.svg", id = id, dpi = 25.4);
 }
 // A few doubtful tiles on a small board, to try the fit and the tip.
 module special_test() {
@@ -1065,8 +1086,9 @@ module assembly() {
     z2 = board_stack_h + explode + board_layers * explode / 6;
     if (show(2)) for (i = [0, 1]) translate([0.5, 0.5 + i * (half.y + gap), z2]) half_tray();
     z3 = z2 + half_h + explode;
-    if (show(3)) translate([(box.x - special_forge.x - gap - special_others.x) / 2, 0.5, z3])
-        special_boards();
+    // Turned half round: the forge board at the right, its icon at the back.
+    if (show(3)) translate([(box.x + special_forge.x + gap + special_others.x) / 2, 0.5 + special_forge.y, z3])
+        rotate(180) special_boards();
     z4 = z3 + special_h + explode;
     if (show(4)) translate([0.5, 0.5, z4]) {
         for (r = [0:2]) translate([0, r * (bld.y + gap), 0]) {
@@ -1145,7 +1167,7 @@ module the_part() {
 }
 // Every color the parts use. New colors go last, so a saved Orca project's
 // objects keep their order.
-print_colors = concat([c_game, c_setup], vik_colors, ["black", c_floor]);
+print_colors = concat([c_game, c_setup], vik_colors, ["black", c_floor, c_forge]);
 if (part == "assembly") assembly();
 else if (part == "boards") board_stack(4);
 else for (c = print_colors) let ($only = c) the_part();

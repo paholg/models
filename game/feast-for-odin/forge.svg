@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Forge tongs holding a glowing rock, after the forge icon in A Feast for
+  Odin. Two colors, which share an edge and don't overlap; import either by id:
+    import("forge.svg", id = "black");  import("forge.svg", id = "orange");
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 22 176 152">
+  <!-- The handles. -->
+  <path id="black" fill="#1a1a1a"
+    d="M118 72 L38 88 Q28 91 30 99 Q32 107 42 106 L100 100 L68 152
+       Q63 162 71 167 Q80 171 86 162 L136 96 Z"/>
+  <!-- The glowing jaws, and the rock between them. -->
+  <path id="orange" fill="#f28c1e"
+    d="M118 72 L121 54 Q122 48 127 44.5 L142 33 Q146 29 151 29.2 L181 34
+       A6.6 6.6 0 0 1 180 47 L151 43 L137 54 L134 66 L139 79 L152 85
+       L180 81 A6.6 6.6 0 0 1 181 94 L152 99 Q147 99.5 143 98 L136 96 Z
+       M192 65 L185 53 L177 52 L166 54.5 L161 64 L165 75 L175 76.5
+       L186 76 Z"/>
+</svg>
