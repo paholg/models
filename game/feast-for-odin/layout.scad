@@ -3,7 +3,8 @@
 // x is the box length (305), y its width (216), z up.
 //
 // Bottom to top:
-// 1: the big boards, in a frame that fills the box round them.
+// 1: the big boards, in a frame that fills the box round them, and the
+//    rulebooks on top of those.
 // 2: two identical half trays of the small, often-used tiles and money, one
 //    per end of the table, side by side.
 // 3: the special tiles' boards.
@@ -40,6 +41,9 @@ layer_only = false;
 box = [305, 216, 117.5];
 // Cardboard: see board_stack().
 card_t = 2.25;
+// The rulebooks lie flat on the boards and their frame. Roughly: the player
+// boards' length, and 25 mm wider.
+rulebooks = [299, 215, 2.5];
 // Player boards, action board, round overview.
 board_layers = 8;
 board_stack_h = board_layers * card_t + 0.75;
@@ -57,8 +61,9 @@ tray_h = 17.2;
 half_h = 26.2;
 scoop_min = 8;
 scoop_max = 15;
-// Warn when a bin holds fewer than this many times its tiles, stacked neatly.
-min_cap = 1.3;
+// Warn when a bin's tiles, as solid cardboard, fill more of it than this:
+// they're thrown in loose.
+max_fill = 0.5;
 
 /* [Chamfers] */
 // Well and pocket rims.
@@ -130,6 +135,8 @@ vik_colors = ["red", "blue", "yellow", "white"];
 $only = undef;
 $setup = false;
 $labels = true;
+// A bin tray's walls, outside and between bins.
+$wall = wall;
 function role_color(c) =
     c == "black" || c == c_floor || c == c_forge ? c
     : len([for (v = vik_colors) if (v == c) 1]) > 0 ? c
@@ -366,11 +373,11 @@ module vp_tray() {
     }
 }
 // A spare bin over the VP tray, filling its pocket up to the layer's top,
-// scooped up all four walls.
+// scooped up all four walls. In the setup color, like the misc bin.
 spare = [vp.x, vp.y];
 spare_h = up_h - vp_h;
 spare_scoop = 12;
-module spare_bin() body() difference() {
+module spare_bin() let ($setup = true) body() difference() {
     cbox(spare, spare_h);
     in = spare - 2 * [wall, wall];
     translate([wall, wall, 0]) {
@@ -423,7 +430,8 @@ wood_rows = [
         ["wood", -1, [21, 14], 0, c_wood],
     ]],
 ];
-module wood_tray() let ($back_scoop = true, $labels = false) bin_tray("wood", wood, tier_h, wood_rows);
+// Its bins are long, and have room to spare: so thicker walls.
+module wood_tray() let ($back_scoop = true, $labels = false, $wall = 2.4) bin_tray("wood", wood, tier_h, wood_rows);
 
 // Cardboard trays are open: a plain floor and an L-shaped post at each
 // well corner, no walls between. Stacks lift straight out, gripped from the
@@ -563,13 +571,13 @@ function cumsum(v, i) = sum([for (j = [0:1:i - 1]) v[j]]);
 function row_depths(rows, size) =
     let (fixed = sum([for (r = rows) r[0] > 0 ? r[0] : 0]),
          n = len([for (r = rows) if (r[0] < 0) 1]),
-         fill = (size.y - wall * (len(rows) + 1) - fixed) / max(1, n))
+         fill = (size.y - $wall * (len(rows) + 1) - fixed) / max(1, n))
     [for (r = rows) r[0] > 0 ? r[0] : fill];
 
 function bin_widths(bins, size) =
     let (fixed = sum([for (b = bins) b[1] > 0 ? b[1] : 0]),
          n = len([for (b = bins) if (b[1] < 0) 1]),
-         fill = (size.x - wall * (len(bins) + 1) - fixed) / max(1, n))
+         fill = (size.x - $wall * (len(bins) + 1) - fixed) / max(1, n))
     [for (b = bins) b[1] > 0 ? b[1] : fill];
 
 // Scoop up the front wall, leaving the tile room to lie flat behind it. With
@@ -581,11 +589,6 @@ $back_scoop = false;
 $scoop_fit = false;
 $side_scoop = false;
 function scoop(w, d, fp) = [min(scoop_max, max(scoop_min, (d - fp.y) / ($back_scoop && $scoop_fit ? 2 : 1))), true];
-
-// Tiles that fit stacked neatly on the flat floor between the scoops.
-function neat_cap(w, flat_d, in_h, fp) =
-    let (a = fp + [0.5, 0.5])
-    max(floor(w / a.x) * floor(flat_d / a.y), floor(w / a.y) * floor(flat_d / a.x)) * floor(in_h / tile_t);
 
 // A box with every outside edge chamfered.
 module cbox(size, h, co = chamfer_out, cc = chamfer_corner) {
@@ -692,7 +695,7 @@ module bin_cuts(size, h, rows) {
     for (ri = [0:len(rows) - 1]) {
         ws = bin_widths(rows[ri][1], size);
         for (bi = [0:len(ws) - 1])
-            translate([wall + cumsum(ws, bi) + bi * wall, wall + cumsum(ds, ri) + ri * wall, 0]) {
+            translate([$wall + cumsum(ws, bi) + bi * $wall, $wall + cumsum(ds, ri) + ri * $wall, 0]) {
                 fp = rows[ri][1][bi][2];
                 if ($side_scoop) {
                     sc = scoop(ds[ri], ws[bi], [fp.y, fp.x])[0];
@@ -717,21 +720,23 @@ module for_bins(size, rows) {
         ws = bin_widths(bins, size);
         for (bi = [0:len(bins) - 1])
             let ($b = bins[bi], $wd = [ws[bi], ds[ri]],
-                 $pos = [wall + cumsum(ws, bi) + bi * wall, wall + cumsum(ds, ri) + ri * wall],
+                 $pos = [$wall + cumsum(ws, bi) + bi * $wall, $wall + cumsum(ds, ri) + ri * $wall],
                  $s = scoop(ws[bi], ds[ri], bins[bi][2])[0],
                  $first = [bi == 0, ri == 0], $last = [bi == len(bins) - 1, ri == len(rows) - 1])
                 children();
     }
 }
 
-// Reports each bin's capacity.
+// Reports how full each bin is: its tiles' volume, their footprints taken as
+// solid, over the well's, less what the scoops fill in.
 module bin_check(name, size, h, rows) {
     for (ri = [0:len(rows) - 1]) for (w = bin_widths(rows[ri][1], size))
         assert(w > 0 && row_depths(rows, size)[ri] > 0, str(name, ": row ", ri, " doesn't fit"));
     for_bins(size, rows) if ($b[3] > 0) {
-        c = neat_cap($wd.x, $wd.y - ($back_scoop ? 2 : 1) * $s, h - floor_t, $b[2]);
-        echo(str(c < min_cap * $b[3] ? "TIGHT " : "", name, " ", $b[0], ": ", round($wd.x), "x", round($wd.y),
-                 " holds ", c, " neatly, needs ", $b[3]));
+        scoops = ($back_scoop ? 2 : 1) * (1 - PI / 4) * $s * $s * $wd.x;
+        fill = $b[3] * $b[2].x * $b[2].y * tile_t / ($wd.x * $wd.y * (h - floor_t) - scoops);
+        echo(str(fill > max_fill ? "TIGHT " : "", name, " ", $b[0], ": ", round($wd.x), "x", round($wd.y),
+                 ", ", $b[3], " tiles fill ", round(fill * 100), "%"));
     }
 }
 
@@ -757,7 +762,7 @@ module column_icons(size, h, rows, cut = false) {
         // The bin in front, whose back wall it is.
         d = ds[ri - 1];
         sc = scoop(w, d, rows[ri - 1][1][0][2])[0];
-        translate([wall, wall + cumsum(ds, ri - 1) + (ri - 1) * wall, 0]) render() intersection() {
+        translate([$wall, $wall + cumsum(ds, ri - 1) + (ri - 1) * $wall, 0]) render() intersection() {
             difference() {
                 translate([0, icon_d, 0]) well([w, d], floor_t, h, sc, $back_scoop ? sc : 0);
                 if (!cut) well([w, d], floor_t, h, sc, $back_scoop ? sc : 0);
@@ -776,8 +781,8 @@ module bin_labels(size, rows) if ($labels) for_bins(size, rows) if (len($b) <= 5
 // Paints children (a tray body) in its bins' colors: each bin owns its cell
 // out to the middle of the walls around it, and to clip on the outside.
 module bin_paint(size, rows, clip = [[-1, 1000], [-1, 1000]]) for_bins(size, rows) {
-    lo = [for (k = [0:1]) $first[k] ? clip[k][0] : $pos[k] - wall / 2];
-    hi = [for (k = [0:1]) $last[k] ? clip[k][1] : $pos[k] + $wd[k] + wall / 2];
+    lo = [for (k = [0:1]) $first[k] ? clip[k][0] : $pos[k] - $wall / 2];
+    hi = [for (k = [0:1]) $last[k] ? clip[k][1] : $pos[k] + $wd[k] + $wall / 2];
     // render() so the preview shows the colors too.
     paint($b[4]) render() intersection() {
         children();
@@ -1044,14 +1049,19 @@ module deck_holders() for (i = [0:len(deck_trays) - 1]) {
 }
 
 // The board stack, bottom to top, one card_t layer each: [label, pos, size,
-// color], within the box. The player boards, the biggest, are at the bottom.
+// color], within the box. Smallest at the bottom, the player boards, the
+// biggest, on top: so the frame can be thick round the small ones, under the
+// player boards' edges.
 overview = [224, 96];
 player_board = [299, 190];
+action_board = [266, 183]; // the biggest of its layers
 board_stack = [
-    for (i = [0:3]) [["player board", [(box.x - player_board.x) / 2, (box.y - player_board.y) / 2], player_board, "burlywood"]],
-    for (w = [183, 162, 134]) [["action board", [(box.x - 266) / 2, (box.y - w) / 2], [266, w], "tan"]],
     [["round overview", [(box.x - overview.x) / 2, (box.y - overview.y) / 2], overview, "wheat"]],
+    for (w = [134, 162, action_board.y]) [["action board", [(box.x - action_board.x) / 2, (box.y - w) / 2], [action_board.x, w], "tan"]],
+    for (i = [0:3]) [["player board", [(box.x - player_board.x) / 2, (box.y - player_board.y) / 2], player_board, "burlywood"]],
 ];
+// The layers under the player boards.
+boards_under = 4;
 assert(len(board_stack) == board_layers, str("board stack has ", len(board_stack), " layers"));
 module board_stack(explode_layers = 0) {
     for (i = [0:len(board_stack) - 1]) translate([0, 0, i * (card_t + explode_layers)])
@@ -1060,12 +1070,23 @@ module board_stack(explode_layers = 0) {
 // The frame round the board stack: it fills the box round the player boards,
 // so they can't slide, and is the stack's height, for what's above to sit on.
 // Two halves, one per end of the box, each a C; print two.
+// Under the player boards it's a shelf, in to the action boards: the boards'
+// edges rest on it, and it stiffens the thin wall round them.
 frame_clear = 1.5;
 frame_half = [(box.x - 1 - gap) / 2, box.y - 1];
+frame_shelf_h = boards_under * card_t;
 module frame_half() body() difference() {
     cbox(frame_half, board_stack_h);
-    in = player_board + [frame_clear, frame_clear];
-    translate([(box.x - 1 - in.x) / 2, (frame_half.y - in.y) / 2, -1]) cube([in.x, in.y, board_stack_h + 2]);
+    for (c = [[player_board, frame_shelf_h], [action_board, -1]]) {
+        in = c[0] + [frame_clear, frame_clear];
+        translate([(box.x - 1 - in.x) / 2, (frame_half.y - in.y) / 2, c[1]]) cube([in.x, in.y, board_stack_h + 2]);
+    }
+    // The shelf's inside top edge.
+    in = action_board + [frame_clear, frame_clear];
+    translate([(box.x - 1 - in.x) / 2, (frame_half.y - in.y) / 2, frame_shelf_h - chamfer_out]) hull() {
+        linear_extrude(eps) square(in);
+        translate([-chamfer_out, -chamfer_out, chamfer_out]) linear_extrude(eps) square(in + 2 * [chamfer_out, chamfer_out]);
+    }
 }
 module board_frame() {
     frame_half();
@@ -1078,12 +1099,14 @@ module assembly() {
         cube([box.x + 2, box.y + 2, box.z]);
         translate([1, 1, -eps]) cube([box.x, box.y, box.z + 1]);
     }
-    // 1: the boards, in their frame.
+    // 1: the boards, in their frame, and the rulebooks on them.
+    zb = board_stack_h + board_layers * explode / 6 + explode / 2;
     if (show(1)) {
         translate([0.5, 0.5, 0]) board_frame();
         board_stack(explode / 6);
+        translate([(box.x - rulebooks.x) / 2, (box.y - rulebooks.y) / 2, zb]) color("ivory") cube(rulebooks);
     }
-    z2 = board_stack_h + explode + board_layers * explode / 6;
+    z2 = zb + rulebooks.z + explode;
     if (show(2)) for (i = [0, 1]) translate([0.5, 0.5 + i * (half.y + gap), z2]) half_tray();
     z3 = z2 + half_h + explode;
     // Turned half round: the forge board at the right, its icon at the back.
@@ -1126,7 +1149,7 @@ module assembly() {
 
 // The top layer is as tall as the tallest thing in it.
 top_h = max(up_h, tier_h + boat_h, vp_h);
-total_h = board_stack_h + special_h + half_h + card_layer_h + top_h;
+total_h = rulebooks.z + board_stack_h + special_h + half_h + card_layer_h + top_h;
 echo(total_h = total_h, over_box = total_h - box.z);
 
 bed = 270;
