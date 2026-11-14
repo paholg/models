@@ -175,8 +175,9 @@ function t(x, y) = [x * unit, y * unit];
 
 // Each row: [depth (-1 fills the tray), bins]. A bin: [label, width (-1
 // shares what's left equally), tile footprint (scoop sizing, capacity), tile
-// count (0 for none), color, optional icon]. With an icon, the bin shows it on
-// the tray's front face instead of its label.
+// count (0 for none), color, optional icon, optional front-only]. With an icon,
+// the bin shows it on the tray's front face instead of its label. Front-only
+// leaves the bin's back wall square, whatever $back_scoop.
 
 // Icons: a tile's cells as [col, row], col across. "grid" draws them as an
 // outlined grid, "coin" as linked octagons.
@@ -235,7 +236,7 @@ big_cols = [for (k = big_kinds) big_w(k[1].x / unit)];
 function big_row(c, p, n) = [-1, [
     for (ki = [0:len(big_kinds) - 1]) let (k = big_kinds[ki])
         [str(p, k[0]), big_cols[ki], [k[1].x, k[1].y * max(1, k[2])], n[ki], c,
-         grid(k[1].x / unit, k[1].y / unit)],
+         grid(k[1].x / unit, k[1].y / unit), k[2] > 0],
 ]];
 big_rows = [
     big_row(c_animal, "A", [18, 15, 21]),
@@ -384,7 +385,7 @@ module vp_tray() {
 // scooped up all four walls. In the setup color, like the misc bin.
 spare = [vp.x, vp.y];
 spare_h = up_h - vp_h;
-spare_scoop = 12;
+spare_scoop = 15;
 module spare_bin() let ($setup = true) body() difference() {
     cbox(spare, spare_h);
     in = spare - 2 * [wall, wall];
@@ -597,7 +598,10 @@ function bin_widths(bins, size) =
 $back_scoop = false;
 $scoop_fit = false;
 $side_scoop = false;
-function scoop(w, d, fp) = [min(scoop_max, max(scoop_min, (d - fp.y) / ($back_scoop && $scoop_fit ? 2 : 1))), true];
+// With $scoop_r, every scoop is that radius instead.
+$scoop_r = undef;
+function scoop_for(d, fp) = min(scoop_max, max(scoop_min, (d - fp.y) / ($back_scoop && $scoop_fit ? 2 : 1)));
+function scoop(w, d, fp) = [is_undef($scoop_r) ? scoop_for(d, fp) : $scoop_r, true];
 
 // A box with every outside edge chamfered.
 module cbox(size, h, co = chamfer_out, cc = chamfer_corner) {
@@ -712,7 +716,8 @@ module bin_cuts(size, h, rows) {
                 }
                 else {
                     sc = scoop(ws[bi], ds[ri], fp)[0];
-                    well([ws[bi], ds[ri]], floor_t, h, sc, $back_scoop ? sc : 0);
+                    b = rows[ri][1][bi];
+                    well([ws[bi], ds[ri]], floor_t, h, sc, $back_scoop && !(len(b) > 6 && b[6]) ? sc : 0);
                 }
                 rim([ws[bi], ds[ri]], h);
             }
@@ -846,6 +851,9 @@ module half_a() let ($back_scoop = true) bin_tray("half a", half_a, half_h, slic
 // The money column shares the tile bins' last wall.
 module half_b() {
     $back_scoop = true;
+    // Every scoop the biggest, as the tile bins' are anyway: the 2x2 money's
+    // would be less, for the room its tiles leave.
+    $scoop_r = scoop_max;
     tiles = [half_b_tiles_x, half.y];
     mx = half_b_tiles_x - wall;
     money = [half_b.x - mx, half.y];
@@ -882,24 +890,30 @@ module big_tray() {
     $back_scoop = true;
     $scoop_fit = true;
     in_h = tier_h - floor_t;
-    for (ki = [0:len(big_kinds) - 1], ri = [0:len(big_rows) - 1]) {
-        k = big_kinds[ki];
-        bin = big_rows[ri][1][ki];
-        d = row_depths(big_rows, big)[ri];
-        sc = scoop(bin[1], d, bin[2])[0];
-        if (k[2] == 0)
-            echo(str("big ", bin[0], ": on edge, stack ", bin[3] * tile_t, " in ", round(d * 10) / 10, " deep"));
-        else
-            echo(str("big ", bin[0], ": flat, ", k[2], " stacks of ", ceil(bin[3] / k[2]) * tile_t, " in ", in_h,
-                     " high; ", bin[2].y, " long in ", round(d * 10) / 10, ", ", round((d - 2 * sc) * 10) / 10,
-                     " of it flat floor (scoops ", sc, ")"));
+    // One radius for every bin, the biggest, like every other tray's. The flat
+    // stacks fill their bins, so those are scooped at the front only: the back
+    // stack lies flat against the square back wall, and the front one, the
+    // shorter, up the scoop.
+    let ($scoop_r = scoop_max) {
+        for (ki = [0:len(big_kinds) - 1], ri = [0:len(big_rows) - 1]) {
+            k = big_kinds[ki];
+            bin = big_rows[ri][1][ki];
+            d = row_depths(big_rows, big)[ri];
+            sc = scoop(bin[1], d, bin[2])[0];
+            if (k[2] == 0)
+                echo(str("big ", bin[0], ": on edge, stack ", bin[3] * tile_t, " in ", round(d * 10) / 10, " deep"));
+            else
+                echo(str("big ", bin[0], ": flat, ", k[2], " stacks of ", ceil(bin[3] / k[2]) * tile_t, " in ", in_h,
+                         " high; ", bin[2].y, " long in ", round(d * 10) / 10, ", ", round((d - sc) * 10) / 10,
+                         " of it flat floor (front scoop ", sc, ")"));
+        }
+        bin_paint(big, big_rows) difference() {
+            cbox(big, tier_h);
+            bin_cuts(big, tier_h, big_rows);
+            bin_front_icons(big, tier_h, big_rows);
+        }
+        paint("black") bin_front_icons(big, tier_h, big_rows);
     }
-    bin_paint(big, big_rows) difference() {
-        cbox(big, tier_h);
-        bin_cuts(big, tier_h, big_rows);
-        bin_front_icons(big, tier_h, big_rows);
-    }
-    paint("black") bin_front_icons(big, tier_h, big_rows);
 }
 
 // The special tiles' boards: a pocket per tile, the forge tiles on their
