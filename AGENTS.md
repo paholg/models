@@ -16,7 +16,9 @@ so don't go looking for its files through the binary.
   which Orca copies to `~/.config/OrcaSlicer/system/Snapmaker`. Mine are in
   `~/.config/OrcaSlicer/user`.
 * `python/generate.py` turns a .scad file into Orca projects, with settings
-  for the whole print or for single parts. Its docstring has the details.
+  for the whole print or for single parts. Its docstring has the details. What
+  it's made of is in `python/project`: `scad.py` for OpenSCAD's side, `orca.py`
+  for reading and writing Orca's projects, `layout.py` for packing plates.
 * `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
   settings in the G-code rather than guess. Orca's own CLI ignores a
   project's settings, which only the GUI applies; `python/slice.py` lays them

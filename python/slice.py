@@ -16,14 +16,14 @@ Usage: slice.py FILE.3mf [--machine NAME] [--process NAME] [--filament NAME]
 """
 
 import argparse
-import html
 import json
-import re
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+from project.orca import published
 
 ROOT = Path(__file__).resolve().parents[1]
 ORCA = Path.home() / ".config/OrcaSlicer"
@@ -58,22 +58,6 @@ def pick(group: dict[str, dict], name: str, machine: str, kind: str) -> str:
         if full in group:
             return full
     sys.exit(f"no {kind} preset named {name!r}")
-
-
-def published(project: Path) -> dict[str, str]:
-    """The settings a published project applies."""
-    model = zipfile.ZipFile(project).read("3D/3dmodel.model").decode()
-
-    def tag(name: str) -> str:
-        m = re.search(rf'<metadata name="{name}">(.*?)</metadata>', model, re.DOTALL)
-        # Orca escapes these values twice.
-        return html.unescape(html.unescape(m[1])) if m else ""
-
-    config = dict(
-        line.split(" = ", 1) for line in tag("orca_published_config").splitlines()
-    )
-    # A project with nothing to apply still carries a setting, unlisted.
-    return {k: config[k] for k in json.loads(tag("orca_published_keys") or "[]")}
 
 
 def as_cli_reads(project: Path, machine: dict, out: Path) -> None:
