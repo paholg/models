@@ -1,9 +1,9 @@
 """Smoke test: a 30mm spiral-vase cylinder, 10mm tall, T0 bottom half, T1 top half."""
 
 import fullcontrol as fc
+from lib.settings import Settings
 
 from lib import u1
-from lib.settings import Settings
 
 S = Settings()
 LAYER = S.layer_height

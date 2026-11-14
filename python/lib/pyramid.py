@@ -118,7 +118,9 @@ def kernel_center(pts: list[tuple[float, float]]) -> tuple[float, float]:
     return (c.x, c.y)
 
 
-def best_view(pts: list[tuple[float, float]], step: float = 0.25) -> tuple[float, float]:
+def best_view(
+    pts: list[tuple[float, float]], step: float = 0.25
+) -> tuple[float, float]:
     """The point most inside every edge's line (CCW outline).
 
     Maximizes the smallest signed distance to the edges' lines: in the kernel
@@ -128,7 +130,8 @@ def best_view(pts: list[tuple[float, float]], step: float = 0.25) -> tuple[float
 
     def worst(x: float, y: float) -> float:
         return min(
-            ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) / math.dist((x0, y0), (x1, y1))
+            ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0))
+            / math.dist((x0, y0), (x1, y1))
             for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1], strict=True)
         )
 

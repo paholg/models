@@ -5,14 +5,14 @@ one around it (T2). Every roof face rises at SLOPE, so the inner roof is the
 outer one offset by GAP: the gap between them is constant at every height.
 """
 
-from shapely.geometry import Polygon
-
-from lib import u1
 from lib.hat import hat
 from lib.preview import preview
 from lib.pyramid import polygon_floor, strand_steps
 from lib.roof import RoofLattice, row_height_for
 from lib.settings import DEFAULT
+from shapely.geometry import Polygon
+
+from lib import u1
 
 S = DEFAULT
 LW, LH = S.line_width, S.layer_height

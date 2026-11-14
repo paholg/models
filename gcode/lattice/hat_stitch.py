@@ -8,15 +8,15 @@ the lattice is irregular but has no holes or alignment constraints.
 
 import math
 
-from shapely.geometry import Polygon
-
-from lib import u1
 from lib.hat import hat
 from lib.preview import preview
 from lib.pyramid import best_view, kernel_center, polygon_floor, strand_steps
 from lib.roof import row_height_for
 from lib.settings import DEFAULT
 from lib.stitch import StitchedPyramid
+from shapely.geometry import Polygon
+
+from lib import u1
 
 S = DEFAULT
 LW, LH = S.line_width, S.layer_height

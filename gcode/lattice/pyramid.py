@@ -1,9 +1,10 @@
 """Square pyramid: solid bottom (T0), nonplanar diamond-lattice sides (T1)."""
 
-from lib import u1
 from lib.preview import preview
 from lib.pyramid import CENTER, Lattice, floor, square, strand_steps
 from lib.settings import DEFAULT
+
+from lib import u1
 
 S = DEFAULT
 LW, LH = S.line_width, S.layer_height

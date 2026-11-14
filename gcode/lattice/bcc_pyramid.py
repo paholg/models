@@ -7,11 +7,12 @@ Level height is how far the nozzle reaches down past just-printed struts a cell
 away, so it's limited by the hotend's clearance below the heater block/duct.
 """
 
-from lib import u1
 from lib.bcc import BCC
 from lib.preview import preview
 from lib.pyramid import CENTER, floor, strand_steps
 from lib.settings import DEFAULT
+
+from lib import u1
 
 S = DEFAULT
 LW, LH = S.line_width, S.layer_height
