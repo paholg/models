@@ -211,18 +211,25 @@ def published(project: Path) -> dict[str, str]:
     return {k: config[k] for k in json.loads(tags.get("orca_published_keys") or "[]")}
 
 
-def pause_xml(heights: Sequence[float], layer: float) -> bytes:
+# How far over a pause's height to name its layer: half the thinnest layer.
+PAUSE_OVER = 0.04
+
+
+def pause_xml(heights: Sequence[float]) -> bytes:
     """Orca's custom G-code for the first plate: a pause at each height."""
     root = ET.Element("custom_gcodes_per_layer")
     plate = ET.SubElement(root, "plate")
     ET.SubElement(plate, "plate_info", id="1")
     for z in heights:
         # Orca gives each of these to the layer whose top is nearest, and runs it
-        # before that layer: so name the layer above the pause. Type 1 is a pause.
+        # before that layer. The layers aren't known here, with variable layer
+        # height set in the GUI: so name a height just over the pause, by less than
+        # the thinnest layer. That's the first layer to cover z or the one below
+        # it, never one above. Type 1 is a pause.
         ET.SubElement(
             plate,
             "layer",
-            top_z=f"{z + layer:.4f}",
+            top_z=f"{z + PAUSE_OVER:.4f}",
             type="1",
             extruder="1",
             color="",
@@ -378,8 +385,5 @@ def write(
                 for k in range(1, len(plates) + 1):
                     zout.writestr(f"{m[1]}{k}{m[2]}", src.read(name))
         if pauses:
-            zout.writestr(
-                "Metadata/custom_gcode_per_layer.xml",
-                pause_xml(pauses, float(settings["layer_height"])),
-            )
+            zout.writestr("Metadata/custom_gcode_per_layer.xml", pause_xml(pauses))
     return count

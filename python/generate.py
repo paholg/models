@@ -47,8 +47,7 @@ object of everything else:
     piece("feet", "brim_type=outer_only brim_width=3") feet();
 
 A print can pause, to put something inside it: `echo(pause = z)` pauses once
-the print is z high, before the layer above. That takes a `layer_height` on the
-`// orca:` line, to find that layer.
+the print is z high, or a layer sooner: leave a layer's room over what goes in.
 
 `// plate:` lines ask for one more project, gen/<dir>/<stem>-all.3mf, with
 everything in it, laid out on as many plates as it takes. Each line is a group
@@ -189,8 +188,6 @@ def generate(file: Path) -> None:
             work = Path(tmp)
             print(f"{part}: openscad")
             render = scad.render(file, part, work)
-            if render.pauses and "layer_height" not in settings:
-                sys.exit(f"{part} pauses, which takes a layer_height on the orca line")
             if render.pauses and any(part in g for g in groups):
                 print(f"  warning: {file.stem}-all won't pause for {part}")
             filaments.update(render.filaments)
