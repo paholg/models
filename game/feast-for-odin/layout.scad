@@ -8,8 +8,8 @@
 // 2: two identical half trays of the small, often-used tiles and money, one
 //    per end of the table, side by side.
 // 3: the special tiles' boards.
-// 4: cardboard: the buildings, a stack per kind; the vikings, two colors to a
-//    tray; the mountain strips (one stack, the long one on top);
+// 4: cardboard: the buildings, a stack per kind; the vikings, a bin per
+//    color in one tray; the mountain strips (one stack, the long one on top);
 //    and a bin for the dice, moose and cube.
 // 5, 6: the top layer, as tall as the card trays, so that what stands above
 //    the box's rim still reaches well down into it.
@@ -23,11 +23,19 @@
 // tiles out on; each reports how many tiles it holds stacked neatly.
 // Cardboard stacks sit in wells with finger notches to lift them out whole.
 
-// export: half_a half_b big boats vp vikings_a vikings_b islands wood buildings_3 buildings_5 setup_buildings misc strips discard spare frame_half deck_setup deck_occupations deck_weapons special_forge special_others special_test
+// export: half_a half_b big boats vp vikings islands wood buildings_3 buildings_5 setup_buildings misc strips discard spare frame_half deck_setup deck_occupations deck_weapons special_forge special_others special_test
+// Everything, in one project: a line per set of filaments, in an order that
+// changes few of them from one plate to the next.
+// plate: frame_half*2
+// plate: half_a*2 half_b*2 big
+// plate: special_forge special_others
+// plate: buildings_3*2 buildings_5 strips islands wood boats discard*2 vp deck_occupations deck_weapons
+// plate: setup_buildings misc spare deck_setup
+// plate: vikings
 
 include <special_layout.scad>
 
-part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings_a, vikings_b, islands, wood, buildings_3, buildings_5, setup_buildings, misc, strips, discard, spare, frame, frame_half, boards, special, special_forge, special_others, special_test, decks, deck_setup, deck_occupations, deck_weapons]
+part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings, islands, wood, buildings_3, buildings_5, setup_buildings, misc, strips, discard, spare, frame, frame_half, boards, special, special_forge, special_others, special_test, decks, deck_setup, deck_occupations, deck_weapons]
 // Vertical gap between layers in the assembly view.
 explode = 30;
 // Assembly: show layers up to this one, bottom up (0 = all). 1: boards and
@@ -131,7 +139,7 @@ c_game = "lightsteelblue";
 c_setup = "tan";
 c_floor = "darkslategray";
 c_forge = "darkorange";
-vik_colors = ["red", "blue", "yellow", "white"];
+vik_colors = ["red", "blue", "yellow", "black"];
 $only = undef;
 $setup = false;
 $labels = true;
@@ -559,11 +567,12 @@ module misc_tray() let ($setup = true) body() difference() {
     cbox(misc, card_layer_h);
     bin_cuts(misc, card_layer_h, misc_rows);
 }
-// Vikings: a bin per player color, two colors to a tray, scooped up both ends.
+// Vikings: a bin per player color, four to the tray, scooped up both ends.
 // No label: the colors say whose they are, and a fifth filament won't fit.
-vik = bld_beside;
-function vik_rows(i) = [[-1, [for (c = [vik_colors[2 * i], vik_colors[2 * i + 1]]) ["", -1, [13, 21], 0, c]]]];
-module vik_tray(i) let ($side_scoop = true, $back_scoop = true) bin_tray("vikings", vik, card_layer_h, vik_rows(i));
+// One tray, beside the first two rows of buildings: two rows of two bins.
+vik = [bld_beside.x, 2 * bld.y + gap];
+vik_rows = [for (i = [0, 1]) [-1, [for (c = [vik_colors[2 * i], vik_colors[2 * i + 1]]) ["", -1, [13, 21], 0, c]]]];
+module vik_tray() let ($side_scoop = true, $back_scoop = true) bin_tray("vikings", vik, card_layer_h, vik_rows);
 
 function sum(v) = len(v) == 0 ? 0 : v[0] + sum([for (i = [1:1:len(v) - 1]) v[i]]);
 function cumsum(v, i) = sum([for (j = [0:1:i - 1]) v[j]]);
@@ -1116,7 +1125,7 @@ module assembly() {
     if (show(4)) translate([0.5, 0.5, z4]) {
         for (r = [0:2]) translate([0, r * (bld.y + gap), 0]) {
             building_tray([3, 3, 5][r]);
-            translate([bld.x + gap, 0, 0]) if (r < 2) vik_tray(r); else setup_buildings_tray();
+            translate([bld.x + gap, 0, 0]) if (r == 0) vik_tray(); else if (r == 2) setup_buildings_tray();
         }
         translate([0, 3 * (bld.y + gap), 0]) {
             strips_tray();
@@ -1177,8 +1186,7 @@ module the_part() {
     else if (part == "frame") board_frame();
     else if (part == "frame_half") frame_half();
     else if (part == "wood") wood_tray();
-    else if (part == "vikings_a") vik_tray(0);
-    else if (part == "vikings_b") vik_tray(1);
+    else if (part == "vikings") vik_tray();
     else if (part == "special") special_boards();
     else if (part == "special_forge") special_board("forge");
     else if (part == "special_others") special_board("others");
@@ -1190,8 +1198,25 @@ module the_part() {
 }
 // Every color the parts use. New colors go last, so a saved Orca project's
 // objects keep their order.
-print_colors = concat([c_game, c_setup], vik_colors, ["black", c_floor, c_forge]);
+// Each once: black is a viking color too.
+all_colors = concat([c_game, c_setup], vik_colors, ["black", c_floor, c_forge]);
+print_colors = [for (i = [0:len(all_colors) - 1]) if (search([all_colors[i]], all_colors)[0] == i) all_colors[i]];
 if (part == "assembly") assembly();
 else if (part == "boards") board_stack(4);
-else for (c = print_colors) let ($only = c) the_part();
+else for (c = print_colors) let ($only = c) {
+    echo(color = c, piece = piece_name(c), filament = filament_name(c));
+    the_part();
+}
+// The filament a color stands for: the preview's colors aren't the real ones.
+function filament_name(c) =
+    c == c_game ? "main" : c == c_setup ? "setup" : c == c_floor ? "pocket floor" : c == c_forge ? "orange" : c;
+// What a color is, in the part: for Orca's list of its pieces.
+function piece_name(c) =
+    c == c_game || c == c_setup ? "body"
+    : c == c_floor ? "pocket floors"
+    : c == c_forge ? "tongs' jaws and rock"
+    : c != "black" ? str(c, " bin")
+    : part == "vikings" ? "black bin"
+    : part == "special_forge" ? "tongs' handles"
+    : "icons";
 

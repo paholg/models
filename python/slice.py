@@ -9,8 +9,8 @@ The machine defaults to the one selected in Orca, the process to its 0.20
 Standard, and the filament to the machine's default. A name is a preset's full name, or for a
 process the part before its " @machine", like the `// orca:` line's.
 
-The G-code goes to tmp/slice/<project>.gcode, with every tool on the same
-filament. Parts keep the settings of their own, which Orca does read.
+The G-code goes to tmp/slice/<project>.gcode, or for a project of several plates
+to a <project>-plate_<n>.gcode each, with every tool on the same filament. Parts keep the settings of their own, which Orca does read.
 
 Usage: slice.py FILE.3mf [--machine NAME] [--process NAME] [--filament NAME]
 """
@@ -76,7 +76,26 @@ def published(project: Path) -> dict[str, str]:
     return {k: config[k] for k in json.loads(tag("orca_published_keys") or "[]")}
 
 
-def slice_project(project: Path, args: argparse.Namespace) -> Path:
+def as_cli_reads(project: Path, machine: dict, out: Path) -> None:
+    """Copy a published project, saying which bed its plates are laid out for.
+
+    The GUI takes a published project's objects where they are, on plates laid out
+    for the selected printer. The CLI takes a project with no settings to be for its
+    default bed, 200 square, and moves everything to suit the real one.
+    """
+    with (
+        zipfile.ZipFile(project) as zin,
+        zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            zout.writestr(item, zin.read(item.filename))
+        zout.writestr(
+            "Metadata/project_settings.config",
+            json.dumps({k: machine[k] for k in ("printable_area", "printable_height")}),
+        )
+
+
+def slice_project(project: Path, args: argparse.Namespace) -> list[Path]:
     found = presets()
     selected = json.loads((ORCA / "OrcaSlicer.conf").read_text())["presets"]["machine"]
     machine_name = pick(found["machine"], args.machine or selected, "", "machine")
@@ -125,6 +144,7 @@ def slice_project(project: Path, args: argparse.Namespace) -> Path:
         for kind, preset in zip(KINDS, (machine, process, filament)):
             (work / f"{kind}.json").write_text(json.dumps(preset))
         tools = len(machine["nozzle_diameter"])
+        as_cli_reads(project, machine, work / "project.3mf")
         # Orca writes result.json into its working directory.
         done = subprocess.run(
             [
@@ -137,15 +157,15 @@ def slice_project(project: Path, args: argparse.Namespace) -> Path:
                 "0",
                 "--outputdir",
                 work,
-                project,
+                work / "project.3mf",
             ],
             check=False,
             cwd=work,
             capture_output=True,
             text=True,
         )
-        gcode = work / "plate_1.gcode"
-        if not gcode.exists():
+        gcodes = sorted(work.glob("plate_*.gcode"), key=lambda g: int(g.stem[6:]))
+        if not gcodes:
             result = work / "result.json"
             why = (
                 json.loads(result.read_text())["error_string"]
@@ -153,8 +173,15 @@ def slice_project(project: Path, args: argparse.Namespace) -> Path:
                 else ""
             )
             sys.exit(f"orca-slicer failed: {why}\n{done.stdout}{done.stderr}")
-        out.write_bytes(gcode.read_bytes())
-    return out
+        # A project of several plates: one file each.
+        outs = (
+            [out]
+            if len(gcodes) == 1
+            else [out.with_stem(f"{out.stem}-{g.stem}") for g in gcodes]
+        )
+        for o, g in zip(outs, gcodes):
+            o.write_bytes(g.read_bytes())
+    return outs
 
 
 if __name__ == "__main__":
@@ -163,4 +190,5 @@ if __name__ == "__main__":
     for kind in KINDS:
         parser.add_argument(f"--{kind}")
     args = parser.parse_args()
-    print(slice_project(args.project.resolve(), args).relative_to(ROOT))
+    for gcode in slice_project(args.project.resolve(), args):
+        print(gcode.relative_to(ROOT))
