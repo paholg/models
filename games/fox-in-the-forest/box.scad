@@ -46,13 +46,16 @@ part = "closed"; // [closed, open, exploded, panels, simple, seam, magnets]
 /* [Contents] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
 sleeve = [66.5, 92.5];
-// 61 sleeved cards at ~0.61 mm each: a 0.30 mm card, 0.26 mm of sleeve, and
-// ~0.05 mm of loose-stack air.
-stack_h = 37.5;
+// 61 sleeved cards, as they stand in a printed box: they filled a 47 mm
+// cavity, a little loose. (Counted up at ~0.61 mm a card they'd be 37.5.)
+stack_h = 46.5;
 // The score tracker, rupees and all (score.scad: top_h + rupee_lift +
 // rupee_t).
-score_t = 9;
-card_clear = 0.5;
+score_t = 9.2;
+// Across the cards: 69 mm inside, as a bought deck box has.
+side_clear = 2.5;
+// Front to back, on the stack and the tracker.
+stack_clear = 0.5;
 // Above the cards, under the lid.
 top_clear = 0.5;
 
@@ -114,7 +117,7 @@ mag_test_rim = 3;
 
 /* [Logo] */
 // Title traced from the Deluxe box front, inlaid flush in the lid top.
-logo_w = 58;
+logo_w = 60;
 logo_depth = 0.6;
 
 /* [Fox] */
@@ -122,7 +125,10 @@ logo_depth = 0.6;
 fox_h = 50;
 fox_depth = 0.6;
 // Center height of the fox on the front.
-fox_z = 31;
+fox_z = 30;
+// Its outline's center, right of the front's: the fox's weight is ~0.9 mm left
+// of its outline's center, and it looked left of center in print.
+fox_x = 1;
 
 /* [Forest] */
 // Forest entrance inlaid flush in the body's back, stretched to fill it up
@@ -148,7 +154,7 @@ function fit_mag_crush() = is_undef($mag_crush) ? mag_crush : $mag_crush;
 
 // Front and back wall thickness.
 tf = mag.z + mag_c / 2 + mag_skin;
-cav = [sleeve.x + card_clear, stack_h + score_t + card_clear, sleeve.y + top_clear];
+cav = [sleeve.x + side_clear, stack_h + score_t + stack_clear, sleeve.y + top_clear];
 bx = cav.x + 2 * wall;
 by = cav.y + 2 * tf;
 box_h = cav.z + 2 * wall;
@@ -253,7 +259,7 @@ module magnets(dir) {
 
 // Reads from the front.
 module fox(above = 0) {
-  translate([0, 0, fox_z]) rotate([90, 0, 0])
+  translate([fox_x, 0, fox_z]) rotate([90, 0, 0])
     translate([0, 0, -fox_depth]) linear_extrude(fox_depth + above, convexity = 10)
       resize([0, fox_h], auto = true) import("fox.svg", center = true);
 }
@@ -449,20 +455,20 @@ function face(name) =
   name == "floor" ? bottom("concentric") : lines(0);
 
 if (part == "seam") {
-  piece("seam test") color("darkgreen") seam_test();
+  piece("seam test") color("forestgreen") seam_test();
 } else if (part == "magnets") {
-  piece("magnet test") color("darkgreen") mag_test();
+  piece("magnet test") color("forestgreen") mag_test();
 } else if (part == "simple") {
-  piece("body", face("floor")) color("darkgreen") body_shell();
-  piece("lid", face("top")) color("darkgreen") lid_down() lid_shell();
+  piece("body", face("floor")) color("forestgreen") body_shell();
+  piece("lid", face("top")) color("forestgreen") lid_down() lid_shell();
   piece("fox") color("yellow") fox();
   piece("forest") color("yellow") forest_inlay();
   piece("logo", face("top")) color("yellow") lid_down() logo();
 } else if (part == "panels") {
-  for (w = walls) piece(w, face(w)) color("darkgreen") flat(w) panel(w);
-  piece("floor", face("floor")) color("darkgreen") flat("floor") panel("floor");
-  for (w = walls) piece(str("lid ", w), face(w)) color("darkgreen") flat(w, true) panel(w, true);
-  piece("top", face("top")) color("darkgreen") flat("top") panel("top", true);
+  for (w = walls) piece(w, face(w)) color("forestgreen") flat(w) panel(w);
+  piece("floor", face("floor")) color("forestgreen") flat("floor") panel("floor");
+  for (w = walls) piece(str("lid ", w), face(w)) color("forestgreen") flat(w, true) panel(w, true);
+  piece("top", face("top")) color("forestgreen") flat("top") panel("top", true);
   piece("fox", bottom("octagramspiral")) color("yellow") flat("front") fox();
   piece("forest", bottom("archimedeanchords")) color("yellow") flat("back") forest_inlay();
   piece("logo", face("top")) color("yellow") flat("top") logo();
@@ -470,17 +476,17 @@ if (part == "seam") {
   // Exploded pulls the inlays out of their faces.
   e = part == "exploded" ? explode : 0;
   lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
-  color("darkgreen") render(convexity = 10) body_shell();
+  color("forestgreen") render(convexity = 10) body_shell();
   color("forestgreen") translate([0, 0, lift]) render(convexity = 10) lid_shell();
-  color("orange") exploded("front", e) fox();
-  color("white") exploded("back", e) forest_inlay();
-  color("white") exploded("top", e, lift) logo();
+  color("yellow") exploded("front", e) fox();
+  color("yellow") exploded("back", e) forest_inlay();
+  color("yellow") exploded("top", e, lift) logo();
   color("silver") render() magnets(-1);
   color("silver") translate([0, 0, lift]) render() magnets(1);
 } else {
   e = part == "exploded" ? explode : 0;
   lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
-  color("darkgreen") {
+  color("forestgreen") {
     for (w = walls) exploded(w, e) panel(w);
     exploded("floor", e) panel("floor");
   }
@@ -488,9 +494,9 @@ if (part == "seam") {
     for (w = walls) exploded(w, e, lift) panel(w, true);
     exploded("top", e, lift) panel("top", true);
   }
-  color("orange") exploded("front", e) fox();
-  color("white") exploded("back", e) forest_inlay();
-  color("white") exploded("top", e, lift) logo();
+  color("yellow") exploded("front", e) fox();
+  color("yellow") exploded("back", e) forest_inlay();
+  color("yellow") exploded("top", e, lift) logo();
   color("silver") {
     for (w = ["front", "back"]) exploded(w, e) render() intersection() { magnets(-1); region(w); }
     for (w = ["front", "back"]) exploded(w, e, lift) render() intersection() { magnets(1); region(w); }
