@@ -302,7 +302,12 @@ def write(
                 )
                 components = ET.SubElement(obj, core("components"))
                 noted = ET.SubElement(config, "object", id=oid, auto_drop="1")
-                add_metadata(noted, {"name": o.name or placed.name, **o.settings})
+                # Orca drops the extruder of an object's only part, for the object's own.
+                first = str(placed.filaments.get(o.volumes[0].color, 1))
+                add_metadata(
+                    noted,
+                    {"name": o.name or placed.name, "extruder": first, **o.settings},
+                )
                 for v in o.volumes:
                     vid = str(ids[v.number])
                     ET.SubElement(

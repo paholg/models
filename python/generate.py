@@ -23,7 +23,8 @@ with none to apply still carries one, unlisted.
 
 Each part becomes gen/<dir>/<stem>-<part>.3mf, where <dir> is the .scad file's
 directory in this repo: one object, with a part per OpenSCAD object and color,
-each color on its own filament. The file's earlier projects are removed first.
+each color on its own filament: the same one in every project of the file, the
+`// plate:` one too. The file's earlier projects are removed first.
 
 Orca's parts are named for their colors, unless the .scad file names them. One
 way is by color, for a file that draws each color in one go:
@@ -64,9 +65,8 @@ of parts to print together, with `*N` for copies:
 
 A group that doesn't fit one plate goes on several. Its parts are packed by
 their bounding boxes, turned a quarter where that helps; nothing keeps room
-for a prime tower. There being more colors than tool heads, each plate's name
-says which filament goes on which: they're shared out to change as few as can
-be from one plate to the next, in the order of the lines.
+for a prime tower. Each plate's name says which filament goes on which tool
+head. With more colors than heads, those that never print together share one.
 
 Usage: generate.py FILE.scad
 """
@@ -101,28 +101,17 @@ def directive(text: str, name: str) -> str:
 def combine(
     dst: Path,
     settings: dict[str, str],
-    groups: list[list[str]],
+    packed: list[list[tuple[str, float, float, bool]]],
     built: dict[str, orca.Assembly],
+    colors: dict[str, list[str]],
+    heads: dict[str, int],
     filaments: dict[str, str],
 ) -> None:
-    """Write one published project of every group's parts, on as many plates as it takes.
+    """Write one published project of the parts as packed, a plate for each of `packed`.
 
-    `filaments` names the filament a color stands for, for the plates' names.
+    `colors` are each part's and `heads` the tool head for each; `filaments` names
+    the filament a color stands for, for the plates' names.
     """
-    sizes = {
-        p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
-        for p, a in built.items()
-    }
-    packed = [plate for g in groups for plate in layout.pack(g, sizes)]
-    colors = [
-        list(
-            dict.fromkeys(
-                v.color for p, *_ in plate for o in built[p].objects for v in o.volumes
-            )
-        )
-        for plate in packed
-    ]
-    heads = layout.loadouts(colors)
     cols = math.ceil(math.sqrt(len(packed)))
 
     plates = []
@@ -148,13 +137,13 @@ def combine(
                     built[part],
                     part if copy == 1 else f"{part} {copy}",
                     f"{at[0]} {at[1]:.4f} {at[2]:.4f} {-z0:.4f}",
-                    heads[i],
+                    heads,
                 )
             )
         name = ", ".join(p if n == 1 else f"{p} x{n}" for p, n in count.items())
         tools = ", ".join(
             f"T{k} {filaments.get(c) or scad.color_name(c)}"
-            for c, k in sorted(heads[i].items(), key=lambda h: h[1])
+            for k, c in sorted({(heads[c], c) for p in count for c in colors[p]})
         )
         print(f"  plate {i + 1}: {name}: {tools}")
         plates.append(orca.Plate(f"{name}: {tools}", placed))
@@ -187,6 +176,7 @@ def generate(file: Path) -> None:
     built: dict[str, orca.Assembly] = {}
     wanted: dict[str, dict[str, str]] = {}  # each part's settings, presets and all
     filaments: dict[str, str] = {}  # the filament each color the file names stands for
+    renders: dict[str, scad.Render] = {}
     for part in dict.fromkeys(exports + [p for g in groups for p in g]):
         target = out_dir / f"{file.stem}-{part}.3mf"
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,16 +188,27 @@ def generate(file: Path) -> None:
             filaments.update(render.filaments)
             wanted[part] = render.settings
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
-            assembly = built[part] = orca.assemble(render.solids, render.box, work)
-        if part not in exports:
-            continue
-        # Filaments in order of each color's first appearance.
-        order = list(dict.fromkeys(s.color for s in render.solids))
-        if len(order) > layout.FILAMENTS:
-            print(
-                f"  warning: {len(order)} colors for {layout.FILAMENTS} filaments; extras go on filament 1"
-            )
-        heads = {c: i + 1 for i, c in enumerate(order[: layout.FILAMENTS])}
+            built[part] = orca.assemble(render.solids, render.box, work)
+            renders[part] = render
+    colors = {
+        p: list(dict.fromkeys(s.color for s in r.solids)) for p, r in renders.items()
+    }
+    sizes = {
+        p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
+        for p, a in built.items()
+    }
+    packed = [plate for g in groups for plate in layout.pack(g, sizes)]
+    # A color is on one tool head in every project, the plates' too.
+    heads = layout.heads(
+        list(colors.values())
+        + [
+            list(dict.fromkeys(c for p, *_ in plate for c in colors[p]))
+            for plate in packed
+        ]
+    )
+    for part in exports:
+        target = out_dir / f"{file.stem}-{part}.3mf"
+        render, assembly, order = renders[part], built[part], colors[part]
         note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
         settings = {k: v for k, v in render.settings.items() if k not in PRESETS}
         name = f"{target.stem} [{note}]" if note else target.stem
@@ -232,7 +233,15 @@ def generate(file: Path) -> None:
             print(
                 f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts don't share"
             )
-        combine(out_dir / f"{file.stem}-all.3mf", shared, groups, built, filaments)
+        combine(
+            out_dir / f"{file.stem}-all.3mf",
+            shared,
+            packed,
+            built,
+            colors,
+            heads,
+            filaments,
+        )
 
 
 if __name__ == "__main__":

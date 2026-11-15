@@ -98,30 +98,26 @@ def pack_in_order(
     return out
 
 
-def loadouts(plates: list[list[str]]) -> list[dict[str, int]]:
-    """Which tool head each plate's colors go on, changing as few as can be.
+def heads(sets: list[list[str]]) -> dict[str, int]:
+    """A tool head for each color, the same one wherever it's used.
 
-    A color stays where it is while it's loaded; a new one takes an empty head, or
-    else the place of the color that's needed again last.
+    `sets` are the colors that print together: each part's, and each plate's.
+    Colors that do take different heads. The most used pick first, and each
+    takes the head with the fewest colors on it, so that as few as can be share
+    one, and the filament on it changes between plates as little as can be.
     """
-    heads: list[str | None] = [None] * FILAMENTS
-    out = []
-    for i, colors in enumerate(plates):
-        if len(colors) > FILAMENTS:
+    order = sorted(
+        dict.fromkeys(c for s in sets for c in s),
+        key=lambda c: -sum(c in s for s in sets),
+    )
+    out: dict[str, int] = {}
+    for c in order:
+        taken = {out[d] for s in sets if c in s for d in s if d in out}
+        load = [sum(h == k for h in out.values()) for k in range(1, FILAMENTS + 1)]
+        free = [k for k in range(1, FILAMENTS + 1) if k not in taken]
+        if not free:
             print(
-                f"  warning: plate {i + 1} has {len(colors)} colors for {FILAMENTS} filaments; extras go on filament 1"
+                f"  warning: no filament free for {c}, of {len(order)} colors for {FILAMENTS}; it goes on filament 1"
             )
-        colors = colors[:FILAMENTS]
-
-        def next_use(c: str | None, i: int = i) -> int:
-            return next(
-                (j for j in range(i + 1, len(plates)) if c in plates[j]), len(plates)
-            )
-
-        for c in colors:
-            if c not in heads:
-                spare = [k for k, h in enumerate(heads) if h not in colors]
-                k = max(spare, key=lambda k: (heads[k] is None, next_use(heads[k]), -k))
-                heads[k] = c
-        out.append({c: heads.index(c) + 1 for c in colors})
+        out[c] = min(free, key=lambda k: load[k - 1]) if free else 1
     return out
