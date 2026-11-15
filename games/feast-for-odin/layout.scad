@@ -24,13 +24,12 @@
 // Cardboard stacks sit in wells with finger notches to lift them out whole.
 
 // export: half_a half_b big boats vp vikings islands wood buildings_3 buildings_5 setup_buildings misc strips discard spare frame_half deck_setup deck_occupations deck_weapons special_forge special_others special_test
-// Everything, in one project: a line per set of filaments, in an order that
-// changes few of them from one plate to the next.
+// Everything, in one project: a line per set of filaments.
 // plate: frame_half*2
 // plate: half_a*2 half_b*2 big
+// plate: setup_buildings misc spare deck_setup islands
 // plate: special_forge special_others
-// plate: buildings_3*2 buildings_5 strips islands wood boats discard*2 vp deck_occupations deck_weapons
-// plate: setup_buildings misc spare deck_setup
+// plate: buildings_3*2 buildings_5 strips wood boats discard*2 vp deck_occupations deck_weapons
 // plate: vikings
 
 include <special_layout.scad>
@@ -130,7 +129,8 @@ special_test_tiles = [[1, [0, 0]], [13, [0, 24.8]], [3, [57.8, 0]]];
 floor_skin = 0.4;
 
 /* [Hidden] */
-// Colors: a piece is c_game, or c_setup if it's only used in setup ($setup);
+// Colors: a piece is c_game, or c_setup if it's only used in setup ($setup),
+// as are the frame and the islands, which aren't;
 // icons and labels are black. Viking bins keep their player colors.
 // Printing: the part is exported once per color in print_colors, with $only
 // set, and each piece of geometry shows only in its own pass. Unset (the
@@ -501,7 +501,7 @@ module corner_post(h, h_y, t_y = post_t, t_x = post_t) {
 
 // Islands, one stack, beside the big tiles.
 // Its floor is thick, to bring the stack flush with the tier's top.
-module islands_tray() let ($tray_floor = tier_h - island_n * card_t)
+module islands_tray() let ($setup = true, $tray_floor = tier_h - island_n * card_t)
     stack_tray(islands, tier_h, [island, island], ["islands"], "lightsteelblue");
 
 // The cardboard layer: three rows, and behind them a row for the strips. Each
@@ -1098,7 +1098,7 @@ module board_stack(explode_layers = 0) {
 frame_clear = 1.5;
 frame_half = [(box.x - 1 - gap) / 2, box.y - 1];
 frame_shelf_h = boards_under * card_t;
-module frame_half() body() difference() {
+module frame_half() let ($setup = true) body() difference() {
     cbox(frame_half, board_stack_h);
     for (c = [[player_board, frame_shelf_h], [action_board, -1]]) {
         in = c[0] + [frame_clear, frame_clear];
