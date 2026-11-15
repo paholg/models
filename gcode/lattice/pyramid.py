@@ -1,4 +1,4 @@
-"""Square pyramid: solid bottom (T0), nonplanar diamond-lattice sides (T1)."""
+"""Square pyramid: a border for a bottom (T0), nonplanar diamond-lattice sides (T1)."""
 
 from lib.preview import preview
 from lib.pyramid import CENTER, Lattice, floor, square, strand_steps
@@ -12,11 +12,12 @@ LW, LH = S.line_width, S.layer_height
 BASE = 60.0  # bottom side length, mm
 HEIGHT = 50.0  # to the apex
 BOTTOM_LAYERS = 3
+FLOOR_WIDTH = 5.0  # mm; the bottom is only a border, which is enough to test with
 DIAMONDS_PER_FACE = 10  # at the base; sets the diamond size
 STRAND_DIAMETER = 0.6  # strands in air come out roughly round
 STRAND_SPEED = 600  # mm/min
 
-bottom = floor(BASE, BOTTOM_LAYERS, LW, LH)
+bottom = floor(BASE, BOTTOM_LAYERS, LW, LH, width=FLOOR_WIDTH)
 lattice = Lattice(
     base=square(BASE - LW),
     apex=CENTER,

@@ -36,14 +36,19 @@ def floor(
     line_width: float,
     layer_height: float,
     center: Center = CENTER,
+    width: float | None = None,
 ) -> list:
-    """Solid square floor of concentric loops; `side` is the outer edge."""
+    """Square floor of concentric loops; `side` is the outer edge.
+
+    Solid, or with `width` just a border that wide, which prints much faster and
+    is enough to stick and to hold a lattice around the edge.
+    """
     steps = []
     for layer in range(layers):
         z = layer_height * (layer + 1)
         loops = []
         half = side / 2 - line_width / 2
-        while half > line_width / 2:
+        while half > line_width / 2 and (width is None or side / 2 - half < width):
             loops.append([square_point(half, q / 4, z, center) for q in range(5)])
             half -= line_width
         # Alternate outside-in / inside-out so layers connect without travel.
@@ -73,9 +78,16 @@ def square(side: float, center: Center = CENTER) -> list[Point2]:
 
 
 def polygon_floor(
-    outline: Polygon, layers: int, line_width: float, layer_height: float
+    outline: Polygon,
+    layers: int,
+    line_width: float,
+    layer_height: float,
+    width: float | None = None,
 ) -> list:
-    """Solid floor of concentric inward offsets of `outline`, travelling between loops."""
+    """Floor of concentric inward offsets of `outline`, travelling between loops.
+
+    Solid, or with `width` just a border that wide (see `floor`).
+    """
     steps = []
     for layer in range(layers):
         z = layer_height * (layer + 1)
@@ -84,7 +96,7 @@ def polygon_floor(
             inset = outline.buffer(
                 -(line_width / 2 + k * line_width), join_style="mitre"
             )
-            if inset.is_empty:
+            if inset.is_empty or (width is not None and k * line_width >= width):
                 break
             for poly in getattr(inset, "geoms", [inset]):
                 ring = list(poly.exterior.coords)

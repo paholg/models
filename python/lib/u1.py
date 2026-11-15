@@ -214,6 +214,8 @@ def gcode(
 ) -> Path:
     """Wrap design steps with U1 start/end G-code and save to tmp/<name>.gcode.
 
+    The fan is off until the steps first rise above their first layer.
+
     `tool` is the starting tool. With orca_compat, add a header and config block
     so Orca's viewer previews tool changes and filament usage; the
     printer may also read these.
@@ -221,10 +223,22 @@ def gcode(
     s = settings
     f = s.filaments[tool]
     first = next(p for p in steps if isinstance(p, fc.Point)).model_copy()
+    # The fan stays off for the first layer, so it sticks to the bed.
+    above = next(
+        (
+            i
+            for i, p in enumerate(steps)
+            if isinstance(p, fc.Point)
+            and p.z is not None
+            and p.z > first.z + s.layer_height / 2
+        ),
+        len(steps),
+    )
+    steps = [*steps[:above], fc.Fan(speed_percent=s.fan_percent), *steps[above:]]
     all_steps = [
         fc.ManualGcode(text=orca.HEADER if orca_compat else ""),
         fc.ManualGcode(text=start_gcode(tool, f.nozzle_temp, f.bed_temp)),
-        fc.Fan(speed_percent=s.fan_percent),
+        fc.Fan(speed_percent=0),
         # Travel (not extrude) from the purge line to the first point.
         fc.Extruder(on=False),
         fc.Point(x=PURGE_END[0], y=PURGE_END[1], z=2),
