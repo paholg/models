@@ -19,8 +19,9 @@
 // corners.
 //
 // Bar magnets stand on edge in the front and back walls, in pockets open to
-// the inside and to the seam, each meeting its partner edge to edge across
-// the seam. They're magnetized through their thickness, so glue one of each
+// the inside, each facing its partner edge to edge across the seam: through
+// a skin of plastic on either side of it in the panels, and set back from it,
+// bare, in the one-piece box. They're magnetized through their thickness, so glue one of each
 // pair in flipped, to attract. A trapezoid key on each wall's seam locates
 // the lid.
 
@@ -81,15 +82,14 @@ mag_glue = 0.4;
 mag_crush = 0.1;
 // Width of a crush rib at its root.
 mag_rib_w = 1.2;
-// Width of its tip: flat, and wide enough to print at its full height. A
-// pointed rib came out about 0.1 mm short, rounded off by the nozzle, and a
-// 0.15 mm crush gripped nothing.
+// Width of its tip, which is flat.
 mag_rib_tip = 0.4;
 // Plastic outside a pocket; with the magnet, the front and back walls'
 // thickness.
 mag_skin = 0.84;
-// How far each magnet sits below its seam face, so the plastic bears.
-mag_recess = 0.05;
+// Plastic between a magnet and its seam face, in the panels; the one-piece
+// box sets its magnets back as far, bare (lib/panel_box.scad).
+mag_cover = 0.4;
 // Magnets sit this far either side of center, on the front and the back.
 mag_x = 20;
 
@@ -150,6 +150,9 @@ eps = 0.01;
 
 // The seam test's coupons set these two for themselves.
 function fit_key_c() = is_undef($key_c) ? key_c : $key_c;
+// Drawn as the one-piece box, whose magnet pockets have no covers.
+one_piece = part == "simple" || (whole && (part == "closed" || part == "open" || part == "exploded"));
+
 function fit_mag_crush() = is_undef($mag_crush) ? mag_crush : $mag_crush;
 
 // Front and back wall thickness.
@@ -167,7 +170,8 @@ z_sb = box_h - lid_back_h;
 z_sf = z_sb - seam_drop;
 seam_k = seam_drop / cav.y;
 function seam_z(y) = max(z_sf, min(z_sf + seam_k * (y - tf), z_sb));
-mag_d = mag.y + mag_recess;
+// From the seam face to the pads at a magnet's far edge.
+mag_d = pb_magnet_far(mag, mag_cover, mag_c);
 assert(z_top - z_sb >= mag_d + mag_glue + 1, "lid too short at the back for its magnets");
 assert(mag_x - mag.x / 2 - mag_glue - 1 >= key_w / 2 + key_c, "magnets crowd the key");
 assert(mag_x + mag.x / 2 + mag_glue + 1 <= xs, "magnets run into the corners");
@@ -231,22 +235,9 @@ module at_mag(m, dir) {
   translate([m[0], m[1], m[2]]) scale([1, m[3], dir]) children();
 }
 
-// A pocket in that frame: oversize by mag_glue at both ends and at the far
-// edge, with two crush ribs on each end, flat-tipped, running the way the magnet
-// drops in, and two pads at the far edge for it to seat against.
+// A pocket in that frame.
 module mag_pocket() {
-  l = mag.x / 2 + mag_glue;
-  t = mag.z + mag_c / 2;
-  difference() {
-    box([-l, l], [-eps, t], [-eps, mag_d + mag_glue]);
-    for (sx = [-1, 1], zc = [0.25, 0.75] * mag_d)
-      translate([0, -2 * eps, 0]) rotate([-90, 0, 0]) linear_extrude(t + 4 * eps)
-        polygon([for (q = [[l + eps, zc - mag_rib_w / 2], [l + eps, zc + mag_rib_w / 2],
-                           [l - mag_glue - fit_mag_crush(), zc + mag_rib_tip / 2],
-                           [l - mag_glue - fit_mag_crush(), zc - mag_rib_tip / 2]]) [sx * q[0], -q[1]]]);
-    for (sx = [-1, 1])
-      box([sx * mag.x / 4 - 1, sx * mag.x / 4 + 1], [-2 * eps, t + eps], [mag_d, mag_d + mag_glue + eps]);
-  }
+  pb_magnet_pocket(mag, mag_cover, one_piece, mag_c, mag_glue, fit_mag_crush(), mag_rib_w, mag_rib_tip);
 }
 
 module mag_pockets(dir) {
@@ -254,7 +245,7 @@ module mag_pockets(dir) {
 }
 
 module magnets(dir) {
-  for (m = mag_at) at_mag(m, dir) box([-mag.x / 2, mag.x / 2], [-eps, mag.z], [mag_recess, mag_d]);
+  for (m = mag_at) at_mag(m, dir) box([-mag.x / 2, mag.x / 2], [-eps, mag.z], [mag_cover, mag_cover + mag.y]);
 }
 
 // Reads from the front.
@@ -357,7 +348,7 @@ module seam_test() {
 }
 
 /* The magnet test: a strip of the front wall's thickness with a row of
-   pockets, open to the seam and to the inside as in the box. It lies outside
+   pockets, open to the inside as in the box. It lies outside
    down, seam face to the front of the bed. */
 
 module mag_test() {
