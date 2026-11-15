@@ -131,7 +131,7 @@ floor_skin = 0.4;
 /* [Hidden] */
 // Colors: a piece is c_game, or c_setup if it's only used in setup ($setup),
 // as are the frame and the islands, which aren't;
-// icons and labels are black. Viking bins keep their player colors.
+// icons are black. Viking bins keep their player colors.
 // Printing: the part is exported once per color in print_colors, with $only
 // set, and each piece of geometry shows only in its own pass. Unset (the
 // preview), everything shows.
@@ -142,7 +142,6 @@ c_forge = "darkorange";
 vik_colors = ["red", "blue", "yellow", "black"];
 $only = undef;
 $setup = false;
-$labels = true;
 // A bin tray's walls, outside and between bins.
 $wall = wall;
 function role_color(c) =
@@ -173,10 +172,10 @@ c_wood = "saddlebrown";
 
 function t(x, y) = [x * unit, y * unit];
 
-// Each row: [depth (-1 fills the tray), bins]. A bin: [label, width (-1
+// Each row: [depth (-1 fills the tray), bins]. A bin: [name, width (-1
 // shares what's left equally), tile footprint (scoop sizing, capacity), tile
 // count (0 for none), color, optional icon, optional front-only]. With an icon,
-// the bin shows it on the tray's front face instead of its label. Front-only
+// the bin shows it on the tray's front face. Front-only
 // leaves the bin's back wall square, whatever $back_scoop.
 
 // Icons: a tile's cells as [col, row], col across. "grid" draws them as an
@@ -440,15 +439,14 @@ wood_rows = [
     ]],
 ];
 // Its bins are long, and have room to spare: so thicker walls.
-module wood_tray() let ($back_scoop = true, $labels = false, $wall = 2.4) bin_tray("wood", wood, tier_h, wood_rows);
+module wood_tray() let ($back_scoop = true, $wall = 2.4) bin_tray("wood", wood, tier_h, wood_rows);
 
 // Cardboard trays are open: a plain floor and an L-shaped post at each
 // well corner, no walls between. Stacks lift straight out, gripped from the
 // open sides. Wells of one inner size, one above another in y, centered.
 post_l = 15; // each leg, past the corner
 function stack_tray_size(well, n) = [well.x + stack_clear + 2 * post_t, n * (well.y + stack_clear + post_t) + post_t];
-module stack_tray(size, h, well, labels, c) {
-    n = len(labels);
+module stack_tray(size, h, well, n) {
     in = well + [stack_clear, stack_clear];
     x0 = (size.x - in.x) / 2;
     y0 = (size.y - (n * (in.y + post_t) - post_t)) / 2;
@@ -502,7 +500,7 @@ module corner_post(h, h_y, t_y = post_t, t_x = post_t) {
 // Islands, one stack, beside the big tiles.
 // Its floor is thick, to bring the stack flush with the tier's top.
 module islands_tray() let ($setup = true, $tray_floor = tier_h - island_n * card_t)
-    stack_tray(islands, tier_h, [island, island], ["islands"], "lightsteelblue");
+    stack_tray(islands, tier_h, [island, island], 1);
 
 // The cardboard layer: three rows, and behind them a row for the strips. Each
 // row starts with a stack of buildings, a stack per kind (the in-game ones
@@ -569,7 +567,7 @@ module misc_tray() let ($setup = true) body() difference() {
     bin_cuts(misc, card_layer_h, misc_rows);
 }
 // Vikings: a bin per player color, four to the tray, scooped up both ends.
-// No label: the colors say whose they are, and a fifth filament won't fit.
+// No icon: the colors say whose they are, and a fifth filament won't fit.
 // One tray, beside the first two rows of buildings: two rows of two bins.
 vik = [bld_beside.x, 2 * bld.y + gap];
 vik_rows = [for (i = [0, 1]) [-1, [for (c = [vik_colors[2 * i], vik_colors[2 * i + 1]]) ["", -1, [13, 21], 0, c]]]];
@@ -724,7 +722,7 @@ module bin_cuts(size, h, rows) {
     }
 }
 
-// A bin tray's scoops, floor colors and labels; reports capacity.
+// A bin tray's scoops, floor colors and icons; reports capacity.
 // Runs children once per bin, with $b the bin, $pos its corner, $wd its
 // [width, depth], $s its scoop radius, and $first / $last per axis.
 module for_bins(size, rows) {
@@ -786,11 +784,6 @@ module column_icons(size, h, rows, cut = false) {
         }
     }
 }
-// Labels, raised on the floor, for bins without an icon; none if !$labels.
-module bin_labels(size, rows) if ($labels) for_bins(size, rows) if (len($b) <= 5)
-    translate([$pos.x + $wd.x / 2, $pos.y + ($wd.y + ($back_scoop ? 0 : $s)) / 2, floor_t])
-        rotate($wd.x < 25 ? 90 : 0)
-        linear_extrude(0.4) text($b[0], size = 3.5, halign = "center", valign = "center");
 
 // Paints children (a tray body) in its bins' colors: each bin owns its cell
 // out to the middle of the walls around it, and to clip on the outside.
@@ -824,7 +817,7 @@ module icon_2d(icon) {
     }
 }
 
-// A bin tray: the body in its bins' colors, icons and labels in black.
+// A bin tray: the body in its bins' colors, icons in black.
 module bin_tray(name, size, h, rows) {
     bin_check(name, size, h, rows);
     bin_paint(size, rows) difference() {
@@ -832,10 +825,7 @@ module bin_tray(name, size, h, rows) {
         bin_cuts(size, h, rows);
         bin_front_icons(size, h, rows);
     }
-    paint("black") {
-        bin_front_icons(size, h, rows);
-        bin_labels(size, rows);
-    }
+    paint("black") bin_front_icons(size, h, rows);
 }
 
 function slice(v, a, b) = [for (i = [a:b - 1]) v[i]];

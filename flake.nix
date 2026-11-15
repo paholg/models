@@ -108,7 +108,11 @@
           ORCA_SOURCE = orca-source;
 
           FONTCONFIG_FILE = pkgs.makeFontsConf {
-            fontDirectories = [ pkgs.liberation_ttf ];
+            # Every font a model names: Liberation Sans is also OpenSCAD's default.
+            fontDirectories = [
+              pkgs.liberation_ttf
+              pkgs.gyre-fonts
+            ];
           };
         };
       }
