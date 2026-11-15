@@ -8,15 +8,17 @@
 
 ## A Feast for Odin
 
-- Plates 3 and 4 are printed
+Plates:
+- 3 is printed
+- 4 is printing
 
 ## The Fox in the Forest
 
-- Resize and reprint the box
+- Reprint the box
 
 ## Magic Octagon
 
-- Print the variants
+- Print variants
 
 ## Jenga
 
@@ -31,4 +33,4 @@
 
 ## Lattices (gcode/lattice)
 
-- Keep test printing
+- Print strands (now as one raft)
