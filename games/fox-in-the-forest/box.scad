@@ -6,8 +6,6 @@
 // file is what goes in it, its colors, and its art.
 
 // export: panels simple seam magnets
-// orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2
-// orca simple:
 
 use <../../lib/card_box.scad>
 

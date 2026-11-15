@@ -27,7 +27,7 @@ preview file:
 
 # Export each part a .scad file lists in its `// export:` line to gen/<dir>/<stem>-<part>.3mf,
 # where <dir> is the file's directory in this repo: an Orca project with one part per color, which
-# applies and shows the settings on the file's `// orca:` line (see python/generate.py).
+# applies and shows the settings the file asks for with `orca()` (see python/generate.py).
 generate file:
     uv --project python run python/generate.py {{file}}
 

@@ -7,7 +7,7 @@ lays the project's settings over them, and slices with the result.
 
 The machine defaults to the one selected in Orca, the process to its 0.20
 Standard, and the filament to the machine's default. A name is a preset's full name, or for a
-process the part before its " @machine", like the `// orca:` line's.
+process the part before its " @machine", like `orca_process()`'s.
 
 The G-code goes to tmp/slice/<project>.gcode, or for a project of several plates
 to a <project>-plate_<n>.gcode each, with every tool on the same filament. Parts keep the settings of their own, which Orca does read.

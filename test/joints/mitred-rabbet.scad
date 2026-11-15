@@ -18,12 +18,14 @@
 // three layers, to fold up warm. Every one folded well past 90°, and the
 // skin creased white.
 
+// export: print
+
+use <../../lib/orca.scad>
+use <../../lib/piece.scad>
+
 // The 0.08 High Quality process: fine steps on the mitre, slow outer walls.
 // Seams at the back, on the coupons' far ends and off the joint.
-// export: print
-// orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2 seam_position=back
-
-use <../../lib/piece.scad>
+orca([orca_process("0.08 High Quality"), orca_layer_height(0.08), orca_first_layer_height(0.2), orca_seam("back")]);
 
 /* [Output] */
 part = "fit"; // [fit, print]

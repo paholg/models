@@ -10,6 +10,7 @@
 
 // export: print
 
+use <../../lib/orca.scad>
 use <../../lib/piece.scad>
 
 /* [Output] */
@@ -136,17 +137,15 @@ module bed(i) { translate([i * (d + 5), 0, 0]) children(); }
 // On the faces, which print on the bed: rings around the octagons, and lines
 // along each arrow. Angles follow the model, so that turning it in Orca turns
 // the lines too.
-orca_half = "bottom_surface_pattern=concentric";
-function orca_arrow(angle) = str(
-  "bottom_surface_pattern=monotonic bottom_layer_direction=", angle,
-  " align_infill_direction_to_model=1"
-);
+half_settings = [orca_bottom_pattern("concentric")];
+function arrow_settings(angle) =
+  [orca_bottom_pattern("monotonic"), orca_bottom_direction(angle), orca_align_infill_to_model()];
 
 if (part == "print") {
-  piece("half 0", orca_half) color(c_half[0]) bed(0) half(angles[0]);
-  piece("half 1", orca_half) color(c_half[1]) bed(1) half(angles[1]);
-  piece("arrow 0", orca_arrow(angles[0])) color(c_arrow[0]) bed(0) arrow(angles[0]);
-  piece("arrow 1", orca_arrow(angles[1])) color(c_arrow[1]) bed(1) arrow(angles[1]);
+  piece("half 0", half_settings) color(c_half[0]) bed(0) half(angles[0]);
+  piece("half 1", half_settings) color(c_half[1]) bed(1) half(angles[1]);
+  piece("arrow 0", arrow_settings(angles[0])) color(c_arrow[0]) bed(0) arrow(angles[0]);
+  piece("arrow 1", arrow_settings(angles[1])) color(c_arrow[1]) bed(1) arrow(angles[1]);
 } else {
   e = part == "exploded" ? 6 : 0;
   for (i = [0, 1]) {

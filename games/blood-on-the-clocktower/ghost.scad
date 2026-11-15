@@ -14,6 +14,7 @@
 
 // export: ghost vote fit
 
+use <../../lib/orca.scad>
 use <../../lib/piece.scad>
 
 /* [Output] */
@@ -432,19 +433,18 @@ module held() {
 // The ghost's seams are scattered, not in a line. Orca keeps a seam's place
 // for a whole object, so the ghost is one of its own: its pieces share a name
 // for that, and each carries the setting.
-orca_seam = "seam_position=random";
+seam_settings = [orca_seam("random")];
 // The sheet's texture: soft bumps on the outside of the white alone, which
 // leaves the socket's springs, and the black, smooth.
-orca_ghost = str(
-  orca_seam,
-  " fuzzy_skin=external fuzzy_skin_noise_type=perlin fuzzy_skin_scale=2.5",
-  " fuzzy_skin_thickness=0.2 fuzzy_skin_point_distance=0.3",
-  " fuzzy_skin_octaves=2 fuzzy_skin_persistence=0.4"
-);
+ghost_settings = [
+  seam_settings,
+  orca_fuzzy_skin("external", thickness = 0.2, point_distance = 0.3, noise = "perlin", scale = 2.5, octaves = 2,
+                  persistence = 0.4),
+];
 
 // The vote's layers are thin, for its edges. Orca keeps a layer height for a
 // whole object, so, as with the ghost, its pieces share a name and the setting.
-orca_vote = "layer_height=0.1 top_surface_pattern=hilbertcurve bottom_surface_pattern=hilbertcurve";
+vote_settings = [orca_layer_height(0.1), orca_top_pattern("hilbertcurve"), orca_bottom_pattern("hilbertcurve")];
 
 if (part == "fit") {
   od = 2 * (pencil_flats / 2 + spring_t + spring_gap) + 6;
@@ -452,13 +452,13 @@ if (part == "fit") {
     for (i = [0:len(fit_press) - 1]) translate([i * (od + 3), 0, 0]) fit_piece(i);
 } else if (part == "ghost") {
   echo(pause = ghost_pause);
-  piece("ghost", orca_ghost) color(c_ghost) ghost();
-  piece("ghost", orca_seam) color(c_eyes) eyes();
-  piece("ghost", orca_seam) color(c_eyes) mouth();
+  piece("ghost", ghost_settings) color(c_ghost) ghost();
+  piece("ghost", seam_settings) color(c_eyes) eyes();
+  piece("ghost", seam_settings) color(c_eyes) mouth();
 } else if (part == "vote") {
   echo(pause = vote_pause);
-  piece("vote", orca_vote) color(c_vote) vote();
-  piece("vote", orca_vote) color(c_text) vote_text();
+  piece("vote", vote_settings) color(c_vote) vote();
+  piece("vote", vote_settings) color(c_text) vote_text();
 } else if (part == "assembled" || part == "empty") {
   color(c_ghost) ghost();
   color(c_eyes) eyes();

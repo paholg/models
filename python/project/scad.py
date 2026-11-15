@@ -4,7 +4,6 @@ an STL for each object and color, with what the file's echoes say of them."""
 import json
 import os
 import re
-import shlex
 import struct
 import subprocess
 import sys
@@ -32,7 +31,7 @@ COLOR_NAMES = {
 }  # fmt: skip
 
 # Asked for in place of a piece, to see what is in none: no piece has no name.
-NO_PIECE = ("", "")
+NO_PIECE = ("", "[]")
 
 # Each color a file has named, as OpenSCAD writes it.
 _values: dict[str, str] = {}
@@ -57,11 +56,16 @@ class Render:
     box: tuple[tuple[float, ...], tuple[float, ...]]  # the corners round them all
     pauses: list[float]  # the heights to pause at
     filaments: dict[str, str]  # the filament a color stands for, where the file says
+    settings: dict[str, str]  # for the whole print, presets and all
 
 
-def pairs(line: str) -> dict[str, str]:
-    """The key=value pairs on an orca line."""
-    return dict(i.split("=", 1) for i in shlex.split(line))
+def settings(said: str) -> dict[str, str]:
+    """A list of [key, value] settings, as OpenSCAD writes it in its log."""
+
+    def text(v) -> str:
+        return str(int(v)) if isinstance(v, bool) else str(v)
+
+    return {k: text(v) for k, v in json.loads(said)}
 
 
 def color_name(color: str) -> str:
@@ -122,7 +126,7 @@ def split(
 ) -> list[tuple[float, ...]]:
     """Write one STL per object and color in an OpenSCAD 3MF, adding to `solids`.
 
-    Returns their points. `piece` is the name and orca line of what the 3MF
+    Returns their points. `piece` is the name and settings of what the 3MF
     holds, if the .scad file names its pieces; `by_color` the names it gave by
     color.
     """
@@ -162,7 +166,7 @@ def split(
                 label = (
                     name if len(tris_by_color) == 1 else f"{name} {color_name(color)}"
                 )
-                own = pairs(line)
+                own = settings(line)
             path = out / f"{len(solids) + 1}.stl"
             write_stl(path, tris)
             solids.append(Solid(path, color, label, own, name))
@@ -208,11 +212,13 @@ def render(scad: Path, part: str, work: Path) -> Render:
 
     # In order, each once: pieces that share a name and settings come together.
     pieces = list(
-        dict.fromkeys(
-            (m[1], m[2] or "") for m in echoes(r'piece = "(.*?)"(?:, orca = "(.*)")?')
-        )
+        dict.fromkeys((m[1], m[2]) for m in echoes(r'piece = "(.*?)", orca = (\[.*\])'))
     )
     pauses = [float(m[1]) for m in echoes(r"pause = ([\d.]+)")]
+    # For the whole print: each orca() in turn, a later one's settings winning.
+    whole: dict[str, str] = {}
+    for m in echoes(r"orca = (\[.*\])"):
+        whole.update(settings(m[1]))
     # A color's name: what to call whatever is that color, and its filament.
     named = {
         m[1]: (m[2], m[3])
@@ -261,5 +267,9 @@ def render(scad: Path, part: str, work: Path) -> Render:
     high = tuple(max(v[k] for v in points) for k in range(3))
     values = color_values(set(named))
     return Render(
-        solids, (low, high), pauses, {values[c]: f for c, (_, f) in named.items() if f}
+        solids,
+        (low, high),
+        pauses,
+        {values[c]: f for c, (_, f) in named.items() if f},
+        whole,
     )

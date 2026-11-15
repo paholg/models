@@ -1,24 +1,21 @@
 """Export a .scad file's parts as Orca projects that apply the settings they need.
 
-The .scad file lists its parts on an `// export:` line. An optional `// orca:`
-line holds the slicer settings that matter for the print, as key=value pairs,
-quoted where a value has spaces:
+The .scad file lists its parts on an `// export:` line:
 
     // export: print test
-    // orca: process="0.12 Fine" layer_height=0.1
 
-Each key is an Orca setting, by its name in the preset JSON files. Opening the
-project applies them on top of whatever presets Orca has selected, and leaves
-everything else alone. `printer`, `process` and `filament` are not settings but
-presets, which Orca keeps as selected: those are for you to pick by hand.
+Its slicer settings are in its code: lib/orca.scad's `orca()`, for the whole
+print, with a function for each setting. That file has them.
 
-The whole line is also shown, as the name of the plate and of the object.
+    orca([orca_process("0.12 Fine"), orca_layer_height(0.1)]);
 
-A part can have a line to itself, which it takes in place of that one. An
-empty one leaves the part with no settings, all as selected in Orca:
+Opening the project applies them on top of whatever presets Orca has selected,
+and leaves everything else alone. `printer`, `process` and `filament` are not
+settings but presets, which Orca keeps as selected: those are for you to pick
+by hand. All of them are also shown, as the name of the plate and of the
+object. A part can have its own, or none, the file being rendered for each:
 
-    // orca test: process="0.20 Standard" layer_height=0.2
-    // orca draft:
+    if (part != "draft") orca([orca_layer_height(0.1)]);
 
 This uses Orca 2.5's "published" projects, which carry only the settings they
 list. Orca reads no plate names from a project without settings, so a project
@@ -44,16 +41,16 @@ A piece says what it is in OpenSCAD's log, and this then renders the file once
 for each, asking for that one alone: OpenSCAD has no other way to hand over one
 piece of what it draws. That file has the rest of it.
 
-A piece can carry settings of its own, which Orca applies to just its parts: an
-`orca` string beside the name, written like the `// orca:` line.
+A piece can carry settings of its own, which Orca applies to just its parts: a
+list of them beside the name.
 
-    piece("lid", "bottom_surface_pattern=concentric") color("green") lid();
+    piece("lid", [orca_bottom_pattern("concentric")]) color("green") lid();
 
 Orca keeps some settings for a whole object, not a part: a brim or a raft, say.
 A piece with one of those becomes an object of its own, where it is, beside the
 object of everything else:
 
-    piece("feet", "brim_type=outer_only brim_width=3") feet();
+    piece("feet", [orca_brim("outer_only", 3)]) feet();
 
 A print can pause, to put something inside it: `echo(pause = z)` pauses once
 the print is z high, or a layer sooner: leave a layer's room over what goes in.
@@ -76,7 +73,6 @@ Usage: generate.py FILE.scad
 
 import io
 import math
-import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -174,10 +170,8 @@ def generate(file: Path) -> None:
 
     text = file.read_text()
 
-    def line_settings(line: str) -> dict[str, str]:
-        return {k: v for k, v in scad.pairs(line).items() if k not in PRESETS}
-
-    shared = line_settings(directive(text, "orca"))
+    if any(line.startswith("// orca") for line in text.splitlines()):
+        sys.exit("settings are no longer `// orca:` lines: see lib/orca.scad's orca()")
 
     exports = directive(text, "export").split()
     # Each `// plate:` line's parts, a copy at a time.
@@ -191,13 +185,10 @@ def generate(file: Path) -> None:
         for line in directives(text, "plate")
     ]
     built: dict[str, orca.Assembly] = {}
+    wanted: dict[str, dict[str, str]] = {}  # each part's settings, presets and all
     filaments: dict[str, str] = {}  # the filament each color the file names stands for
     for part in dict.fromkeys(exports + [p for g in groups for p in g]):
         target = out_dir / f"{file.stem}-{part}.3mf"
-        # The part's own line, or the file's.
-        line = next(iter(directives(text, f"orca {part}")), directive(text, "orca"))
-        note = ", ".join(shlex.split(line))
-        settings = line_settings(line)
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             print(f"{part}: openscad")
@@ -205,6 +196,7 @@ def generate(file: Path) -> None:
             if render.pauses and any(part in g for g in groups):
                 print(f"  warning: {file.stem}-all won't pause for {part}")
             filaments.update(render.filaments)
+            wanted[part] = render.settings
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
             assembly = built[part] = orca.assemble(render.solids, render.box, work)
         if part not in exports:
@@ -216,6 +208,8 @@ def generate(file: Path) -> None:
                 f"  warning: {len(order)} colors for {layout.FILAMENTS} filaments; extras go on filament 1"
             )
         heads = {c: i + 1 for i, c in enumerate(order[: layout.FILAMENTS])}
+        note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
+        settings = {k: v for k, v in render.settings.items() if k not in PRESETS}
         name = f"{target.stem} [{note}]" if note else target.stem
         placed = orca.Placed(assembly, name, assembly.transform, heads)
         objects = orca.write(
@@ -227,6 +221,17 @@ def generate(file: Path) -> None:
             + "".join(f", pause at {z:g} mm" for z in render.pauses)
         )
     if groups:
+        # One project has one set of settings: those its parts agree on.
+        parts = [wanted[p] for g in groups for p in g]
+        shared = {
+            k: v
+            for k, v in parts[0].items()
+            if k not in PRESETS and all(p.get(k) == v for p in parts)
+        }
+        if dropped := sorted({k for p in parts for k in p} - set(shared) - PRESETS):
+            print(
+                f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts don't share"
+            )
         combine(out_dir / f"{file.stem}-all.3mf", shared, groups, built, filaments)
 
 

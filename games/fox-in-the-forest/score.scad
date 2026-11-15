@@ -29,9 +29,11 @@
 // on the rupees.
 
 // export: print print_rupees test
-// orca: process="0.12 Fine" layer_height=0.1 elefant_foot_compensation=0.15
 
+use <../../lib/orca.scad>
 use <../../lib/piece.scad>
+
+orca([orca_process("0.12 Fine"), orca_layer_height(0.1), orca_elephant_foot(0.15)]);
 
 /* [Output] */
 part = "assembled"; // [assembled, exploded, print, print_rupees, top, numbers, back, sliders, rupees, test]
@@ -503,11 +505,11 @@ module bed() {
 // Lines along the tracks, so along y on the bed: on the top's face, which
 // prints on the bed, and on the back's channel floor, its top. Angles follow
 // the model, so that turning it in Orca turns the lines too.
-turned = " align_infill_direction_to_model=1";
-orca_top = str("bottom_surface_pattern=monotonic bottom_layer_direction=90", turned);
-orca_back = str("bottom_surface_pattern=concentric top_surface_pattern=monotonic top_layer_direction=90", turned);
+turned = orca_align_infill_to_model();
+top_settings = [orca_bottom_pattern("monotonic"), orca_bottom_direction(90), turned];
+back_settings = [orca_bottom_pattern("concentric"), orca_top_pattern("monotonic"), orca_top_direction(90), turned];
 // A brim, for so little on the bed: of the object, so the rupees are their own.
-orca_rupee = "top_surface_pattern=concentric brim_type=outer_only brim_width=3";
+rupee_settings = [orca_top_pattern("concentric"), orca_brim("outer_only", 3)];
 
 // Turned over, not mirrored, which would print the numbers backwards.
 module print_top() {
@@ -579,22 +581,22 @@ if (part == "assembled" || part == "exploded") {
   color(c_rupee[1]) translate([0, 0, 2 * e]) rupees_in_place(1);
 } else if (part == "print") {
   if (!arms) echo(pause = z_pause);
-  piece("top", orca_top) color(c_body) bed() print_top() top();
-  piece("numbers", orca_top) color(c_number) bed() print_top() numbers();
-  piece("back", orca_back) color(c_body) bed() translate([card.x + 5, 0, 0]) back();
+  piece("top", top_settings) color(c_body) bed() print_top() top();
+  piece("numbers", top_settings) color(c_number) bed() print_top() numbers();
+  piece("back", back_settings) color(c_body) bed() translate([card.x + 5, 0, 0]) back();
   piece("sliders") color(c_slider) bed() print_sliders();
-  piece("rupees 0", orca_rupee) color(c_rupee[0]) bed() print_rupees([0, 1]);
-  piece("rupees 1", orca_rupee) color(c_rupee[1]) bed() print_rupees([2, 3]);
+  piece("rupees 0", rupee_settings) color(c_rupee[0]) bed() print_rupees([0, 1]);
+  piece("rupees 1", rupee_settings) color(c_rupee[1]) bed() print_rupees([2, 3]);
 } else if (part == "print_rupees") {
   // The rupees alone, to print them again.
-  piece("rupees 0", orca_rupee) color(c_rupee[0]) bed() print_rupees([0, 1]);
-  piece("rupees 1", orca_rupee) color(c_rupee[1]) bed() print_rupees([2, 3]);
+  piece("rupees 0", rupee_settings) color(c_rupee[0]) bed() print_rupees([0, 1]);
+  piece("rupees 1", rupee_settings) color(c_rupee[1]) bed() print_rupees([2, 3]);
 } else if (part == "test") {
   if (!arms) echo(pause = z_pause);
-  piece("top", orca_top) color(c_body) bed() print_top() test_top();
-  piece("back", orca_back) color(c_body) bed() test_back();
+  piece("top", top_settings) color(c_body) bed() print_top() test_top();
+  piece("back", back_settings) color(c_body) bed() test_back();
   piece("sliders") color(c_slider) bed() test_sliders();
-  piece("rupees", orca_rupee) color(c_rupee[0]) bed() test_rupees();
+  piece("rupees", rupee_settings) color(c_rupee[0]) bed() test_rupees();
 }
 else if (part == "top") top();
 else if (part == "numbers") numbers();

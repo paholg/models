@@ -43,15 +43,16 @@
 //
 // Printing. The joints fit as drawn at 0.08 mm layers: the 0.6 mm inlays, the
 // 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front and back all
-// end on whole layers, from the bed up. "simple" has no joints to fit. So,
-// for python/generate.py, in the file that draws the box:
+// end on whole layers, from the bed up. So the box asks for those layers
+// itself, but for "simple", which has no joints to fit and prints at whatever
+// is selected in Orca. For python/generate.py, the file that draws the box
+// wants only:
 //   // export: panels simple seam magnets
-//   // orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2
-//   // orca simple:
 //
 // More than one box in a file: give each a `name`, which goes before its
 // pieces' names, and move them apart.
 
+use <orca.scad>
 use <panel_box.scad>
 use <piece.scad>
 
@@ -417,18 +418,23 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
   // The pattern each panel's outside face prints in, on the bed. Front, back
   // and top: lines up the box, or across it. Sides: along the seam, which leans
   // the other way on each as they lie on the bed.
+  // Monotonic lines at angle a on the bed, from +x.
+  function cb_lines(a) = [orca_bottom_pattern("monotonic"), orca_solid_infill_direction(a)];
   function cb_face(name) =
-    name == "front" || name == "back" ? piece_lines(90) :
-    name == "left" ? piece_lines(atan2(1, -seam_k)) :
-    name == "right" ? piece_lines(atan2(1, seam_k)) :
-    name == "floor" ? piece_bottom("concentric") : piece_lines(0);
+    name == "front" || name == "back" ? cb_lines(90) :
+    name == "left" ? cb_lines(atan2(1, -seam_k)) :
+    name == "right" ? cb_lines(atan2(1, seam_k)) :
+    name == "floor" ? [orca_bottom_pattern("concentric")] : cb_lines(0);
 
   // A face's art, as a panel: its own pattern, or its panel's.
-  function cb_art_face(face) = cb_art_pattern(face) == "" ? cb_face(face) : piece_bottom(cb_art_pattern(face));
+  function cb_art_face(face) = cb_art_pattern(face) == "" ? cb_face(face) : [orca_bottom_pattern(cb_art_pattern(face))];
 
   /* The box: its pieces, or a view of it. Children are the art. */
 
   module cb_draw() {
+    // The layers the joints fit at.
+    if (part != "simple")
+      orca([orca_process("0.08 High Quality"), orca_layer_height(0.08), orca_first_layer_height(0.2)]);
     if (part == "seam") {
       piece("seam test") color(box_color) cb_seam_test();
     } else if (part == "magnets") {

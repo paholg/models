@@ -12,9 +12,11 @@
 // between them share it out with nothing left over and nothing overhanging.
 
 // export: print
-// orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2 seam_position=back
 
+use <../../lib/orca.scad>
 use <../../lib/piece.scad>
+
+orca([orca_process("0.08 High Quality"), orca_layer_height(0.08), orca_first_layer_height(0.2), orca_seam("back")]);
 
 /* [Output] */
 part = "fit"; // [fit, exploded, print]
