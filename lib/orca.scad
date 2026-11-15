@@ -56,6 +56,10 @@ function orca_solid_infill_direction(a) = ["solid_infill_direction", a];
 // Directions follow the model, so that turning it in Orca turns the lines too.
 function orca_align_infill_to_model(on = true) = ["align_infill_direction_to_model", on ? 1 : 0];
 
+// How walls are drawn: arachne, whose lines vary in width to fit, or classic,
+// at one width, which leaves out a wall too thin for it.
+function orca_wall_generator(generator) = ["wall_generator", generator];
+
 // A brim: outer_only, inner_only, outer_and_inner, no_brim.
 function orca_brim(type, width) = [["brim_type", type], ["brim_width", width]];
 

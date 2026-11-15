@@ -5,14 +5,12 @@
 // The box is lib/card_box.scad's, which has how it's made and printed. This
 // file is what goes in it, its colors, and its art.
 
-// export: panels simple seam magnets
+// export: panels seam magnets
 
 use <../../lib/card_box.scad>
 
 /* [Output] */
-part = "closed"; // [closed, open, exploded, panels, simple, seam, magnets]
-// Show closed, open and exploded as the one-piece box, not the panels.
-whole = false;
+part = "closed"; // [closed, open, exploded, panels, seam, magnets]
 
 /* [Contents] */
 // Dragon Shield Matte standard sleeve, outside, at its largest: width, length.
@@ -60,7 +58,7 @@ module logo() {
   resize([logo_w, 0], auto = true) import("logo.svg", center = true);
 }
 
-card_box(part, whole, sleeve = sleeve, stack = deck + tracker, box_color = box_color, art_color = art_color,
+card_box(part, sleeve = sleeve, stack = deck + tracker, box_color = box_color, art_color = art_color,
          front_art = "fox", front_art_pattern = "octagramspiral",
          back_art = "forest", back_art_pattern = "archimedeanchords", top_art = "logo") {
   fox();

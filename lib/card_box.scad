@@ -9,13 +9,9 @@
 // is level across the front and back walls and slopes up between them along
 // the sides.
 //
-// It comes two ways. "simple" is two prints, the body and the lid, each in
-// one piece: the body standing, the lid top down. "panels" is the same box
-// cut into flat panels, for faces off the bed all round and inlays that
-// print flat.
-//
-// That box is ten flat panels, glued: floor, top, and a body and a lid piece
-// of each wall. Every panel prints with its outside face on the bed. They
+// The box is ten flat panels, glued, for faces off the bed all round and
+// inlays that print flat: floor, top, and a body and a lid piece of each
+// wall. Every panel prints with its outside face on the bed. They
 // join in mitred rabbets (panel_box.scad), whose seams fall on the box's
 // edges, so no joint shows on a face. The front and back drop between the
 // sides, and the floor and top into all four walls. To glue the body, or the
@@ -23,14 +19,12 @@
 // corners.
 //
 // Bar magnets stand on edge in the front and back walls, in pockets open to
-// the inside, each facing its partner edge to edge across the seam. In the
-// panels a cover of plastic stands between each magnet and the seam, so that
-// magnets never touch and the seam bears on plastic: a wall one line wide, as
-// a panel prints. Printed whole, that cover is a roof over the pocket, and
-// would sag: the one-piece box leaves it off, and its magnets sit as far below
-// the seam, bare. They're magnetized through their thickness, so glue one of
-// each pair in flipped, to attract. A trapezoid key on each wall's seam
-// locates the lid.
+// the inside, each facing its partner edge to edge across the seam. A cover
+// of plastic stands between each magnet and the seam, so that magnets never
+// touch and the seam bears on plastic: a wall one line wide, as a panel
+// prints. They're magnetized through their thickness, so glue one of each
+// pair in flipped, to attract. A trapezoid key on each wall's seam locates
+// the lid.
 //
 // Art is inlaid flush in the front, the back and the top: a second color, in
 // pieces of its own. It is the box's children, in that order, each drawn in
@@ -44,10 +38,8 @@
 // Printing. The joints fit as drawn at 0.08 mm layers: the 0.6 mm inlays, the
 // 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front and back all
 // end on whole layers, from the bed up. So the box asks for those layers
-// itself, but for "simple", which has no joints to fit and prints at whatever
-// is selected in Orca. For python/generate.py, the file that draws the box
-// wants only:
-//   // export: panels simple seam magnets
+// itself. For python/generate.py, the file that draws the box wants only:
+//   // export: panels seam magnets
 //
 // More than one box in a file: give each a `name`, which goes before its
 // pieces' names, and move them apart.
@@ -58,13 +50,11 @@ use <piece.scad>
 
 //   part       closed, open, exploded: views.
 //              panels: every panel on the bed, outside down.
-//              simple: the body and the lid on the bed, each in one piece.
 //              seam: a test, three short lengths of the front wall across the
 //              seam, each with the key and one magnet pocket, at the fits in
 //              seam_fits.
 //              magnets: a smaller one, a strip of wall with a magnet pocket at
 //              each crush in mag_crushes.
-//   whole      show the views as the one-piece box, not the panels
 //   explode    how far the panels pull apart in the exploded view
 //   name       goes before the names of its pieces
 //
@@ -87,7 +77,10 @@ use <piece.scad>
 //
 //   mag        bar magnets in the seam: length along the wall, height, thickness
 //   mag_c      pocket clearance on the thickness, where the pocket is open to
-//              the inside, and between the cover and the pads
+//              the inside
+//   mag_slack  room for the magnet's height, between the cover and the pads.
+//              Loose: a magnet that's tight there bows the cover out at the
+//              seam, and its partner's pull seats it against the cover anyway.
 //   mag_glue   gap for excess glue, past each end of a magnet and past its far
 //              edge from the seam. Crush ribs and stop pads cross it to hold
 //              the magnet in place.
@@ -98,8 +91,7 @@ use <piece.scad>
 //              by the nozzle, and a 0.15 mm crush gripped nothing.
 //   mag_skin   plastic outside a pocket; with the magnet, the front and back
 //              walls' thickness
-//   mag_cover  plastic between a magnet and its seam face, in the panels; the
-//              one-piece box sets its magnets back as far, bare
+//   mag_cover  plastic between a magnet and its seam face
 //   mag_x      magnets sit this far either side of center, on the front and
 //              the back
 //
@@ -118,13 +110,13 @@ use <piece.scad>
 //
 //   lid_gap, bed_gap  on the bed: between a wall's body piece and its lid
 //              piece, and between panels
-module card_box(part = "closed", whole = false, explode = 12, name = "",
+module card_box(part = "closed", explode = 12, name = "",
                 sleeve = [66.5, 92.5], stack = 40, clear = [2.5, 0.5, 0.5],
                 wall = 2.04, seam_drop = 25, lid_back_h = 14, chamfer = 0.6,
                 box_color = "forestgreen", art_color = "yellow",
                 front_art = "", front_art_pattern = "", back_art = "", back_art_pattern = "",
                 top_art = "", top_art_pattern = "", art_depth = 0.6,
-                mag = [18.4, 9, 2.5], mag_c = 0.12, mag_glue = 0.4, mag_crush = 0.1, mag_rib_w = 1.2,
+                mag = [18.4, 9, 2.5], mag_c = 0.12, mag_slack = 0.3, mag_glue = 0.4, mag_crush = 0.1, mag_rib_w = 1.2,
                 mag_rib_tip = 0.4, mag_skin = 0.84, mag_cover = 0.4, mag_x = 20,
                 key_w = 14, key_h = 2.5, key_lean = 1.25, key_c = 0.05,
                 seam_fits = [[0.05, 0.05], [0.05, 0.1], [0.05, 0.2]], seam_test_x = [-9, 31], seam_test_h = 14,
@@ -133,9 +125,6 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
   $fn = 48;
   $piece_prefix = name;
   eps = 0.01;
-
-  // Drawn as the one-piece box, whose magnet pockets have no covers.
-  one_piece = part == "simple" || (whole && (part == "closed" || part == "open" || part == "exploded"));
 
   // The seam test's coupons set these two for themselves.
   function cb_key_c() = is_undef($key_c) ? key_c : $key_c;
@@ -162,7 +151,7 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
   seam_k = seam_drop / cav.y;
   function cb_seam_z(y) = max(z_sf, min(z_sf + seam_k * (y - tf), z_sb));
   // From the seam face to the pads at a magnet's far edge.
-  mag_d = mag_cover + mag.y + mag_c;
+  mag_d = mag_cover + mag.y + mag_slack;
   assert(z_top - z_sb >= mag_d + mag_glue + 1, "lid too short at the back for its magnets");
   assert(mag_x - mag.x / 2 - mag_glue - 1 >= key_w / 2 + key_c, "magnets crowd the key");
   assert(mag_x + mag.x / 2 + mag_glue + 1 <= xs, "magnets run into the corners");
@@ -222,9 +211,8 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
     l = mag.x / 2 + mag_glue;
     t = mag.z + mag_c / 2;
     crush = cb_mag_crush();
-    z0 = one_piece ? -eps : mag_cover;
     difference() {
-      translate([-l, -eps, z0]) cube([2 * l, t + eps, mag_d + mag_glue - z0]);
+      translate([-l, -eps, mag_cover]) cube([2 * l, t + eps, mag_d + mag_glue - mag_cover]);
       for (sx = [-1, 1], zc = [for (f = [0.25, 0.75]) mag_cover + f * mag.y])
         translate([0, -2 * eps, 0]) rotate([-90, 0, 0]) linear_extrude(t + 4 * eps)
           polygon([for (q = [[l + eps, zc - mag_rib_w / 2], [l + eps, zc + mag_rib_w / 2],
@@ -410,11 +398,6 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
     pb_flat(name, cb_size, bed_gap, lid_gap) translate([xo, 0, lid ? lid_gap : 0]) children();
   }
 
-  // The lid in one piece, on the bed beside the body, top down.
-  module cb_lid_down() {
-    translate([xo + bed_gap + xo, 0, 0]) pb_top_down(cb_size) children();
-  }
-
   // The pattern each panel's outside face prints in, on the bed. Front, back
   // and top: lines up the box, or across it. Sides: along the seam, which leans
   // the other way on each as they lie on the bed.
@@ -432,19 +415,14 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
   /* The box: its pieces, or a view of it. Children are the art. */
 
   module cb_draw() {
-    // The layers the joints fit at.
-    if (part != "simple")
-      orca([orca_process("0.08 High Quality"), orca_layer_height(0.08), orca_first_layer_height(0.2)]);
+    // The layers the joints fit at, and walls that print the magnets' covers:
+    // one line wide, which classic walls would leave out.
+    orca([orca_process("0.08 High Quality"), orca_layer_height(0.08), orca_first_layer_height(0.2),
+          orca_wall_generator("arachne")]);
     if (part == "seam") {
       piece("seam test") color(box_color) cb_seam_test();
     } else if (part == "magnets") {
       piece("magnet test") color(box_color) cb_mag_test();
-    } else if (part == "simple") {
-      piece("body", cb_face("floor")) color(box_color) cb_body() { children(0); children(1); children(2); }
-      piece("lid", cb_face("top")) color(box_color) cb_lid_down() cb_lid() { children(0); children(1); children(2); }
-      if (front_art != "") piece(front_art) color(art_color) cb_art("front") { children(0); children(1); children(2); }
-      if (back_art != "") piece(back_art) color(art_color) cb_art("back") { children(0); children(1); children(2); }
-      if (top_art != "") piece(top_art, cb_face("top")) color(art_color) cb_lid_down() cb_art("top") { children(0); children(1); children(2); }
     } else if (part == "panels") {
       for (w = walls) piece(w, cb_face(w)) color(box_color) cb_flat(w) cb_panel(w) { children(0); children(1); children(2); }
       piece("floor", cb_face("floor")) color(box_color) cb_flat("floor") cb_panel("floor") { children(0); children(1); children(2); }
@@ -456,22 +434,15 @@ module card_box(part = "closed", whole = false, explode = 12, name = "",
       // Exploded pulls the panels apart, and the art out of its faces.
       e = part == "exploded" ? explode : 0;
       lift = part == "closed" ? 0 : part == "open" ? 40 : 3 * explode;
-      if (whole) {
-        color(box_color) render(convexity = 10) cb_body() { children(0); children(1); children(2); }
-        color(box_color) translate([0, 0, lift]) render(convexity = 10) cb_lid() { children(0); children(1); children(2); }
-        color("silver") render() cb_magnets(-1);
-        color("silver") translate([0, 0, lift]) render() cb_magnets(1);
-      } else {
-        color(box_color) {
-          for (w = walls) cb_exploded(w, e) cb_panel(w) { children(0); children(1); children(2); }
-          cb_exploded("floor", e) cb_panel("floor") { children(0); children(1); children(2); }
-          for (w = walls) cb_exploded(w, e, lift) cb_panel(w, true) { children(0); children(1); children(2); }
-          cb_exploded("top", e, lift) cb_panel("top", true) { children(0); children(1); children(2); }
-        }
-        color("silver") for (w = ["front", "back"]) {
-          cb_exploded(w, e) render() intersection() { cb_magnets(-1); cb_region(w); }
-          cb_exploded(w, e, lift) render() intersection() { cb_magnets(1); cb_region(w); }
-        }
+      color(box_color) {
+        for (w = walls) cb_exploded(w, e) cb_panel(w) { children(0); children(1); children(2); }
+        cb_exploded("floor", e) cb_panel("floor") { children(0); children(1); children(2); }
+        for (w = walls) cb_exploded(w, e, lift) cb_panel(w, true) { children(0); children(1); children(2); }
+        cb_exploded("top", e, lift) cb_panel("top", true) { children(0); children(1); children(2); }
+      }
+      color("silver") for (w = ["front", "back"]) {
+        cb_exploded(w, e) render() intersection() { cb_magnets(-1); cb_region(w); }
+        cb_exploded(w, e, lift) render() intersection() { cb_magnets(1); cb_region(w); }
       }
       color(art_color) for (f = cb_art_faces) if (cb_art_name(f) != "")
         cb_exploded(f, e, f == "top" ? lift : 0) cb_art(f) { children(0); children(1); children(2); }

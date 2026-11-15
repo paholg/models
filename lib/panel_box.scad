@@ -31,9 +31,6 @@
 // Gluing: tape the panels up dry, outside, then run thin CA along the inside
 // corners. It wicks through the rabbet and stops at the glue break, a trough
 // under the mitre's inner end, short of the outside.
-//
-// The same box prints whole as well, with no joints: the box itself, not cut
-// into panels, opening up. A lid prints top down: pb_top_down turns it over.
 
 function pb_names() = ["left", "right", "front", "back", "floor", "top"];
 function pb_axis(name) = name == "left" || name == "right" ? 0 : name == "front" || name == "back" ? 1 : 2;
@@ -47,12 +44,6 @@ function pb_normal(name) = (pb_far(name) ? 1 : -1) * pb_unit(pb_axis(name));
 module pb_outer(size, c) {
   hull() for (i = [0 : 2])
     translate([for (k = [0 : 2]) k == i ? 0 : c]) cube([for (k = [0 : 2]) k == i ? size[k] : size[k] - 2 * c]);
-}
-
-// Children turned over onto the bed, top face down, as a one-piece lid
-// prints.
-module pb_top_down(size) {
-  translate([0, size.y, size.z]) rotate([180, 0, 0]) children();
 }
 
 // Children drawn in (depth below panel a, depth below panel b), extruded the
