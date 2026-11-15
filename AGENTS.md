@@ -41,11 +41,6 @@ so don't go looking for its files through the binary.
 
 Please generate any assets into `./tmp/`.
 
-Focus on fast, interactive iteration, rather than trying to get out final
-products. I'd much rather see something quickly that's unfinished than wait for
-the final product. Optimize for more interactions with me; it's okay if you have
-to wait for me.
-
 While these models are for 3d prints, I'm general fine with mixed media, gluing,
 using bolts, etc. I'm usually more interested in the final product than in
 getting a single print does everything. When in doubt, ask me.
