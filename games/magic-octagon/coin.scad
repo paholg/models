@@ -52,10 +52,8 @@ rib_w = 0.8;
 rib_press = 0.1;
 
 /* [Colors] */
-// One for each half. Each distinct color is a filament; halves or arrows that
-// share a color share a filament.
-c_half = ["DimGray", "FireBrick"];
-c_arrow = ["Gold", "Gold"];
+c_half = ["Gold", "Black"];
+c_arrow = ["Black", "Gold"];
 
 /* [Hidden] */
 $fn = 64;
@@ -137,7 +135,7 @@ module bed(i) { translate([i * (d + 5), 0, 0]) children(); }
 // On the faces, which print on the bed: rings around the octagons, and lines
 // along each arrow. Angles follow the model, so that turning it in Orca turns
 // the lines too.
-half_settings = [orca_bottom_pattern("concentric")];
+half_settings = [orca_bottom_pattern("octagramspiral")];
 function arrow_settings(angle) =
   [orca_bottom_pattern("monotonic"), orca_bottom_direction(angle), orca_align_infill_to_model()];
 
