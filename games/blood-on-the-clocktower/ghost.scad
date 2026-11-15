@@ -14,6 +14,8 @@
 
 // export: ghost vote fit
 
+use <../../lib/piece.scad>
+
 /* [Output] */
 // `fit` is the socket alone, at each of `fit_press`, to try on a pencil: the
 // dots on each count from the loosest.
@@ -443,12 +445,6 @@ orca_ghost = str(
 // The vote's layers are thin, for its edges. Orca keeps a layer height for a
 // whole object, so, as with the ghost, its pieces share a name and the setting.
 orca_vote = "layer_height=0.1 top_surface_pattern=hilbertcurve bottom_surface_pattern=hilbertcurve";
-
-// Each top-level statement of a layout is a piece: a part in Orca.
-module piece(name, orca = "") {
-  echo(piece = name, orca = orca);
-  children();
-}
 
 if (part == "fit") {
   od = 2 * (pencil_flats / 2 + spring_t + spring_gap) + 6;

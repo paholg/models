@@ -2,6 +2,7 @@
 an STL for each object and color, with what the file's echoes say of them."""
 
 import json
+import os
 import re
 import shlex
 import struct
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +30,9 @@ COLOR_NAMES = {
     "#FFC0CB": "pink", "#A52A2A": "brown", "#FFD700": "gold", "#000080": "navy",
     "#008080": "teal", "#00FF00": "lime", "#00FFFF": "cyan", "#FF00FF": "magenta",
 }  # fmt: skip
+
+# Asked for in place of a piece, to see what is in none: no piece has no name.
+NO_PIECE = ("", "")
 
 # Each color a file has named, as OpenSCAD writes it.
 _values: dict[str, str] = {}
@@ -109,23 +114,21 @@ def color_values(names: set[str]) -> dict[str, str]:
 
 
 def split(
-    src: Path, out: Path, pieces: list[tuple[str, str]], by_color: dict[str, str]
-) -> tuple[list[Solid], tuple]:
-    """Write one STL per object and color in an OpenSCAD 3MF.
+    src: Path,
+    out: Path,
+    solids: list[Solid],
+    piece: tuple[str, str] | None,
+    by_color: dict[str, str],
+) -> list[tuple[float, ...]]:
+    """Write one STL per object and color in an OpenSCAD 3MF, adding to `solids`.
 
-    Returns them, and the corners of the box round them all. `pieces` are the
-    objects' names and orca lines, if the .scad file gave one for each; `by_color`
-    the names it gave by color.
+    Returns their points. `piece` is the name and orca line of what the 3MF
+    holds, if the .scad file names its pieces; `by_color` the names it gave by
+    color.
     """
     colors, objects = meshes(src)
-    solids: list[Solid] = []
     points = []
-    if pieces and len(pieces) != len(objects):
-        print(
-            f"  warning: {len(pieces)} piece names for {len(objects)} objects; numbering them"
-        )
-    named = len(pieces) == len(objects)
-    for i, obj in enumerate(objects):
+    for obj in objects:
         mesh = child(obj, "m:mesh", NS)
         verts = [
             tuple(float(attr(v, k)) for k in "xyz")
@@ -139,8 +142,13 @@ def split(
             )
         if len(tris_by_color) > 1:
             print(
-                f"  warning: {obj.get('name')} mixes colors on one solid; give each color"
-                " its own top-level statement in the .scad, or its parts won't be closed"
+                f"  warning: {piece[0] if piece else obj.get('name')} mixes colors on one"
+                " solid, so its parts won't be closed: "
+                + (
+                    "give each color a piece with a name of its own"
+                    if piece
+                    else "give each color its own top-level statement in the .scad"
+                )
             )
         for k, tris in sorted(tris_by_color.items()):
             color = colors[k] if k < len(colors) else ""
@@ -148,57 +156,110 @@ def split(
             label = by_color.get(color, color_name(color))
             if n := sum(1 for s in solids if s.color == color):
                 label += f" {n + 1}"
-            own, piece = {}, ""
-            if named:
-                piece, line = pieces[i]
+            own, name = {}, ""
+            if piece:
+                name, line = piece
                 label = (
-                    piece if len(tris_by_color) == 1 else f"{piece} {color_name(color)}"
+                    name if len(tris_by_color) == 1 else f"{name} {color_name(color)}"
                 )
                 own = pairs(line)
             path = out / f"{len(solids) + 1}.stl"
             write_stl(path, tris)
-            solids.append(Solid(path, color, label, own, piece))
+            solids.append(Solid(path, color, label, own, name))
             points += [v for t in tris for v in t]
-    box = tuple(tuple(f(v[k] for v in points) for k in range(3)) for f in (min, max))
-    return solids, box
+    return points
 
 
-def render(scad: Path, part: str, work: Path) -> Render:
-    """Render one part of a .scad file into `work`, showing OpenSCAD's log."""
-    mesh = work / "mesh.3mf"
+def openscad(scad: Path, part: str, out: Path, only: tuple[str, str] | None = None):
+    """Run OpenSCAD on one part of a .scad file, or on one piece of that part.
+
+    A piece of no name is none of them: what is drawn then is in no piece.
+    Returns how it ended, and its log.
+    """
+    args = ["openscad", "--enable=lazy-union", "-D", f'part="{part}"']
+    if only:
+        args += ["-D", f"$only=[{json.dumps(only[0])}, {json.dumps(only[1])}]"]
     # Not --quiet, which would drop the echoes.
-    openscad = subprocess.Popen(
-        ["openscad", "--enable=lazy-union", "-D", f'part="{part}"', "-o", mesh, scad],
+    run = subprocess.run(
+        [*args, "-o", out, scad],
+        check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
     )
-    assert openscad.stderr is not None  # a pipe, as asked for
-    # Show the log as it comes.
-    log = []
-    for line in openscad.stderr:
-        log.append(line.rstrip("\n"))
-        if log[-1]:
-            print(f"  {log[-1]}")
-    if openscad.wait():
-        sys.exit(f"openscad failed on {part}")
+    return run.returncode, [line for line in run.stderr.split("\n") if line]
+
+
+def render(scad: Path, part: str, work: Path) -> Render:
+    """Render one part of a .scad file into `work`, showing OpenSCAD's log.
+
+    A file that names its pieces is rendered once for each, which is how a
+    piece is told from the rest: OpenSCAD hands over what it draws as one solid,
+    but for the statements at the top of the file. So first it is only asked
+    what the pieces are.
+    """
+    code, log = openscad(scad, part, work / "pieces.echo")
+    # An .echo has the echoes, and the log may not.
+    listing = work / "pieces.echo"
+    said = listing.read_text().splitlines() if listing.exists() else []
 
     def echoes(pattern: str) -> list[re.Match]:
-        return [m for line in log if (m := re.fullmatch(f"ECHO: {pattern}", line))]
+        return [m for line in said if (m := re.fullmatch(f"ECHO: {pattern}", line))]
 
-    pieces = [
-        (m[1], m[2] or "") for m in echoes(r'piece = "(.*?)"(?:, orca = "(.*)")?')
-    ]
+    # In order, each once: pieces that share a name and settings come together.
+    pieces = list(
+        dict.fromkeys(
+            (m[1], m[2] or "") for m in echoes(r'piece = "(.*?)"(?:, orca = "(.*)")?')
+        )
+    )
     pauses = [float(m[1]) for m in echoes(r"pause = ([\d.]+)")]
     # A color's name: what to call whatever is that color, and its filament.
     named = {
         m[1]: (m[2], m[3])
         for m in echoes(r'color = "(.*?)", piece = "(.*?)"(?:, filament = "(.*?)")?')
     }
+    for line in dict.fromkeys(said + [line for line in log if "ECHO" not in line]):
+        print(f"  {line}")
+    # Writing an .echo, OpenSCAD puts its errors there too, and calls it done.
+    if code or any(line.startswith("ERROR") for line in said):
+        sys.exit(f"openscad failed on {part}")
+    by_color = {v: named[c][0] for c, v in color_values(set(named)).items()}
+
+    solids: list[Solid] = []
+    points = []
+    if pieces:
+        # With no piece asked for, nothing should be left.
+        asked = [NO_PIECE, *pieces]
+        meshes_ = [work / f"piece{i}.3mf" for i in range(len(asked))]
+        with ThreadPoolExecutor(os.cpu_count()) as pool:
+            (code, log), *runs = pool.map(
+                lambda a: openscad(scad, part, a[0], a[1]), zip(meshes_, asked)
+            )
+        if not code:
+            sys.exit(
+                f"{part} draws something outside its pieces, which would be in every"
+                " one of them: put it in a piece of its own"
+            )
+        if not any("empty" in line for line in log):
+            sys.exit(f"openscad failed on {part}, looking for what is in no piece")
+        for mesh, piece, (code, log) in zip(meshes_[1:], pieces, runs):
+            for line in log:
+                if "WARNING" in line or "ERROR" in line:
+                    print(f"  {piece[0]}: {line}")
+            if code and any("empty" in line for line in log):
+                print(f"  warning: {piece[0]} is empty")
+            elif code:
+                sys.exit(f"openscad failed on {part}, at {piece[0]}")
+            else:
+                points += split(mesh, work, solids, piece, by_color)
+    else:
+        code, log = openscad(scad, part, work / "mesh.3mf")
+        if code:
+            sys.exit(f"openscad failed on {part}")
+        points = split(work / "mesh.3mf", work, solids, None, by_color)
+    low = tuple(min(v[k] for v in points) for k in range(3))
+    high = tuple(max(v[k] for v in points) for k in range(3))
     values = color_values(set(named))
-    solids, box = split(
-        mesh, work, pieces, {values[c]: n for c, (n, _) in named.items()}
-    )
     return Render(
-        solids, box, pauses, {values[c]: f for c, (_, f) in named.items() if f}
+        solids, (low, high), pauses, {values[c]: f for c, (_, f) in named.items() if f}
     )

@@ -34,16 +34,19 @@ way is by color, for a file that draws each color in one go:
 no matter if nothing is. A `filament = "name"` after those names the filament
 the color stands for, for the plates' names (see `// plate:`).
 
-The other is one `echo(piece = "name")` for each top-level statement, in order.
-For instance:
+The other is by piece: lib/piece.scad's `piece("name")`, around every solid of
+the print, wherever in the file it is drawn. For instance:
 
-    module piece(name) { echo(piece = name); children(); }
+    use <../../lib/piece.scad>
     piece("lid") color("green") lid();
+
+A piece says what it is in OpenSCAD's log, and this then renders the file once
+for each, asking for that one alone: OpenSCAD has no other way to hand over one
+piece of what it draws. That file has the rest of it.
 
 A piece can carry settings of its own, which Orca applies to just its parts: an
 `orca` string beside the name, written like the `// orca:` line.
 
-    module piece(name, orca = "") { echo(piece = name, orca = orca); children(); }
     piece("lid", "bottom_surface_pattern=concentric") color("green") lid();
 
 Orca keeps some settings for a whole object, not a part: a brim or a raft, say.

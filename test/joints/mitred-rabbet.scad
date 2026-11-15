@@ -23,6 +23,8 @@
 // export: print
 // orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2 seam_position=back
 
+use <../../lib/piece.scad>
+
 /* [Output] */
 part = "fit"; // [fit, print]
 
@@ -86,11 +88,6 @@ module coupon(n) {
 
 module pair(i) {
   translate([0, i * (len + bed_gap), 0]) children();
-}
-
-module piece(name) {
-  echo(piece = name);
-  children();
 }
 
 // One statement, so one object, for all the B panels and one for all the A.

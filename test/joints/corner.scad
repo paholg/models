@@ -14,6 +14,8 @@
 // export: print
 // orca: process="0.08 High Quality" layer_height=0.08 initial_layer_print_height=0.2 seam_position=back
 
+use <../../lib/piece.scad>
+
 /* [Output] */
 part = "fit"; // [fit, exploded, print]
 
@@ -116,11 +118,6 @@ module flat(i) {
     if (i == 0) multmatrix([[0, 1, 0, 0], [0, 0, 1, 0], [1, 0, 0, 0]]) children();
     else if (i == 1) multmatrix([[0, 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 0]]) children();
     else children();
-}
-
-module piece(name) {
-  echo(piece = name);
-  children();
 }
 
 colors = ["darkgreen", "forestgreen", "seagreen"];

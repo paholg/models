@@ -10,6 +10,8 @@
 
 // export: print
 
+use <../../lib/piece.scad>
+
 /* [Output] */
 part = "assembled"; // [assembled, exploded, print]
 
@@ -130,12 +132,6 @@ module place(i, e = 0) {
 }
 
 module bed(i) { translate([i * (d + 5), 0, 0]) children(); }
-
-// Each top-level statement of a layout is a piece: a part in Orca.
-module piece(name, orca = "") {
-  echo(piece = name, orca = orca);
-  children();
-}
 
 // On the faces, which print on the bed: rings around the octagons, and lines
 // along each arrow. Angles follow the model, so that turning it in Orca turns

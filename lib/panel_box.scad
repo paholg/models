@@ -43,16 +43,6 @@ function pb_unit(i) = [for (k = [0 : 2]) k == i ? 1 : 0];
 // Outward.
 function pb_normal(name) = (pb_far(name) ? 1 : -1) * pb_unit(pb_axis(name));
 
-// Magnets, to hold a lid: bars standing on edge in a wall, each in a pocket
-// open to the inside, facing its partner edge to edge across the seam between
-// body and lid. pb_magnet_pocket is one pocket, to cut from a wall.
-//
-// In panels a `cover` of plastic stands between each magnet and the seam, so
-// that magnets never touch and the seam bears on plastic: a wall one line
-// wide, as the panel prints. Printed whole, that cover is a roof over the
-// pocket, and would sag: `whole` leaves it off, and the magnet sits as far
-// below the seam, bare.
-
 // The box's outside, with chamfer c on every edge.
 module pb_outer(size, c) {
   hull() for (i = [0 : 2])
@@ -112,37 +102,26 @@ module pb_panel(name, size, t, rank = [0, 1, 2], mitre = 1, mitre_gap = 0, brk =
   }
 }
 
-// From the seam to the pads a magnet's far edge seats against.
-function pb_magnet_far(mag, cover, c = 0.12) = cover + mag.y + c;
+// Pulled e out along the panel's normal, for an exploded view.
+module pb_exploded(name, e) {
+  translate(e * pb_normal(name)) children();
+}
 
-// A magnet's pocket: x along the wall, y into it from its inside face, z away
-// from the seam, which is at 0. Oversize by `glue` at both ends and at the far
-// edge, with two crush ribs on each end, flat-tipped, running the way the
-// magnet drops in, and two pads at the far edge for it to seat against.
-//   mag      length along the wall, height, thickness
-//   cover    plastic between the magnet and the seam
-//   whole    for a box printed whole: no cover, the magnet set back by it
-//   c        clearance on the thickness, and between the cover and the pads
-//   glue     gap for excess glue
-//   crush    how far each end's ribs bite into the magnet's length
-//   rib_w    width of a rib at its root
-//   rib_tip  width of its tip: flat, and wide enough to print at its full
-//            height. A pointed rib came out about 0.1 mm short, rounded off by
-//            the nozzle, and a 0.15 mm crush gripped nothing.
-module pb_magnet_pocket(mag, cover, whole = false, c = 0.12, glue = 0.4, crush = 0.1, rib_w = 1.2,
-                        rib_tip = 0.4) {
-  eps = 0.01;
-  l = mag.x / 2 + glue;
-  t = mag.z + c / 2;
-  far = pb_magnet_far(mag, cover, c);
-  z0 = whole ? -eps : cover;
-  difference() {
-    translate([-l, -eps, z0]) cube([2 * l, t + eps, far + glue - z0]);
-    for (sx = [-1, 1], zc = [for (f = [0.25, 0.75]) cover + f * mag.y])
-      translate([0, -2 * eps, 0]) rotate([-90, 0, 0]) linear_extrude(t + 4 * eps)
-        polygon([for (q = [[l + eps, zc - rib_w / 2], [l + eps, zc + rib_w / 2],
-                           [l - glue - crush, zc + rib_tip / 2], [l - glue - crush, zc - rib_tip / 2]])
-                   [sx * q[0], -q[1]]]);
-    for (sx = [-1, 1]) translate([sx * mag.x / 4 - 1, -2 * eps, far]) cube([2, t + 3 * eps, glue + eps]);
-  }
+// The box's panels laid out on the bed, each outside face down: children are
+// the box, or the one panel of it, and come out where panel `name` lies. The
+// front and back lie side by side, the left and right behind them, the floor
+// and top behind those, `gap` apart.
+//   split  extra room up each wall, for one cut in two across its height:
+//          lift the upper piece by as much, and it lies beyond the lower
+module pb_flat(name, size, gap = 5, split = 0) {
+  h = size.z + split;
+  y1 = h + gap;
+  y2 = y1 + size.y + gap;
+  x1 = size.x + gap;
+  if (name == "front") translate([0, h, 0]) rotate([90, 0, 0]) children();
+  else if (name == "back") translate([x1, 0, size.y]) rotate([-90, 0, 0]) children();
+  else if (name == "left") translate([h, y1, 0]) rotate([0, -90, 0]) children();
+  else if (name == "right") translate([h + gap, y1, size.x]) rotate([0, 90, 0]) children();
+  else if (name == "floor") translate([0, y2, 0]) children();
+  else translate([x1, y2 + size.y, size.z]) rotate([180, 0, 0]) children();
 }

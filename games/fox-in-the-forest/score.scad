@@ -31,6 +31,8 @@
 // export: print print_rupees test
 // orca: process="0.12 Fine" layer_height=0.1 elefant_foot_compensation=0.15
 
+use <../../lib/piece.scad>
+
 /* [Output] */
 part = "assembled"; // [assembled, exploded, print, print_rupees, top, numbers, back, sliders, rupees, test]
 
@@ -490,13 +492,6 @@ module rupees_in_place(p) {
 }
 
 /* Print layout */
-
-// Each top-level statement of a layout is a piece: a part in Orca, with a
-// name and slicer settings of its own (see python/generate.py).
-module piece(name, orca = "") {
-  echo(piece = name, orca = orca);
-  children();
-}
 
 // The layouts are drawn with the tracks along x and the back toward +x, then
 // turned onto the bed: tracks front to back, and the back at the front of the
