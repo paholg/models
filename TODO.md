@@ -9,8 +9,8 @@
 ## A Feast for Odin
 
 Plates:
-- 3 is printed
-- 4 is printing
+- Printed: 3, 4
+- Printing: 9
 
 ## The Fox in the Forest
 
