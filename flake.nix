@@ -80,6 +80,22 @@
             ++ [ orca-slicer ];
           text = builtins.readFile ./nix/f.sh;
         };
+
+        # `just diff`, from anywhere in the repo: what the working tree's changes
+        # since a commit do to each part (see python/diff.py).
+        scadiff = pkgs.writeShellApplication {
+          name = "scadiff";
+          runtimeInputs = with pkgs; [
+            git
+            gnutar
+            openscad-unstable
+            uv
+          ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+            exec uv --project python run python/diff.py "$@"
+          '';
+        };
       in
       {
         devShells.default = pkgs.mkShell {
@@ -101,6 +117,7 @@
             ++ [
               f
               orca-slicer
+              scadiff
             ];
 
           # src/libslic3r/PrintConfig.cpp defines every setting; resources/profiles holds

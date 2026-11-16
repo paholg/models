@@ -1,0 +1,3 @@
+# Where the scripts' own modules are, to tell them from what is installed
+# wherever ruff is run from: an import block has those apart.
+src = ["python"]

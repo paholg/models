@@ -8,12 +8,12 @@ rest follow toward the back, in the order of VARIANTS. All in T0.
 from dataclasses import dataclass
 
 import fullcontrol as fc
-from lib.preview import preview
-from lib.pyramid import CENTER, polygon_floor
-from lib.settings import DEFAULT
 from shapely.geometry import box
 
 from lib import u1
+from lib.preview import preview
+from lib.pyramid import CENTER, polygon_floor
+from lib.settings import DEFAULT
 
 S = DEFAULT
 LW, LH = S.line_width, S.layer_height

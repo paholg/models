@@ -31,6 +31,12 @@ preview file:
 generate file:
     uv --project python run python/generate.py {{file}}
 
+# Open OpenSCAD on what the working tree's changes since a commit do to each part they reach:
+# green for what they add, red for what they remove (see python/diff.py).
+[positional-arguments]
+diff *args:
+    @uv --project python run python/diff.py "$@"
+
 # Slice one of those projects with Orca's CLI, to tmp/slice/<project>.gcode, for checking what a
 # print comes out as. Takes --machine, --process and --filament preset names (see python/slice.py).
 [positional-arguments]
