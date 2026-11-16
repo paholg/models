@@ -13,8 +13,6 @@ Plates:
 
 ## The Fox in the Forest
 
-- Print the seam test: the lid seats with no gap, the shortened magnet covers
-  print whole
 - Reprint the box. The joints seat without trimming; the sides still square
   the other panels (0.56 mm of rabbet wall left: if loose, `relief` to 0.16);
   thin CA still wicks from the inside corners' V

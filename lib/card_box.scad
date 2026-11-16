@@ -203,9 +203,9 @@ module card_box(part = "closed", explode = 12, name = "",
   }
 
   module cb_keys(g) {
-    // Front and back.
-    for (p = [[tf, z_sf], [by + 1, z_sb]])
-      translate([0, p[0], p[1]]) rotate([90, 0, 0]) linear_extrude(tf + 1) cb_key_2d(g);
+    // Front and back, and on into the cavity, to end on no face of the wall.
+    for (p = [[tf + 1, z_sf], [by + 1, z_sb]])
+      translate([0, p[0], p[1]]) rotate([90, 0, 0]) linear_extrude(tf + 2) cb_key_2d(g);
     // Sides, leaning with the seam.
     y_mid = by / 2;
     translate([0, y_mid, cb_seam_z(y_mid)]) multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, seam_k, 1, 0]])
@@ -333,16 +333,21 @@ module card_box(part = "closed", explode = 12, name = "",
   // to its inside face, whatever is within reach across the seam, the reach
   // falling from `ease` at the face to nothing `ease` into the wall. In steps
   // finer than a layer, as the seam is no shape to taper whole. Each wall's
-  // is kept to its own panel.
+  // is kept to its own panel. Rendered, as its many pieces are otherwise more
+  // than the preview will take.
   module cb_seam_ease(lid) {
     n = 6;
-    for (w = walls, k = [0 : n - 1]) {
+    render(convexity = 4) for (w = walls, k = [0 : n - 1]) {
       // Into the wall, from and to.
       a = k == 0 ? -eps : k * ease / n;
       b = (k + 1) * ease / n;
       s = ease * (1 - (k + 0.5) / n);
       intersection() {
-        cb_region(w);
+        // Its panel, and a hair into the cavity, to end on no face of it.
+        union() {
+          cb_region(w);
+          translate(-eps * pb_normal(w)) cb_region(w);
+        }
         if (w == "front") cb_box([-xo, xo], [tf - b, tf - a], [0, box_h]);
         else if (w == "back") cb_box([-xo, xo], [y_back + a, y_back + b], [0, box_h]);
         else if (w == "left") cb_box([-xs - b, -xs - a], [0, by], [0, box_h]);
