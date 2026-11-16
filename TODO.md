@@ -9,9 +9,8 @@
 ## A Feast for Odin
 
 Plates:
-- Printed: 3, 4
-- Printing: 9
-
+- Printed: 3, 4, 9
+- Reprint: `VP`, `buildings_5`, `buildings_3 2`
 ## The Fox in the Forest
 
 - Reprint the box

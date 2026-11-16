@@ -17,7 +17,7 @@ the ones used during the game.
 I recommend you use adaptive layer heights; this should help the scoops be
 smooth while letting you have large layers above them. If you want clear text
 for the symbols on the tile scoops, though, those should be at a lower layer
-height; I set mine to around 0.16, wheras Orca wanted to put them closer to 0.3.
+height; I set mine to around 0.16, whereas Orca wanted to put them closer to 0.3.
 
 ## License
 

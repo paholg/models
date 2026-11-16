@@ -14,8 +14,8 @@
 // 5, 6: the top layer, as tall as the card trays, so that what stands above
 //    the box's rim still reaches well down into it.
 //    front strip: the card trays (not ours: see card-trays/README.md), and
-//    beside them the VP and penalty tokens and the 2x5 money, under a
-//    spare bin.
+//    beside them the VP and penalty tokens and the 2x5 money (5), under a
+//    spare bin (6).
 //    back, two tiers: the islands and the big tiles below (5); the wooden
 //    goods, the boat market and two discard bins for cards above (6).
 //
@@ -39,7 +39,7 @@ part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings, 
 explode = 30;
 // Assembly: show layers up to this one, bottom up (0 = all). 1: boards and
 // frame; 2: half trays; 3: special boards; 4: cardboard trays; 5: card trays,
-// VP, islands, big tiles; 6: wood, boats.
+// VP, islands, big tiles; 6: wood, boats, discard and spare bins.
 layer = 0; // [0:6]
 // Show only that layer, not the ones under it.
 layer_only = false;
@@ -263,7 +263,6 @@ boat_side_slot_w = 25;
 // Smaller than the standard, to leave more wall between neighboring slots.
 boat_slot_r = 2;
 boat_slot_lip = 2;
-boat_slot_bottom = 2;
 boat_well = [for (b = boats) b[1] + [boat_clear, boat_clear]];
 boat_well_y = max([for (w = boat_well) w.y]);
 // Just tall enough for the tallest stack.
@@ -276,6 +275,10 @@ boat = [back_y, boat_well_y + 2 * wall];
 boat_wall = (boat.x - sum([for (w = boat_well) w.x])) / (len(boats) + 1);
 function boat_x(i) = boat_wall + sum([for (j = [0:1:i - 1]) boat_well[j].x + boat_wall]);
 
+// The floor's notch at a slot len wide, through a wall t thick: its corners
+// start where the floor's fillet ends.
+module boat_notch(len, t, fl) let (inset = boat_clear / 2 + floor_inset)
+    floor_notch(len, t, inset, fl, chamfer_out, top_from = fillet_r, r = inset - fillet_r);
 // The boat market: its own piece, with the pinch slots open front and back.
 module boat_tray() {
     body() difference() {
@@ -288,15 +291,28 @@ module boat_tray() {
                 well(w, boat_floor(i), boat_h);
                 rim(w, boat_h);
             }
-            // Pinch slot through the front and back walls;
-            // the skinny first well is too narrow for that, so its slot goes
+            // Pinch slots through the front and back walls, all the way
+            // down, the floor cut back from each (see floor_notch()); the
+            // skinny first well is too narrow for that, so its slot goes
             // through the outer side wall instead.
             wy = boat.y - wall - w.y;
-            if (i == 0) translate([0, wy + w.y / 2, 0]) rotate(-90)
-                pinch_slot(boat_side_slot_w, boat_floor(i) + boat_slot_bottom, boat_h, 0, boat_wall, [[0, 1], [boat_wall, -1]], boat_slot_r);
-            else translate([boat_x(i) + w.x / 2, 0, 0])
-                pinch_slot(sw, boat_floor(i) + boat_slot_bottom, boat_h, 0, boat.y,
-                       [[0, 1], [wy, -1], [wy + w.y, 1], [boat.y, -1]], boat_slot_r);
+            fl = boat_floor(i);
+            if (i == 0) {
+                translate([0, wy + w.y / 2, 0]) rotate(-90)
+                    pinch_slot(boat_side_slot_w, -10, boat_h, 0, boat_wall, [[0, 1]], boat_slot_r);
+                translate([boat_wall, wy + w.y / 2, 0]) rotate(90)
+                    slot_ease(boat_side_slot_w, -10, boat_h, fl, fillet_r, boat_slot_r);
+                translate([boat_wall, wy + (w.y + boat_side_slot_w) / 2, 0]) rotate(-90)
+                    boat_notch(boat_side_slot_w, boat_wall, fl);
+            }
+            else translate([boat_x(i) + w.x / 2, 0, 0]) {
+                pinch_slot(sw, -10, boat_h, 0, wy, [[0, 1]], boat_slot_r);
+                pinch_slot(sw, -10, boat_h, wy + w.y, boat.y, [[boat.y, -1]], boat_slot_r);
+                translate([0, wy, 0]) mirror([0, 1, 0]) slot_ease(sw, -10, boat_h, fl, fillet_r, boat_slot_r);
+                translate([0, wy + w.y, 0]) slot_ease(sw, -10, boat_h, fl, fillet_r, boat_slot_r);
+                translate([-sw / 2, wy, 0]) boat_notch(sw, wy, fl);
+                translate([-sw / 2, wy + w.y, 0]) mirror([0, 1, 0]) boat_notch(sw, wall, fl);
+            }
         }
     }
 }
@@ -306,8 +322,10 @@ module boat_tray() {
 // row, biggest first at the front (x = 0), as you only ever need the next one.
 // A well per value, walls as tall as the tokens; one pinch slot runs through
 // the front face and every divider, to slide the front token up and out.
-// Behind them, a round well holds the 7 penalty tokens (30 mm round) in a
-// stack, with pinch slots out the side and the back.
+// Behind them, in the tray's corner, a round well holds the 7 penalty tokens
+// (30 mm round) in a stack, flush with the top. The corner itself is open: the quarter of the
+// well's wall that faces it is gone, down to the bottom, and the floor there
+// stops short of the stack's edge.
 vp_token = 25;
 vp_counts = [2, 6, 8];
 vp_slack = 1.5; // per value, so the tokens can lean
@@ -317,7 +335,9 @@ vp_slot_w = 16;
 vp_slot_bottom = 4;
 // Smaller than the standard round-over, to leave more of the dividers.
 vp_slot_r = 2;
-pen_r = (30 + 1.5) / 2;
+pen_clear = 1.5;
+pen_n = 7;
+pen_r = (30 + pen_clear) / 2;
 function vp_group(i) = vp_counts[i] * tile_t + vp_slack;
 function vp_x(i) = wall + sum([for (j = [0:1:i - 1]) vp_group(j) + wall]);
 vp_in_y = vp_token + vp_clear;
@@ -326,22 +346,58 @@ vp_block_y = vp_in_y + 2 * wall;
 // The 2x5 money, in a stack of its own down the tray's other side, like a
 // boat's.
 money_n = 5;
-money_well = t(2, 5) + [1, 1];
+money_clear = 1;
+money_well = t(2, 5) + [money_clear, money_clear];
 money_slot_w = 25;
 // The tray fills the pocket beside the card trays.
 vp = [box.x - 1 - decks_x - gap, front_y];
 vp_need = [vp_x(len(vp_counts)) + money_well.x + wall, max(vp_block_y + 2 * pen_r + wall, money_well.y + 2 * wall)];
 assert(vp_need.x <= vp.x && vp_need.y <= vp.y, str("the VP tray needs ", vp_need, " of ", vp));
-pen_c = [vp_x(len(vp_counts)) / 2, vp_block_y + pen_r];
+// A wall's thickness from the tray's side and its back.
+pen_c = [wall + pen_r, vp.y - wall - pen_r];
 vp_h = floor_t + vp_wall_h;
 module vp_tray() {
     n = len(vp_counts);
-    back = vp.y - pen_c.y;
     bz = floor_t + vp_slot_bottom;
-    // The penalty well's slots: out the side, and out the back.
-    module pen_slots(side_faces, back_faces) {
-        translate([0, pen_c.y, 0]) rotate(-90) pinch_slot(vp_slot_w, bz, vp_h, 0, pen_c.x, side_faces, vp_slot_r);
-        translate([pen_c.x, pen_c.y, 0]) pinch_slot(vp_slot_w, bz, vp_h, 0, back, back_faces, vp_slot_r);
+    // The penalty well's corner opening: a square, from the corner to the
+    // well's center, so the walls end where the well is nearest them.
+    pen_a = wall + pen_r;
+    pen_gap = pen_clear / 2 + floor_inset;
+    // Raised, so the stack comes flush with the top.
+    pen_floor = vp_h - pen_n * tile_t;
+    // The end of the side wall, as one side of a pinch slot twice as wide,
+    // and its easing into the well.
+    module pen_wall_end() translate([wall, vp.y, 0]) rotate(90) {
+        // Through the wall, and no further: the floor's tongue is beyond.
+        pinch_slot(2 * pen_a, -10, vp_h, -fillet_r, wall, [[wall, -1]], vp_slot_r);
+        slot_ease(2 * pen_a, -10, vp_h, pen_floor, fillet_r, vp_slot_r);
+    }
+    // What's cut from the floor: the opening, less a tongue under the stack.
+    // Its corners by the walls are rounded, from where the floor's fillet
+    // ends.
+    module pen_floor_2d() let (r = pen_gap - fillet_r) offset(r = r) offset(delta = -r) difference() {
+        translate([-5, pen_c.y]) square([pen_a + 5, pen_a + 5]);
+        translate(pen_c) circle(pen_r - pen_gap, $fn = 96);
+    }
+    // Its top edge, clear of the walls' ends, which slot_ease() does.
+    module pen_floor_top_2d() intersection() {
+        pen_floor_2d();
+        translate([wall + fillet_r, 0]) square([vp.x, vp.y - wall - fillet_r]);
+    }
+    module pen_opening(steps = 4) {
+        // Mirrored in the corner's diagonal, for the back wall's end.
+        pen_wall_end();
+        translate([0, vp.y, 0]) mirror([1, 1, 0]) translate([0, -vp.y, 0]) pen_wall_end();
+        translate([-1, pen_c.y, pen_floor]) cube([pen_a + 1, pen_a + 1, vp_h]);
+        translate([0, 0, -1]) linear_extrude(pen_floor + 1 + eps) pen_floor_2d();
+        // Chamfers, in steps finer than a layer: the cut's bottom edge, and
+        // the tongue's top one.
+        for (i = [0:steps - 1]) {
+            translate([0, 0, i * chamfer_out / steps - eps]) linear_extrude(chamfer_out / steps + eps)
+                offset(r = chamfer_out * (1 - (i + 0.5) / steps)) pen_floor_2d();
+            translate([0, 0, pen_floor - chamfer + i * chamfer / steps]) linear_extrude(chamfer / steps + eps)
+                offset(r = chamfer * (i + 0.5) / steps) pen_floor_top_2d();
+        }
     }
     money_at = [vp.x - wall - money_well.x, (vp.y - money_well.y) / 2];
     money_floor = vp_h - money_n * tile_t;
@@ -356,28 +412,28 @@ module vp_tray() {
             pinch_slot(vp_slot_w, bz, vp_h, 0, vp_x(n - 1),
                    [[0, 1], for (i = [0:n - 1]) each [[vp_x(i), -1], if (i < n - 1) [vp_x(i) + vp_group(i), 1]]],
                    vp_slot_r);
-        // The flat outer faces get pinch_slot's chamfers; the round inner one a
-        // bevel from an octahedron run round the opening.
-        translate([pen_c.x, pen_c.y, 0]) round_well(pen_r, floor_t, vp_h);
-        pen_slots([[0, 1]], [[back, -1]]);
-        minkowski() {
-            intersection() {
-                translate([pen_c.x, pen_c.y, 0]) difference() {
-                    cylinder(r = pen_r + 0.05, h = vp_h + 1, $fn = 96);
-                    translate([0, 0, -1]) cylinder(r = pen_r, h = vp_h + 3, $fn = 96);
-                }
-                pen_slots([], []);
-            }
-            octahedron(chamfer_out);
-        }
+        translate([pen_c.x, pen_c.y, 0]) round_well(pen_r, pen_floor, vp_h);
+        pen_opening();
         // The money: its floor raised so the stack comes flush, and a pinch
-        // slot through the outside wall.
+        // slot through the outside wall, all the way down. The floor stops
+        // short of the stack's edge there: see floor_notch().
         translate([money_at.x, money_at.y, 0]) {
             well(money_well, money_floor, vp_h);
             rim(money_well, vp_h);
         }
-        translate([vp.x - wall, vp.y / 2, 0]) rotate(-90)
-            pinch_slot(money_slot_w, money_floor + 2, vp_h, 0, wall, [[0, 1], [wall, -1]], vp_slot_r);
+        // Below the floor the notch cuts the same opening as the slot, and
+        // chamfers its bottom edge. Inside, the slot's sides run straight on
+        // into the notch's, and are eased into the well.
+        money_inset = money_clear / 2 + floor_inset;
+        translate([vp.x - wall, vp.y / 2, 0]) rotate(-90) {
+            pinch_slot(money_slot_w, -10, vp_h, 0, wall, [[wall, -1]], vp_slot_r);
+            slot_ease(money_slot_w, -10, vp_h, money_floor, fillet_r, vp_slot_r);
+        }
+        // The notch's corners start where the floor's fillet ends, so the
+        // two meet on flat floor.
+        translate([vp.x - wall, (vp.y - money_slot_w) / 2, 0]) rotate(90)
+            floor_notch(money_slot_w, wall, money_inset, money_floor, chamfer_out, top_from = fillet_r,
+                        r = money_inset - fillet_r);
     }
 }
 // A spare bin over the VP tray, filling its pocket up to the layer's top,
@@ -443,8 +499,54 @@ module wood_tray() let ($back_scoop = true, $wall = 2.4) bin_tray("wood", wood, 
 
 // Cardboard trays are open: a plain floor and an L-shaped post at each
 // well corner, no walls between. Stacks lift straight out, gripped from the
-// open sides. Wells of one inner size, one above another in y, centered.
+// open sides, where the floor is cut back to under the stack's edge. Wells of one inner size, one above another in y, centered.
 post_l = 15; // each leg, past the corner
+// Where a neat stack's well is open at the side, the floor stops this far
+// inside the stack's edge, to get a fingertip under the stack.
+floor_inset = wall;
+// The cut for that, through the wall and the floor, in plan: along an opening
+// from x = 0 to len in a wall t thick, whose inside face is y = 0, the well in
+// +y, the floor, fl thick, is cut back to y = inset. The opening's corners are
+// chamfered, so it widens to the wall's faces: by chamfer_out at the outside
+// one, and by k_in at the inside one, where the notch in the floor is as wide.
+// The notch's inside corners are rounded by r. The whole cut's bottom edge is
+// chamfered by cb, and the floor's new top edge by ct, from y = top_from on:
+// a walled well's slot does the part by the wall itself (see slot_ease()).
+// Its outline is a union of convex pieces, so a chamfer can be hulled a piece
+// at a time: 0 the notch, 1 the way through the wall, 2 and 3 the outside
+// corners' chamfers, 4 and 5 the inside ones'.
+module floor_notch_piece(i, len, t, inset, k_in, r) {
+    k = chamfer_out;
+    module ends() for (m = [0, 1]) translate([m * len, 0]) mirror([m, 0]) children();
+    if (i == 0) hull() {
+        translate([-k_in, 0]) square([len + 2 * k_in, inset - r]);
+        for (x = [r - k_in, len + k_in - r]) translate([x, inset - r]) circle(r, $fn = 24);
+    }
+    else if (i == 1) translate([0, -t - 1]) square([len, t + 1 + eps]);
+    else if (i < 4) ends() if (i % 2 == 0) polygon([[-k - 1, -t - 1], [eps, -t - 1], [eps, -t + k]]);
+    else if (k_in > 0) ends() if (i % 2 == 0) polygon([[-k_in, eps], [eps, eps], [eps, -k_in]]);
+}
+module floor_notch(len, t, inset, fl, cb = chamfer, ct = chamfer, k_in = 0, top_from = 0, r = fillet_r) {
+    module piece(i, g = 0) offset(r = g) floor_notch_piece(i, len, t, inset, k_in, r);
+    // The part inside the wall's face, where the floor has a top edge.
+    module inner(g = 0, y0 = 0) intersection() {
+        piece(0, g);
+        translate([-k_in - g - 1, y0]) square([len + 2 * (k_in + g + 1), inset + g + 1]);
+    }
+    for (i = [0:5]) {
+        translate([0, 0, -1]) linear_extrude(fl + 1 + eps) piece(i);
+        hull() {
+            translate([0, 0, -eps]) linear_extrude(eps) piece(i, cb);
+            translate([0, 0, cb]) linear_extrude(eps) piece(i);
+        }
+    }
+    hull() {
+        translate([0, 0, fl - ct]) linear_extrude(eps) inner(0, top_from);
+        translate([0, 0, fl]) linear_extrude(eps) inner(ct, top_from);
+    }
+    // A walled well's floor is filleted into the wall: that goes too.
+    translate([0, 0, fl]) linear_extrude(fillet_r + eps) inner();
+}
 function stack_tray_size(well, n) = [well.x + stack_clear + 2 * post_t, n * (well.y + stack_clear + post_t) + post_t];
 module stack_tray(size, h, well, n) {
     in = well + [stack_clear, stack_clear];
@@ -459,13 +561,40 @@ module stack_tray(size, h, well, n) {
 // h_end is the height of the posts' legs along y, if not h.
 // $tray_floor is the floor's thickness. t_end is the thickness of the posts'
 // legs along y, and t_side of those along x, if not post_t.
+// Between the posts the floor is notched, to floor_inset inside the stack,
+// which has clear round it: along each side from side_span[0] to
+// side_span[1] of the well's length, and each end likewise by end_span;
+// from post to post if undef, not at all if false.
+// The floor's edges are rounded like the posts', so the two run flush.
 $tray_floor = floor_t;
-module open_tray(size, h, wells, h_end, t_end = post_t, t_side = post_t) {
-    // The floor: chamfered round the bottom only, so its sides run flush into
-    // the posts'.
-    intersection() {
-        cbox(size, $tray_floor + 1, 0.4);
-        cube([size.x, size.y, $tray_floor]);
+post_r = 0.6;
+module open_tray(size, h, wells, h_end, t_end = post_t, t_side = post_t, clear = [stack_clear, stack_clear],
+                 side_span, end_span) {
+    // One notch, in a wall whose inside face is y = 0: its inside corners
+    // rounded.
+    module notch_2d(span, inset) if (span != false) hull() {
+        translate([span[0], -1000]) square([span[1] - span[0], 1000 + inset - fillet_r]);
+        for (x = [span[0] + fillet_r, span[1] - fillet_r]) translate([x, inset - fillet_r]) circle(fillet_r, $fn = 24);
+    }
+    module plan() difference() {
+        square(size);
+        for (w = wells) translate(w[0]) {
+            in = w[1];
+            ss = is_undef(side_span) ? [post_l, in.x - post_l] : side_span;
+            es = is_undef(end_span) ? [post_l, in.y - post_l] : end_span;
+            for (m = [0, 1]) {
+                translate([0, m * in.y]) mirror([0, m]) notch_2d(ss, clear.y / 2 + floor_inset);
+                translate([m * in.x, 0]) mirror([m, 0]) mirror([1, -1]) notch_2d(es, clear.x / 2 + floor_inset);
+            }
+        }
+    }
+    // A thin floor's edges are rounded by a little less than half of it.
+    r = min(post_r, $tray_floor / 2 - 0.1);
+    // How far sphere($fn = 12) reaches up and down: not quite its radius.
+    rz = r * cos(15);
+    minkowski() {
+        translate([0, 0, rz]) linear_extrude($tray_floor - 2 * rz) offset(delta = -r) plan();
+        sphere(r, $fn = 12);
     }
     for (w = wells, sx = [0, 1], sy = [0, 1])
         translate(w[0] + [sx * w[1].x, sy * w[1].y]) mirror([sx, 0, 0]) mirror([0, sy, 0])
@@ -473,19 +602,17 @@ module open_tray(size, h, wells, h_end, t_end = post_t, t_side = post_t) {
 }
 // An L round the corner at the origin of a well lying in +x, +y. Each leg's
 // free end is one side of a pinch slot: rounded over at the top on a radius
-// of half its reach, leaving a flat on top, and filleted into the floor.
-// Every edge is rounded.
+// of half its reach, leaving a flat on top, and straight down from there, to
+// run on into the side of the floor's notch. Every edge is rounded.
 module corner_post(h, h_y, t_y = post_t, t_x = post_t) {
-    r = 0.6;
+    r = post_r;
     gap_w = 100; // the opening: only its near side matters
     // A leg's side, len long past the corner. On a short post (over a thick
-    // floor) the fillet and the round-over shrink to fit one above the other.
+    // floor) the round-over shrinks to fit.
     module side(h, len) difference() {
-        up = h - $tray_floor;
-        f = min(pinch_fillet, up / 3);
-        R = min(post_l / 2, up - f - 1); // leaves len - R flat on top
-        square([len + f, h]);
-        translate([len + gap_w / 2, 0]) pinch_2d(gap_w, $tray_floor, h, R, f);
+        R = min(post_l / 2, h - $tray_floor - 1); // leaves len - R flat on top
+        square([len, h]);
+        translate([len + gap_w / 2, 0]) pinch_2d(gap_w, -10, h, R);
     }
     // A leg along x, t thick, reaching c back past the corner to cover the
     // other leg's end.
@@ -533,7 +660,8 @@ assert(3 * (bld.y + gap) + strips.y <= box.y - 1, "the cardboard layer is too de
 module building_tray(n, size = bld) {
     $tray_floor = card_layer_h - n * card_t;
     in = building + [stack_clear, card_clear_y];
-    body() open_tray(size, card_layer_h, [[[(size.x - in.x) / 2, post_t], in]], undef, (size.x - in.x) / 2);
+    body() open_tray(size, card_layer_h, [[[(size.x - in.x) / 2, post_t], in]], undef, (size.x - in.x) / 2,
+                     clear = [stack_clear, card_clear_y]);
 }
 module setup_buildings_tray() let ($setup = true) building_tray(6, bld_beside);
 module strips_tray() {
@@ -542,7 +670,9 @@ module strips_tray() {
     ledge = in.x - short.x;
     x1 = post_t + short.x; // where the ledge starts
     body() {
-        open_tray(strips, strips_h, [[[post_t, post_t], in]]);
+        // The floor's notches are along the short strips' sides only.
+        open_tray(strips, strips_h, [[[post_t, post_t], in]], clear = [stack_clear, card_clear_y],
+                  side_span = [post_l, short.x - post_l], end_span = false);
         translate([x1, post_t, 0]) cube([ledge, in.y, strips_ledge_h]);
         // The short well's posts at the ledge: their end legs are no taller
         // than it.
@@ -697,6 +827,30 @@ module pinch_slot(w, bz, h, y0, y1, faces, top_r = pinch_top_r, fillet = pinch_f
             translate([0, 0, f[0] - eps]) linear_extrude(2 * eps) offset(r = c) pinch_piece(i, w, bz, h, top_r, fillet);
             translate([0, 0, f[0] + f[1] * c - eps]) linear_extrude(2 * eps) pinch_piece(i, w, bz, h, top_r, fillet);
         }
+    }
+}
+
+// Eases a pinch slot into the well behind its wall, in pinch_slot's frame: the
+// wall's face on the well is y = 0, the well in -y, its floor's top at fl and
+// filleted into the wall by fillet_r. Every edge where the slot's sides meet
+// the well's inside is chamfered by c: up the wall, round the end of the
+// floor's fillet, and along the floor's edge for reach, if the floor is cut
+// away under the slot (see floor_notch()).
+// A point goes if it's within c of the slot and the well together: both are
+// convex (the slot a piece at a time), so that's a hull of a few steps.
+module slot_ease(w, bz, h, fl, reach, top_r = pinch_top_r, fillet = pinch_fillet, c = chamfer, n = 4) {
+    xzy = [[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0]];
+    big = 2 * (w + h);
+    // The well's section, as [y, z].
+    module well_2d() hull() {
+        translate([-big, fl + fillet_r]) square([big, big]);
+        translate([-big, fl]) square([big - fillet_r, 1]);
+        translate([-fillet_r, fl + fillet_r]) circle(fillet_r, $fn = 32);
+    }
+    for (j = [0:pinch_pieces() - 1]) hull() for (i = [0:n]) let (d = c * i / n, e = c - d) intersection() {
+        multmatrix(xzy) translate([0, 0, -reach]) linear_extrude(reach + c + eps)
+            offset(r = d) pinch_piece(j, w, bz, h, top_r, fillet);
+        rotate([90, 0, 90]) linear_extrude(big, center = true) offset(r = e) well_2d();
     }
 }
 
@@ -1141,8 +1295,8 @@ module assembly() {
         if (show(5)) {
             deck_holders();
             translate([decks_x + gap, 0, 0]) vp_tray();
-            translate([decks_x + gap, 0, vp_h + explode / 2]) spare_bin();
         }
+        if (show(6)) translate([decks_x + gap, 0, vp_h + explode / 2]) spare_bin();
         translate([0, front_y + gap, 0]) {
             // Lower tier.
             if (show(5)) {
