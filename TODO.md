@@ -11,9 +11,16 @@
 Plates:
 - Printed: 3, 4, 9
 - Reprint: `VP`, `buildings_5`, `buildings_3 2`
+
 ## The Fox in the Forest
 
 - Reprint the box
+
+## SET
+
+- Measure the cards and the deck, set `sleeve` and `deck`
+- Get purple, lavender filament
+- Print the body and the lid
 
 ## Magic Octagon
 

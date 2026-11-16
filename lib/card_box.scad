@@ -35,11 +35,23 @@
 // $cb_size, the box's outside, and $cb_seam, the seam's height at the front
 // and at the back, are there to fit it by. It is trimmed to its face.
 //
+// A face's art can be of several colors: layers, each with a name and a
+// color, and a piece of its own. The face's child is then drawn once for
+// each, with its name in $cb_art, and draws that layer alone. They go on
+// like paint, a later layer covering the ones before it:
+//   card_box(part, front_art = [["card", "white"], ["pips", "red"]]) {
+//     if ($cb_art == "card") square([20, 30], center = true);
+//     else circle(4);
+//   }
+//
 // Printing. The joints fit as drawn at 0.08 mm layers: the 0.6 mm inlays, the
 // 0.84 mm magnet skins, the 2.04 mm walls and the 3.4 mm front and back all
 // end on whole layers, from the bed up. So the box asks for those layers
 // itself. For python/generate.py, the file that draws the box wants only:
 //   // export: panels seam magnets
+//
+// With more colors than the printer has heads, the body and the lid can
+// print apart, each with its own: `// export: body lid` in place of panels.
 //
 // More than one box in a file: give each a `name`, which goes before its
 // pieces' names, and move them apart.
@@ -50,6 +62,7 @@ use <piece.scad>
 
 //   part       closed, open, exploded: views.
 //              panels: every panel on the bed, outside down.
+//              body, lid: the panels of one of them, where they lie in panels.
 //              seam: a test, three short lengths of the front wall across the
 //              seam, each with the key and one magnet pocket, at the fits in
 //              seam_fits.
@@ -69,8 +82,12 @@ use <piece.scad>
 //   lid_back_h  height of the lid at the back, top plate included
 //   chamfer     on the outside edges, which also blunts the mitres' knife edges
 //
+//   box_color, lid_color, art_color  the body's, the lid's ("" for the
+//              body's), and that of art given by name alone
+//
 //   front_art, back_art, top_art  each face's art: its name, as a piece for
-//              the slicer, or "" for none
+//              the slicer, in art_color; or its layers, a list of [name,
+//              color]; or "" for none
 //   *_pattern  the pattern its face prints in, on the bed, as a panel, or ""
 //              for the panel's own
 //   art_depth  how deep art is inlaid
@@ -113,7 +130,7 @@ use <piece.scad>
 module card_box(part = "closed", explode = 12, name = "",
                 sleeve = [66.5, 92.5], stack = 40, clear = [2.5, 0.5, 0.5],
                 wall = 2.04, seam_drop = 25, lid_back_h = 14, chamfer = 0.6,
-                box_color = "forestgreen", art_color = "yellow",
+                box_color = "forestgreen", lid_color = "", art_color = "yellow",
                 front_art = "", front_art_pattern = "", back_art = "", back_art_pattern = "",
                 top_art = "", top_art_pattern = "", art_depth = 0.6,
                 mag = [18.4, 9, 2.5], mag_c = 0.12, mag_slack = 0.3, mag_glue = 0.4, mag_crush = 0.1, mag_rib_w = 1.2,
@@ -124,6 +141,7 @@ module card_box(part = "closed", explode = 12, name = "",
                 lid_gap = 5, bed_gap = 5) {
   $fn = 48;
   $piece_prefix = name;
+  lid_c = lid_color == "" ? box_color : lid_color;
   eps = 0.01;
 
   // The seam test's coupons set these two for themselves.
@@ -244,37 +262,58 @@ module card_box(part = "closed", explode = 12, name = "",
   /* Art */
 
   cb_art_faces = ["front", "back", "top"];
-  function cb_art_name(face) = face == "front" ? front_art : face == "back" ? back_art : top_art;
+  // A face's layers, each [name, color].
+  function cb_layers(art) = art == "" || art == [] ? [] : is_string(art) ? [[art, art_color]] : art;
+  function cb_art_layers(face) = cb_layers(face == "front" ? front_art : face == "back" ? back_art : top_art);
   function cb_art_pattern(face) =
     face == "front" ? front_art_pattern : face == "back" ? back_art_pattern : top_art_pattern;
 
-  // A face's art as drawn, sunk art_depth into it and standing `above` it.
-  module cb_art_drawn(face, above = 0) {
-    h = art_depth + above;
+  // One layer of a face's art as drawn, sunk art_depth into the face, and
+  // going on `over` past that, both ways.
+  module cb_art_drawn(face, layer, over = 0) {
+    $cb_art = layer;
+    h = art_depth + 2 * over;
     if (face == "front")
-      rotate([90, 0, 0]) translate([0, 0, -art_depth]) linear_extrude(h, convexity = 10) children(0);
+      rotate([90, 0, 0]) translate([0, 0, -art_depth - over]) linear_extrude(h, convexity = 10) children(0);
     else if (face == "back")
-      translate([0, by, 0]) rotate([90, 0, 180]) translate([0, 0, -art_depth])
+      translate([0, by, 0]) rotate([90, 0, 180]) translate([0, 0, -art_depth - over])
         linear_extrude(h, convexity = 10) children(1);
     else
-      translate([0, by / 2, box_h - art_depth]) linear_extrude(h, convexity = 10) children(2);
+      translate([0, by / 2, box_h - art_depth - over]) linear_extrude(h, convexity = 10) children(2);
   }
 
-  // What it takes out of its face: kept to its panel, inside the mitres.
+  // What it takes out of its face, every layer of it: kept to its panel,
+  // inside the mitres, and no deeper than the art.
   module cb_art_cut(face) {
-    if (cb_art_name(face) != "") intersection() {
+    layers = cb_art_layers(face);
+    if (layers != []) intersection() {
       cb_region(face);
-      cb_art_drawn(face, eps) { children(0); children(1); children(2); }
+      union() for (l = layers) cb_art_drawn(face, l[0]) { children(0); children(1); children(2); }
+      cb_art_slab(face);
     }
   }
 
-  // The inlay itself, trimmed to the box's chamfers as well. Rendered, as the
-  // preview otherwise paints it over the whole box.
-  module cb_art(face) {
-    render(convexity = 10) intersection() {
-      cb_region(face);
-      cb_art_drawn(face) { children(0); children(1); children(2); }
-      cb_outer();
+  // The outside of a face, to just past the art's depth and well out of it.
+  module cb_art_slab(face) {
+    d = art_depth;
+    if (face == "front") cb_box([-bx, bx], [-1, d], [-1, box_h + 1]);
+    else if (face == "back") cb_box([-bx, bx], [by - d, by + 1], [-1, box_h + 1]);
+    else cb_box([-bx, bx], [-1, by + 1], [box_h - d, box_h + 1]);
+  }
+
+  // Layer i of the inlay itself, less the layers over it, and trimmed to the
+  // box's chamfers as well. Rendered, as the preview otherwise paints it over
+  // the whole box.
+  module cb_art(face, i) {
+    layers = cb_art_layers(face);
+    render(convexity = 10) difference() {
+      intersection() {
+        cb_region(face);
+        cb_art_drawn(face, layers[i][0]) { children(0); children(1); children(2); }
+        cb_outer();
+      }
+      for (j = [i + 1 : 1 : len(layers) - 1])
+        cb_art_drawn(face, layers[j][0], eps) { children(0); children(1); children(2); }
     }
   }
 
@@ -423,13 +462,21 @@ module card_box(part = "closed", explode = 12, name = "",
       piece("seam test") color(box_color) cb_seam_test();
     } else if (part == "magnets") {
       piece("magnet test") color(box_color) cb_mag_test();
-    } else if (part == "panels") {
-      for (w = walls) piece(w, cb_face(w)) color(box_color) cb_flat(w) cb_panel(w) { children(0); children(1); children(2); }
-      piece("floor", cb_face("floor")) color(box_color) cb_flat("floor") cb_panel("floor") { children(0); children(1); children(2); }
-      for (w = walls) piece(str("lid ", w), cb_face(w)) color(box_color) cb_flat(w, true) cb_panel(w, true) { children(0); children(1); children(2); }
-      piece("top", cb_face("top")) color(box_color) cb_flat("top") cb_panel("top", true) { children(0); children(1); children(2); }
-      for (f = cb_art_faces) if (cb_art_name(f) != "")
-        piece(cb_art_name(f), cb_art_face(f)) color(art_color) cb_flat(f) cb_art(f) { children(0); children(1); children(2); }
+    } else if (part == "panels" || part == "body" || part == "lid") {
+      if (part != "lid") {
+        for (w = walls) piece(w, cb_face(w)) color(box_color) cb_flat(w) cb_panel(w) { children(0); children(1); children(2); }
+        piece("floor", cb_face("floor")) color(box_color) cb_flat("floor") cb_panel("floor") { children(0); children(1); children(2); }
+      }
+      if (part != "body") {
+        for (w = walls) piece(str("lid ", w), cb_face(w)) color(lid_c) cb_flat(w, true) cb_panel(w, true) { children(0); children(1); children(2); }
+        piece("top", cb_face("top")) color(lid_c) cb_flat("top") cb_panel("top", true) { children(0); children(1); children(2); }
+      }
+      // The top's art is the lid's, the rest the body's.
+      for (f = cb_art_faces) if (part == "panels" || (part == "lid") == (f == "top")) {
+        layers = cb_art_layers(f);
+        for (i = [0 : 1 : len(layers) - 1])
+          piece(layers[i][0], cb_art_face(f)) color(layers[i][1]) cb_flat(f) cb_art(f, i) { children(0); children(1); children(2); }
+      }
     } else {
       // Exploded pulls the panels apart, and the art out of its faces.
       e = part == "exploded" ? explode : 0;
@@ -437,6 +484,8 @@ module card_box(part = "closed", explode = 12, name = "",
       color(box_color) {
         for (w = walls) cb_exploded(w, e) cb_panel(w) { children(0); children(1); children(2); }
         cb_exploded("floor", e) cb_panel("floor") { children(0); children(1); children(2); }
+      }
+      color(lid_c) {
         for (w = walls) cb_exploded(w, e, lift) cb_panel(w, true) { children(0); children(1); children(2); }
         cb_exploded("top", e, lift) cb_panel("top", true) { children(0); children(1); children(2); }
       }
@@ -444,8 +493,11 @@ module card_box(part = "closed", explode = 12, name = "",
         cb_exploded(w, e) render() intersection() { cb_magnets(-1); cb_region(w); }
         cb_exploded(w, e, lift) render() intersection() { cb_magnets(1); cb_region(w); }
       }
-      color(art_color) for (f = cb_art_faces) if (cb_art_name(f) != "")
-        cb_exploded(f, e, f == "top" ? lift : 0) cb_art(f) { children(0); children(1); children(2); }
+      for (f = cb_art_faces) {
+        layers = cb_art_layers(f);
+        for (i = [0 : 1 : len(layers) - 1]) color(layers[i][1])
+          cb_exploded(f, e, f == "top" ? lift : 0) cb_art(f, i) { children(0); children(1); children(2); }
+      }
     }
   }
 

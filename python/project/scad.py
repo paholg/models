@@ -28,6 +28,7 @@ COLOR_NAMES = {
     "#8B4513": "saddlebrown", "#D3D3D3": "lightgray", "#800080": "purple",
     "#FFC0CB": "pink", "#A52A2A": "brown", "#FFD700": "gold", "#000080": "navy",
     "#008080": "teal", "#00FF00": "lime", "#00FFFF": "cyan", "#FF00FF": "magenta",
+    "#E6E6FA": "lavender",
 }  # fmt: skip
 
 # Asked for in place of a piece, to see what is in none: no piece has no name.
