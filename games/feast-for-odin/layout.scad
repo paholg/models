@@ -33,6 +33,7 @@
 // plate: vikings
 
 include <special_layout.scad>
+use <../../lib/orca.scad>
 
 part = "assembly"; // [assembly, half, half_a, half_b, big, boats, vp, vikings, islands, wood, buildings_3, buildings_5, setup_buildings, misc, strips, discard, spare, frame, frame_half, boards, special, special_forge, special_others, special_test, decks, deck_setup, deck_occupations, deck_weapons]
 // Vertical gap between layers in the assembly view.
@@ -1354,6 +1355,11 @@ module the_part() {
     else if (part == "deck_occupations") deck_tray(1);
     else if (part == "deck_weapons") deck_tray(2);
 }
+// The open trays' floors are thick, and only thin posts go on above them: where
+// a floor's solid top layers end, they push a ridge out into the posts. Less
+// so with the outside wall drawn first.
+open_tray_parts = ["islands", "buildings_3", "buildings_5", "setup_buildings", "strips"];
+if (len([for (p = open_tray_parts) if (p == part) 1]) > 0) orca([orca_wall_sequence("outer wall/inner wall")]);
 // Every color the parts use. New colors go last, so a saved Orca project's
 // objects keep their order.
 // Each once: black is a viking color too.

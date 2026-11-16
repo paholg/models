@@ -57,7 +57,9 @@ A print can pause, to put something inside it: `echo(pause = z)` pauses once
 the print is z high, or a layer sooner: leave a layer's room over what goes in.
 
 `// plate:` lines ask for one more project, gen/<dir>/<stem>-all.3mf, with
-everything in it, laid out on as many plates as it takes. Each line is a group
+everything in it, laid out on as many plates as it takes. It applies the
+settings its parts share; one that only some have goes on those parts' own
+objects, if Orca lets an object have it, and is left out with a warning if not. Each line is a group
 of parts to print together, with `*N` for copies:
 
     // plate: lid*2 base
@@ -106,11 +108,13 @@ def combine(
     colors: dict[str, list[str]],
     heads: dict[str, int],
     filaments: dict[str, str],
+    own: dict[str, dict[str, str]],
 ) -> None:
     """Write one published project of the parts as packed, a plate for each of `packed`.
 
     `colors` are each part's and `heads` the tool head for each; `filaments` names
-    the filament a color stands for, for the plates' names.
+    the filament a color stands for, for the plates' names. `own` are the settings
+    of each part alone, beyond `settings`.
     """
     cols = math.ceil(math.sqrt(len(packed)))
 
@@ -138,6 +142,7 @@ def combine(
                     part if copy == 1 else f"{part} {copy}",
                     f"{at[0]} {at[1]:.4f} {at[2]:.4f} {-z0:.4f}",
                     heads,
+                    own.get(part, {}),
                 )
             )
         name = ", ".join(p if n == 1 else f"{p} x{n}" for p, n in count.items())
@@ -222,16 +227,25 @@ def generate(file: Path) -> None:
             + "".join(f", pause at {z:g} mm" for z in render.pauses)
         )
     if groups:
-        # One project has one set of settings: those its parts agree on.
+        # One project has one set of settings: those its parts agree on. The
+        # rest go on each part's own objects, where Orca lets an object have one.
         parts = [wanted[p] for g in groups for p in g]
         shared = {
             k: v
             for k, v in parts[0].items()
             if k not in PRESETS and all(p.get(k) == v for p in parts)
         }
-        if dropped := sorted({k for p in parts for k in p} - set(shared) - PRESETS):
+        rest = {
+            p: {k: v for k, v in wanted[p].items() if k not in PRESETS | set(shared)}
+            for g in groups
+            for p in g
+        }
+        ownable = orca.own_keys() if any(rest.values()) else frozenset()
+        own = {p: {k: v for k, v in r.items() if k in ownable} for p, r in rest.items()}
+        if dropped := sorted({k for r in rest.values() for k in r} - ownable):
             print(
-                f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts don't share"
+                f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts"
+                " don't share, and an object can't have of its own"
             )
         combine(
             out_dir / f"{file.stem}-all.3mf",
@@ -241,6 +255,7 @@ def generate(file: Path) -> None:
             colors,
             heads,
             filaments,
+            own,
         )
 
 

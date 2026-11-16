@@ -13,7 +13,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape, unescape
 
@@ -87,6 +87,8 @@ class Placed:
     name: str  # for its object of everything left
     transform: str
     filaments: dict[str, int]  # the tool head for each color
+    # Settings for its objects alone, where the project's are for every plate.
+    settings: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -96,19 +98,29 @@ class Plate:
 
 
 @functools.cache
-def object_keys() -> frozenset[str]:
-    """The settings Orca keeps for a whole object, which a part can't carry."""
+def config_keys(name: str) -> frozenset[str]:
+    """The settings in one of Orca's config classes, PrintObjectConfig say."""
     if "ORCA_SOURCE" not in os.environ:
-        sys.exit("a piece has settings, which takes $ORCA_SOURCE to sort them")
+        sys.exit("settings of a piece or a part take $ORCA_SOURCE to sort them")
     header = Path(os.environ["ORCA_SOURCE"]) / "src/libslic3r/PrintConfig.hpp"
     block = re.search(
-        r"^PRINT_CONFIG_CLASS_DEFINE\(\s*PrintObjectConfig,(.*?)^\)",
+        rf"^PRINT_CONFIG_CLASS_DEFINE\(\s*{name},(.*?)^\)",
         header.read_text(),
         re.DOTALL | re.MULTILINE,
     )
     if not block:
-        sys.exit(f"no PrintObjectConfig in {header}")
+        sys.exit(f"no {name} in {header}")
     return frozenset(re.findall(r"\(\(\s*ConfigOption[^,]*,\s*(\w+)\)\)", block[1]))
+
+
+def object_keys() -> frozenset[str]:
+    """The settings Orca keeps for a whole object, which a part can't carry."""
+    return config_keys("PrintObjectConfig")
+
+
+def own_keys() -> frozenset[str]:
+    """The settings an object can have of its own, apart from the project's."""
+    return object_keys() | config_keys("PrintRegionConfig")
 
 
 def metadata(parent: ET.Element, key: str) -> ET.Element:
@@ -306,7 +318,12 @@ def write(
                 first = str(placed.filaments.get(o.volumes[0].color, 1))
                 add_metadata(
                     noted,
-                    {"name": o.name or placed.name, "extruder": first, **o.settings},
+                    {
+                        "name": o.name or placed.name,
+                        "extruder": first,
+                        **placed.settings,
+                        **o.settings,
+                    },
                 )
                 for v in o.volumes:
                     vid = str(ids[v.number])

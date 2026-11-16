@@ -56,6 +56,10 @@ function orca_solid_infill_direction(a) = ["solid_infill_direction", a];
 // Directions follow the model, so that turning it in Orca turns the lines too.
 function orca_align_infill_to_model(on = true) = ["align_infill_direction_to_model", on ? 1 : 0];
 
+// The order a layer's walls are drawn in: "inner wall/outer wall",
+// "outer wall/inner wall", "inner-outer-inner wall" (which takes three walls).
+function orca_wall_sequence(order) = ["wall_sequence", order];
+
 // How walls are drawn: arachne, whose lines vary in width to fit, or classic,
 // at one width, which leaves out a wall too thin for it.
 function orca_wall_generator(generator) = ["wall_generator", generator];
