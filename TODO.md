@@ -10,7 +10,6 @@
 
 Plates:
 - Printed: 3, 4, 9
-- Reprint: `VP`, `buildings_5`, `buildings_3 2`
 
 ## The Fox in the Forest
 
