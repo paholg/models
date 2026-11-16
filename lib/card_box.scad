@@ -96,6 +96,8 @@ use <piece.scad>
 //              color]; or "" for none
 //   *_pattern  the pattern its face prints in, on the bed, as a panel, or ""
 //              for the panel's own
+//   *_turn     how far its art is turned, counter-clockwise as seen from
+//              outside: the lines it prints in turn with it
 //   art_depth  how deep art is inlaid
 //
 //   mag        bar magnets in the seam: length along the wall, height, thickness
@@ -138,7 +140,8 @@ module card_box(part = "closed", explode = 12, name = "",
                 wall = 2.04, seam_drop = 25, lid_back_h = 14, chamfer = 0.6, ease = 0.24,
                 box_color = "forestgreen", lid_color = "", art_color = "yellow",
                 front_art = "", front_art_pattern = "", back_art = "", back_art_pattern = "",
-                top_art = "", top_art_pattern = "", art_depth = 0.6,
+                top_art = "", top_art_pattern = "",
+                front_art_turn = 0, back_art_turn = 0, top_art_turn = 0, art_depth = 0.6,
                 mag = [18.4, 9, 2.5], mag_c = 0.12, mag_slack = 0.3, mag_glue = 0.4, mag_crush = 0.1, mag_rib_w = 1.2,
                 mag_rib_tip = 0.4, mag_skin = 0.84, mag_cover = 0.4, mag_x = 20,
                 key_w = 14, key_h = 2.5, key_lean = 1.25, key_c = 0.05,
@@ -494,8 +497,12 @@ module card_box(part = "closed", explode = 12, name = "",
     name == "right" ? cb_lines(atan2(1, seam_k)) :
     name == "floor" ? [orca_bottom_pattern("concentric")] : cb_lines(0);
 
-  // A face's art, as a panel: its own pattern, or its panel's.
-  function cb_art_face(face) = cb_art_pattern(face) == "" ? cb_face(face) : [orca_bottom_pattern(cb_art_pattern(face))];
+  // A face's art, as a panel: its own pattern, or its panel's lines, turned
+  // as the art is. Outside down, a turn is the other way on the bed.
+  function cb_art_turn(face) = face == "front" ? front_art_turn : face == "back" ? back_art_turn : top_art_turn;
+  function cb_art_face(face) =
+    cb_art_pattern(face) != "" ? [orca_bottom_pattern(cb_art_pattern(face))] :
+    cb_lines((face == "top" ? 0 : 90) - cb_art_turn(face));
 
   /* The box: its pieces, or a view of it. Children are the art. */
 

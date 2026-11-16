@@ -130,16 +130,16 @@ module cards() {
 }
 
 /* The logo: for each letter a white tile, edged in purple, in front of a
-   purple one and a striped one, each up and to the right of the last. */
+   purple one and one striped purple and white, each up and to the right of the last. */
 
 // A tile's side, with the row of them logo_w across.
-tile = logo_w / (2 * 1.4 + 1.6);
+tile = logo_w / (2 * 1.4 + 1.44);
 tile_size = [tile, 0.88 * tile];
 tile_pitch = 1.4 * tile;
 tile_edge = 0.06 * tile;
 // The tiles behind: how far each is from the front one.
-tile_mid = [0.3 * tile, 0.16 * tile];
-tile_far = [0.6 * tile, 0.3 * tile];
+tile_mid = [0.22 * tile, 0.16 * tile];
+tile_far = [0.44 * tile, 0.3 * tile];
 tile_stripes = 8;
 
 module tile_at(i) {
@@ -153,32 +153,51 @@ module letter(i) {
   else text("SET"[i], size = 0.58 * tile, font = logo_font, halign = "center", valign = "center");
 }
 
+// The striped tile's bars.
+module tile_bars() {
+  pitch = tile_size.y / tile_stripes;
+  for (k = [0 : tile_stripes - 1]) translate([-tile_size.x / 2, -tile_size.y / 2 + k * pitch])
+    square([tile_size.x, pitch / 2]);
+}
+
 module logo() {
-  for (i = [0 : 2]) tile_at(i) {
-    if ($cb_art == "logo") {
-      // Striped: a frame, and bars across it.
-      translate(tile_far) {
-        difference() {
-          square(tile_size, center = true);
-          offset(delta = -tile_edge) square(tile_size, center = true);
-        }
-        pitch = tile_size.y / tile_stripes;
-        for (k = [0 : tile_stripes - 1]) translate([-tile_size.x / 2, -tile_size.y / 2 + k * pitch])
-          square([tile_size.x, pitch / 2]);
+  if ($cb_art == "logo") for (i = [0 : 2]) tile_at(i) {
+    // Striped: a frame, and bars across it.
+    translate(tile_far) {
+      difference() {
+        square(tile_size, center = true);
+        offset(delta = -tile_edge) square(tile_size, center = true);
       }
-      translate(tile_mid) square(tile_size, center = true);
-      // The front tile's edge, and its letter, through the white.
-      offset(delta = tile_edge) square(tile_size, center = true);
-      letter(i);
-    } else difference() {
+      tile_bars();
+    }
+    translate(tile_mid) square(tile_size, center = true);
+    // The front tile's edge, and its letter, through the white.
+    offset(delta = tile_edge) square(tile_size, center = true);
+    letter(i);
+  } else {
+    for (i = [0 : 2]) tile_at(i) difference() {
       square(tile_size, center = true);
       letter(i);
+    }
+    // Between the striped tiles' bars, where they show past the tiles in
+    // front of them: their own, and the next letter's.
+    difference() {
+      for (i = [0 : 2]) tile_at(i) translate(tile_far) difference() {
+        offset(delta = -tile_edge) square(tile_size, center = true);
+        tile_bars();
+      }
+      for (i = [0 : 2]) tile_at(i) {
+        translate(tile_mid) square(tile_size, center = true);
+        offset(delta = tile_edge) square(tile_size, center = true);
+        letter(i);
+      }
     }
   }
 }
 
 card_box(part, sleeve = sleeve, stack = deck, box_color = box_color, lid_color = lid_color,
          front_art = [["cards", card_color], ["diamonds", "green"], ["ovals", "red"]],
+         front_art_turn = cards_lean,
          top_art = [["logo", box_color], ["logo white", "white"]]) {
   cards();
   square(0);
