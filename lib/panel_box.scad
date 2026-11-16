@@ -15,6 +15,11 @@
 // rabbet in the other. Printed outside down, every mating face is a wall or
 // faces up: nothing overhangs, so nothing droops and binds.
 //
+// A panel's last layers, its inside face, flare a little past its edges. So
+// the edges of that face that would meet another panel are chamfered clear:
+// the end of the panel that sits in a rabbet (`relief`), and the top of the
+// rabbet's wall (`ease`), which is the box's inside corner.
+//
 // Which panel sits in which is by `rank`, by axis: along an edge, the higher
 // panel ends square and the lower has the rabbet. By default the front and
 // back drop between the sides, and the floor and top drop into all four
@@ -23,14 +28,15 @@
 // panels meet, the cuts along the three edges share the corner out between
 // them with nothing left over.
 //
-// Fit, as found with test/joints at 0.08 mm layers: the rabbet locates the
+// Fit, as found with test coupons at 0.08 mm layers: the rabbet locates the
 // panels and the mitre closes with no gap. At 0.2 mm layers the mitre's
 // steps stand proud and lever the joint out of square; mitre_gap is for
 // that. Keep `mitre`, `brk` and every t on whole layers.
 //
 // Gluing: tape the panels up dry, outside, then run thin CA along the inside
 // corners. It wicks through the rabbet and stops at the glue break, a trough
-// under the mitre's inner end, short of the outside.
+// under the mitre's inner end, short of the outside. The eased corner is a V
+// that holds the drop on the joint.
 
 function pb_names() = ["left", "right", "front", "back", "floor", "top"];
 function pb_axis(name) = name == "left" || name == "right" ? 0 : name == "front" || name == "back" ? 1 : 2;
@@ -65,9 +71,12 @@ module pb_edge(size, a, b) {
 //   brk        depth of the glue break
 //   relief     chamfer on a higher panel's inside end corner, to clear the
 //              rabbet's inside corner
+//   ease       chamfer on the top of a lower panel's rabbet wall, the box's
+//              inside corner. The wall is what squares the joint: leave most
+//              of it.
 //   gap        between a higher panel's end and the rabbet's floor
-module pb_panel(name, size, t, rank = [0, 1, 2], mitre = 1, mitre_gap = 0, brk = 0.32, relief = 0.15,
-                gap = 0) {
+module pb_panel(name, size, t, rank = [0, 1, 2], mitre = 1, mitre_gap = 0, brk = 0.32, relief = 0.24,
+                ease = 0.24, gap = 0) {
   i = pb_axis(name);
   far = pb_far(name);
   big = max(size) + 2;
@@ -82,13 +91,13 @@ module pb_panel(name, size, t, rank = [0, 1, 2], mitre = 1, mitre_gap = 0, brk =
         pb_edge(size, [i, far], [j, fj])
           polygon([[-1, -1], [mitre, mitre], [mitre, e], [t[i] - relief, e], [t[i], e + relief],
                    [big, e + relief], [big, -1]]);
-      // The lower gives up what is outside the mitre, the glue break, and
-      // then the rabbet, as wide as the higher is thick.
+      // The lower gives up what is outside the mitre, the glue break, the
+      // rabbet, as wide as the higher is thick, and the top of its wall.
       else
         pb_edge(size, [j, fj], [i, far])
           polygon([[mitre_gap - 1, -1], [mitre - brk + mitre_gap, mitre - brk],
                    [mitre + mitre_gap, mitre - brk], [mitre + mitre_gap, mitre], [t[j], mitre],
-                   [t[j], big], [-1, big], [-1, -1]]);
+                   [t[j], t[i] - ease], [t[j] + ease, t[i]], [t[j] + ease, big], [-1, big], [-1, -1]]);
     }
   }
 }

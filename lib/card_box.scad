@@ -22,9 +22,13 @@
 // the inside, each facing its partner edge to edge across the seam. A cover
 // of plastic stands between each magnet and the seam, so that magnets never
 // touch and the seam bears on plastic: a wall one line wide, as a panel
-// prints. They're magnetized through their thickness, so glue one of each
+// prints, stopping `ease` short of the wall's inside face. They're magnetized through their thickness, so glue one of each
 // pair in flipped, to attract. A trapezoid key on each wall's seam locates
 // the lid.
+//
+// A panel's last layers, its inside face, flare a little past its edges, and
+// at the seam that holds the lid off. So the seam's inside edges are
+// chamfered, keys and all, as panel_box.scad's are in the joints.
 //
 // Art is inlaid flush in the front, the back and the top: a second color, in
 // pieces of its own. It is the box's children, in that order, each drawn in
@@ -81,6 +85,8 @@ use <piece.scad>
 //   seam_drop   how far the seam drops from back to front
 //   lid_back_h  height of the lid at the back, top plate included
 //   chamfer     on the outside edges, which also blunts the mitres' knife edges
+//   ease        chamfer on the inside edges that meet another piece: the
+//               seam's, and the joints'. Whole layers.
 //
 //   box_color, lid_color, art_color  the body's, the lid's ("" for the
 //              body's), and that of art given by name alone
@@ -129,7 +135,7 @@ use <piece.scad>
 //              piece, and between panels
 module card_box(part = "closed", explode = 12, name = "",
                 sleeve = [66.5, 92.5], stack = 40, clear = [2.5, 0.5, 0.5],
-                wall = 2.04, seam_drop = 25, lid_back_h = 14, chamfer = 0.6,
+                wall = 2.04, seam_drop = 25, lid_back_h = 14, chamfer = 0.6, ease = 0.24,
                 box_color = "forestgreen", lid_color = "", art_color = "yellow",
                 front_art = "", front_art_pattern = "", back_art = "", back_art_pattern = "",
                 top_art = "", top_art_pattern = "", art_depth = 0.6,
@@ -172,6 +178,7 @@ module card_box(part = "closed", explode = 12, name = "",
   mag_d = mag_cover + mag.y + mag_slack;
   assert(z_top - z_sb >= mag_d + mag_glue + 1, "lid too short at the back for its magnets");
   assert(mag_x - mag.x / 2 - mag_glue - 1 >= key_w / 2 + key_c, "magnets crowd the key");
+  assert(ease <= 0.5, "ease reaches under the keys");
   assert(mag_x + mag.x / 2 + mag_glue + 1 <= xs, "magnets run into the corners");
 
   module cb_box(x, y, z) {
@@ -205,10 +212,11 @@ module card_box(part = "closed", explode = 12, name = "",
       rotate([90, 0, 90]) linear_extrude(bx + 2, center = true) cb_key_2d(g);
   }
 
-  // Everything the body keeps: below the seam, plus the keys grown by g.
-  module cb_below_seam(g = 0) {
+  // Everything the body keeps: below the seam, plus the keys grown by g. With
+  // the seam between the keys raised by lift.
+  module cb_below_seam(g = 0, lift = 0) {
     big = [-bx, bx];
-    intersection() {
+    translate([0, 0, lift]) intersection() {
       union() {
         cb_box(big, [-1, by + 1], [-1, z_sf]);
         multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, seam_k, 1, z_sf - seam_k * tf]])
@@ -222,13 +230,15 @@ module card_box(part = "closed", explode = 12, name = "",
   /* Magnets */
 
   // A magnet's pocket: x along the wall, y into it from its inside face, z away
-  // from the seam, which is at 0. Oversize by mag_glue at both ends and at the
+  // from the seam, which is at 0. Its cover stops `ease` short of the inside
+  // face, flat, where the seam's chamfer would leave it a feather. Oversize by mag_glue at both ends and at the
   // far edge, with two crush ribs on each end, flat-tipped, running the way the
   // magnet drops in, and two pads at the far edge for it to seat against.
   module cb_mag_pocket() {
     l = mag.x / 2 + mag_glue;
     t = mag.z + mag_c / 2;
     crush = cb_mag_crush();
+    translate([-l, -eps, -eps]) cube([2 * l, ease + eps, mag_cover + 2 * eps]);
     difference() {
       translate([-l, -eps, mag_cover]) cube([2 * l, t + eps, mag_d + mag_glue - mag_cover]);
       for (sx = [-1, 1], zc = [for (f = [0.25, 0.75]) mag_cover + f * mag.y])
@@ -317,6 +327,35 @@ module card_box(part = "closed", explode = 12, name = "",
     }
   }
 
+  /* The seam's inside edges */
+
+  // What the chamfer takes from the body, or from the lid: in each wall, next
+  // to its inside face, whatever is within reach across the seam, the reach
+  // falling from `ease` at the face to nothing `ease` into the wall. In steps
+  // finer than a layer, as the seam is no shape to taper whole. Each wall's
+  // is kept to its own panel.
+  module cb_seam_ease(lid) {
+    n = 6;
+    for (w = walls, k = [0 : n - 1]) {
+      // Into the wall, from and to.
+      a = k == 0 ? -eps : k * ease / n;
+      b = (k + 1) * ease / n;
+      s = ease * (1 - (k + 0.5) / n);
+      intersection() {
+        cb_region(w);
+        if (w == "front") cb_box([-xo, xo], [tf - b, tf - a], [0, box_h]);
+        else if (w == "back") cb_box([-xo, xo], [y_back + a, y_back + b], [0, box_h]);
+        else if (w == "left") cb_box([-xs - b, -xs - a], [0, by], [0, box_h]);
+        else cb_box([xs + a, xs + b], [0, by], [0, box_h]);
+        if (lid) cb_below_seam(cb_key_c() + s, s);
+        else difference() {
+          cb_box([-bx, bx], [-1, by + 1], [-1, box_h + 1]);
+          cb_below_seam(-s, -s);
+        }
+      }
+    }
+  }
+
   /* Shells */
 
   // Before their art is cut.
@@ -328,6 +367,7 @@ module card_box(part = "closed", explode = 12, name = "",
       }
       cb_cavity();
       cb_mag_pockets(-1);
+      cb_seam_ease(false);
     }
   }
 
@@ -337,6 +377,7 @@ module card_box(part = "closed", explode = 12, name = "",
       cb_below_seam(cb_key_c());
       cb_cavity();
       cb_mag_pockets(1);
+      cb_seam_ease(true);
     }
   }
 
@@ -413,7 +454,7 @@ module card_box(part = "closed", explode = 12, name = "",
   walls = ["front", "back", "left", "right"];
 
   module cb_region(name) {
-    translate([-xo, 0, 0]) pb_panel(name, cb_size, [wall, tf, wall]);
+    translate([-xo, 0, 0]) pb_panel(name, cb_size, [wall, tf, wall], relief = ease, ease = ease);
   }
 
   module cb_panel(name, lid = false) {
