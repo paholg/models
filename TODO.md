@@ -9,7 +9,8 @@
 ## A Feast for Odin
 
 Plates:
-- Printed: 3, 4, 9
+- Printed: 3, 4, 8, 9
+- Reprint: Strips, boat, wood
 
 ## The Fox in the Forest
 

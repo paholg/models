@@ -58,6 +58,9 @@ boats; we would want to print the prices (3, 5, 8) on it.
 VP bonus: 25 mm square, 2x "4 vp", 6x "3 vp", 8x "2 vp"
 
 Boats, in tiles: 8x 1x4, 10x 2x3, 12x 2x4, 10x 2x4
+Boats are _not_ tile sized, though.
+2x3 tile: 21 x 31.6; 2x3 boat: 26 x 34
+The others are the correct width, but instead of 43 are 46 long.
 
 ### Goods, Money, Animals
 

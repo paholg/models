@@ -247,14 +247,17 @@ assert(abs(sum(big_cols) + (len(big_cols) + 1) * wall - big.x) < 0.01, "the big 
 // Boats: a market of stacks, like mini decks. Each well fits its tile
 // lengthwise (long side front to back), with a pinch slot through the front
 // and back walls. The slots leave a lip each side to hold the stack in.
-// [label, tile footprint, count], left to right. The twelve of one 2x4 kind
-// are split in two, so no stack is taller than the tier.
+// [label, footprint, count], left to right. The twelve of one 2x4 kind are
+// split in two, so no stack is taller than the tier.
+// A boat is bigger than the tiles it's named for: the 4-long ones are 46
+// long, their widths the tiles', and the 2x3 is 26 x 34.
+boat_l = 46;
 boats = [
-    ["1x4", t(1, 4), 8],
-    ["2x3", t(2, 3), 10],
-    ["2x4", t(2, 4), 6],
-    ["2x4", t(2, 4), 6],
-    ["2x4", t(2, 4), 10],
+    ["1x4", [unit, boat_l], 8],
+    ["2x3", [26, 34], 10],
+    ["2x4", [2 * unit, boat_l], 6],
+    ["2x4", [2 * unit, boat_l], 6],
+    ["2x4", [2 * unit, boat_l], 10],
 ];
 boat_clear = 1;
 // Between its sides; the round-overs widen it at the rim.
@@ -280,6 +283,32 @@ function boat_x(i) = boat_wall + sum([for (j = [0:1:i - 1]) boat_well[j].x + boa
 // start where the floor's fillet ends.
 module boat_notch(len, t, fl) let (inset = boat_clear / 2 + floor_inset)
     floor_notch(len, t, inset, fl, chamfer_out, top_from = fillet_r, r = inset - fillet_r);
+// Where a short well leaves a thick wall, front or back, the wall is cut back
+// to the usual thickness across the well, so its slot is no deeper to reach
+// into than the others'. The outside face is y = 0, the tray in +y; the cut is
+// w wide, centered on x = 0, and d deep. It's a bite out of the tray's
+// outline, with the outline's own chamfers: chamfer_out round its top and
+// bottom edges, and chamfer_corner on the two corners at its mouth.
+// Convex pieces, each chamfer hulled a piece at a time: 0 the bite, 1 and 2
+// the corners.
+module boat_recess(w, d) {
+    k = chamfer_out;
+    cc = chamfer_corner;
+    module piece(i, g = 0) offset(delta = g)
+        if (i == 0) translate([-w / 2, -1]) square([w, d + 1]);
+        else mirror([i - 1, 0]) polygon([[w / 2 - eps, -1], [w / 2 + cc + 1, -1], [w / 2 - eps, cc + eps]]);
+    for (i = [0:2]) {
+        translate([0, 0, -1]) linear_extrude(boat_h + 2) piece(i);
+        hull() {
+            translate([0, 0, -eps]) linear_extrude(eps) piece(i, k);
+            translate([0, 0, k]) linear_extrude(eps) piece(i);
+        }
+        hull() {
+            translate([0, 0, boat_h - k]) linear_extrude(eps) piece(i);
+            translate([0, 0, boat_h]) linear_extrude(eps) piece(i, k);
+        }
+    }
+}
 // The boat market: its own piece, with the pinch slots open front and back.
 module boat_tray() {
     body() difference() {
@@ -287,8 +316,9 @@ module boat_tray() {
         for (i = [0:len(boats) - 1]) {
             w = boat_well[i];
             sw = min(boat_slot_w, w.x - 2 * boat_slot_lip);
-            // Well, against the back.
-            translate([boat_x(i), boat.y - wall - w.y, 0]) {
+            // Well, centered front to back: a short one has thicker walls there.
+            wy = (boat.y - w.y) / 2;
+            translate([boat_x(i), wy, 0]) {
                 well(w, boat_floor(i), boat_h);
                 rim(w, boat_h);
             }
@@ -296,7 +326,6 @@ module boat_tray() {
             // down, the floor cut back from each (see floor_notch()); the
             // skinny first well is too narrow for that, so its slot goes
             // through the outer side wall instead.
-            wy = boat.y - wall - w.y;
             fl = boat_floor(i);
             if (i == 0) {
                 translate([0, wy + w.y / 2, 0]) rotate(-90)
@@ -307,11 +336,16 @@ module boat_tray() {
                     boat_notch(boat_side_slot_w, boat_wall, fl);
             }
             else translate([boat_x(i) + w.x / 2, 0, 0]) {
-                pinch_slot(sw, -10, boat_h, 0, wy, [[0, 1]], boat_slot_r);
-                pinch_slot(sw, -10, boat_h, wy + w.y, boat.y, [[boat.y, -1]], boat_slot_r);
+                // The walls there are no thicker than wall.
+                if (wy > wall + eps) for (m = [0, 1]) translate([0, m * boat.y, 0]) mirror([0, m, 0])
+                    boat_recess(w.x, wy - wall);
+                // No further out than that: where a slot runs on through a
+                // recess, the preview draws a stray face.
+                pinch_slot(sw, -10, boat_h, wy - wall, wy, [[wy - wall, 1]], boat_slot_r);
+                pinch_slot(sw, -10, boat_h, wy + w.y, wy + w.y + wall, [[wy + w.y + wall, -1]], boat_slot_r);
                 translate([0, wy, 0]) mirror([0, 1, 0]) slot_ease(sw, -10, boat_h, fl, fillet_r, boat_slot_r);
                 translate([0, wy + w.y, 0]) slot_ease(sw, -10, boat_h, fl, fillet_r, boat_slot_r);
-                translate([-sw / 2, wy, 0]) boat_notch(sw, wy, fl);
+                translate([-sw / 2, wy, 0]) boat_notch(sw, wall, fl);
                 translate([-sw / 2, wy + w.y, 0]) mirror([0, 1, 0]) boat_notch(sw, wall, fl);
             }
         }
@@ -490,8 +524,8 @@ module octahedron(c) polyhedron(
 
 wood_rows = [
     [-1, [
-        ["ore", 60, [11, 11], 0, c_wood],
-        ["stone", 63, [20, 13], 0, c_wood],
+        ["ore", 60.8, [11, 11], 0, c_wood],
+        ["stone", 60.8, [20, 13], 0, c_wood],
         ["wood", -1, [21, 14], 0, c_wood],
     ]],
 ];
@@ -683,8 +717,9 @@ module strips_tray() {
         for (y = [0, post_t + in.y]) translate([x1, y, 0]) cube([ledge, post_t, strips_h]);
         // The end walls are solid, edges rounded like the posts'.
         for (x = [0, strips.x - post_t]) translate([x, 0, 0]) minkowski() {
-            r = 0.6;
-            translate([r, r, 0]) cube([post_t - 2 * r, strips.y - 2 * r, strips_h - r]);
+            r = post_r;
+            rz = r * cos(15); // the sphere's reach down: see open_tray()
+            translate([r, r, rz]) cube([post_t - 2 * r, strips.y - 2 * r, strips_h - r - rz]);
             sphere(r, $fn = 12);
         }
     }
@@ -1359,7 +1394,14 @@ module the_part() {
 // a floor's solid top layers end, they push a ridge out into the posts. Less
 // so with the outside wall drawn first.
 open_tray_parts = ["islands", "buildings_3", "buildings_5", "setup_buildings", "strips"];
-if (len([for (p = open_tray_parts) if (p == part) 1]) > 0) orca([orca_wall_sequence("outer wall/inner wall")]);
+function has(list, x) = len([for (p = list) if (p == x) 1]) > 0;
+orca([
+    if (has(open_tray_parts, part)) orca_wall_sequence("outer wall/inner wall"),
+    // Across a slot cut down to the bed Orca travels without retracting, after
+    // infill and inner walls, and leaves a thread each time. It's a setting of
+    // the whole print, so every part has it, for the plates to.
+    orca_setting("reduce_infill_retraction", 0),
+]);
 // Every color the parts use. New colors go last, so a saved Orca project's
 // objects keep their order.
 // Each once: black is a viking color too.
