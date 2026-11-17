@@ -10,7 +10,8 @@
 
 Plates:
 - Printed: 3, 4, 8, 9
-- Reprint: Strips, boat, wood
+- Reprinting: boat
+- Next: 5
 
 ## The Fox in the Forest
 
