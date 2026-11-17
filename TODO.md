@@ -8,10 +8,11 @@
 
 ## A Feast for Odin
 
-Plates:
+At old sizes:
 - Printed: 3, 4, 8, 9
-- Reprinting: boat
-- Next: 5
+
+At new sizes:
+ - Printing: 1
 
 ## The Fox in the Forest
 

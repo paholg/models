@@ -46,7 +46,15 @@ layer = 0; // [0:6]
 layer_only = false;
 
 /* [Box] */
-box = [305, 216, 117.5];
+// Inside, measured.
+box = [306, 218, 117.5];
+// What the inserts leave of the box, in all, along each of x and y. They sit
+// touching: no gap is drawn between them.
+box_clear = 1.5;
+inner = [box.x - box_clear, box.y - box_clear];
+// Not redesigned yet, so as printed: everything but the frame was drawn for a
+// 305 x 216 box, 1 mm clear of it, with gap between neighbors.
+old_inner = [304, 215];
 // Cardboard: see board_stack().
 card_t = 2.25;
 // The rulebooks lie flat on the boards and their frame. Roughly: the player
@@ -155,7 +163,7 @@ eps = 0.01;
 $fn = 64;
 gap = 0.5;
 // Two to the layer, one behind the other.
-half = [box.x - 1, (box.y - 1 - gap) / 2];
+half = [old_inner.x, (old_inner.y - gap) / 2];
 // Layer 2: the card trays, in a row, set its height (the cards stand a little
 // proud of them) and the front strip.
 up_h = deck_floor + card_w + 0.5;
@@ -163,7 +171,7 @@ front_y = deck_trays[0][3].x;
 tier_h = up_h / 2;
 decks_x = sum([for (d = deck_trays) d[3].y + gap]) - gap;
 // Behind the front strip.
-back_y = box.y - 1 - front_y - gap;
+back_y = old_inner.y - front_y - gap;
 
 c_food = "orange";
 c_equip = "seagreen";
@@ -225,7 +233,7 @@ stack_clear = 1.5;
 island = 129;
 island_n = 8;
 islands = [island + stack_clear + 2 * post_t, back_y];
-big = [box.x - 1 - islands.x - gap, back_y];
+big = [old_inner.x - islands.x - gap, back_y];
 big_clear = (big.x - 4 * wall - 13 * unit) / 3;
 function big_w(n) = n * unit + big_clear;
 // [name, tile, stacks deep (0: on edge)]
@@ -385,7 +393,7 @@ money_clear = 1;
 money_well = t(2, 5) + [money_clear, money_clear];
 money_slot_w = 25;
 // The tray fills the pocket beside the card trays.
-vp = [box.x - 1 - decks_x - gap, front_y];
+vp = [old_inner.x - decks_x - gap, front_y];
 vp_need = [vp_x(len(vp_counts)) + money_well.x + wall, max(vp_block_y + 2 * pen_r + wall, money_well.y + 2 * wall)];
 assert(vp_need.x <= vp.x && vp_need.y <= vp.y, str("the VP tray needs ", vp_need, " of ", vp));
 // A wall's thickness from the tray's side and its back.
@@ -497,7 +505,7 @@ discard_clear = 2;
 discard = [46 + discard_clear + 2 * wall, (back_y - gap) / 2];
 discard_h = tier_h;
 // The wooden goods take the rest of the upper tier.
-wood = [box.x - 1 - boat.y - discard.x - 2 * gap, back_y];
+wood = [old_inner.x - boat.y - discard.x - 2 * gap, back_y];
 module discard_bin() body() difference() {
     cbox(discard, discard_h);
     // Inside, running out the front.
@@ -675,7 +683,7 @@ building = [139, 54.5];
 card_clear_y = 1;
 bld = [building.x + stack_clear + 2 * post_t, building.y + card_clear_y + 2 * post_t];
 // What's left of the row beside a building tray.
-bld_beside = [box.x - 1 - bld.x - gap, bld.y];
+bld_beside = [old_inner.x - bld.x - gap, bld.y];
 // 9 mountain strips in one stack: the eight 169 mm ones, and the 192 mm one on
 // top. The well is the long one's length. A ledge at one end fills it in
 // beside the short ones, level with their top, for the long one to rest on;
@@ -689,7 +697,7 @@ strips_ledge_h = floor_t + 8 * card_t;
 strips_h = strips_ledge_h + card_t;
 // The layer is as tall as the strips.
 card_layer_h = strips_h;
-assert(3 * (bld.y + gap) + strips.y <= box.y - 1, "the cardboard layer is too deep");
+assert(3 * (bld.y + gap) + strips.y <= old_inner.y, "the cardboard layer is too deep");
 // A tray for a stack of n buildings, size across: the end walls thicken to
 // take up any more than bld.
 module building_tray(n, size = bld) {
@@ -726,7 +734,7 @@ module strips_tray() {
 }
 // Beside the strips, a bin for the moose (35 x 30 x 11), the d8 and d12, and
 // the cube: all setup-only.
-misc = [box.x - 1 - strips.x - gap, strips.y];
+misc = [old_inner.x - strips.x - gap, strips.y];
 misc_rows = [[-1, [["", -1, [16, 16], 0, "lightgray"]]]];
 module misc_tray() let ($setup = true, $side_scoop = true) body() difference() {
     cbox(misc, card_layer_h);
@@ -1103,8 +1111,8 @@ special_others_x0 = special_forge_w + special_gap;
 // As deep as the box, so they can't slide; the pockets are centered. The
 // others' board takes what the forge's leaves of the box's length, so the
 // layer is as long as the rest: its margin is a little over special_margin.
-special_forge = [special_forge_w + 2 * special_margin, box.y - 1];
-special_others = [box.x - 1 - special_forge.x - gap, box.y - 1];
+special_forge = [special_forge_w + 2 * special_margin, old_inner.y];
+special_others = [old_inner.x - special_forge.x - gap, old_inner.y];
 assert(special_others.x >= special_size.x - special_others_x0 + 2 * special_margin, "the special boards are too long for the box");
 // A tile's pocket outline, in board coordinates: outside corners rounded by
 // the clearance, inside corners sharp.
@@ -1281,24 +1289,24 @@ module board_stack(explode_layers = 0) {
 // Under the player boards it's a shelf, in to the action boards: the boards'
 // edges rest on it, and it stiffens the thin wall round them.
 frame_clear = 1.5;
-frame_half = [(box.x - 1 - gap) / 2, box.y - 1];
+frame_half = [inner.x / 2, inner.y];
 frame_shelf_h = boards_under * card_t;
 module frame_half() let ($setup = true) body() difference() {
     cbox(frame_half, board_stack_h);
     for (c = [[player_board, frame_shelf_h], [action_board, -1]]) {
         in = c[0] + [frame_clear, frame_clear];
-        translate([(box.x - 1 - in.x) / 2, (frame_half.y - in.y) / 2, c[1]]) cube([in.x, in.y, board_stack_h + 2]);
+        translate([(inner.x - in.x) / 2, (frame_half.y - in.y) / 2, c[1]]) cube([in.x, in.y, board_stack_h + 2]);
     }
     // The shelf's inside top edge.
     in = action_board + [frame_clear, frame_clear];
-    translate([(box.x - 1 - in.x) / 2, (frame_half.y - in.y) / 2, frame_shelf_h - chamfer_out]) hull() {
+    translate([(inner.x - in.x) / 2, (frame_half.y - in.y) / 2, frame_shelf_h - chamfer_out]) hull() {
         linear_extrude(eps) square(in);
         translate([-chamfer_out, -chamfer_out, chamfer_out]) linear_extrude(eps) square(in + 2 * [chamfer_out, chamfer_out]);
     }
 }
 module board_frame() {
     frame_half();
-    translate([box.x - 1, 0, 0]) mirror([1, 0, 0]) frame_half();
+    translate([inner.x, 0, 0]) mirror([1, 0, 0]) frame_half();
 }
 
 function show(n) = layer == 0 || (layer_only ? n == layer : n <= layer);
@@ -1310,7 +1318,7 @@ module assembly() {
     // 1: the boards, in their frame, and the rulebooks on them.
     zb = board_stack_h + board_layers * explode / 6 + explode / 2;
     if (show(1)) {
-        translate([0.5, 0.5, 0]) board_frame();
+        translate([box_clear / 2, box_clear / 2, 0]) board_frame();
         board_stack(explode / 6);
         translate([(box.x - rulebooks.x) / 2, (box.y - rulebooks.y) / 2, zb]) color("ivory") cube(rulebooks);
     }
@@ -1349,7 +1357,7 @@ module assembly() {
             if (show(6)) translate([0, 0, tier_h + explode / 2]) {
                 wood_tray();
                 for (i = [0, 1]) translate([wood.x + gap, i * (discard.y + gap), 0]) discard_bin();
-                translate([box.x - 1, 0, 0]) rotate(90) boat_tray();
+                translate([old_inner.x, 0, 0]) rotate(90) boat_tray();
             }
         }
     }
