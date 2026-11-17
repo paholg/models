@@ -728,7 +728,7 @@ module strips_tray() {
 // the cube: all setup-only.
 misc = [box.x - 1 - strips.x - gap, strips.y];
 misc_rows = [[-1, [["", -1, [16, 16], 0, "lightgray"]]]];
-module misc_tray() let ($setup = true) body() difference() {
+module misc_tray() let ($setup = true, $side_scoop = true) body() difference() {
     cbox(misc, card_layer_h);
     bin_cuts(misc, card_layer_h, misc_rows);
 }
