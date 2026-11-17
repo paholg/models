@@ -43,3 +43,7 @@ Plates:
 ## Lattices (gcode/lattice)
 
 - Print strands (now as one raft)
+
+## Party sign
+
+- Print it
