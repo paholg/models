@@ -1100,9 +1100,12 @@ module big_tray() {
 // own board. Layout from pack_special.py.
 special_h = special_floor + tilt_d + pocket_d;
 special_others_x0 = special_forge_w + special_gap;
-// As deep as the box, so they can't slide; the pockets are centered.
+// As deep as the box, so they can't slide; the pockets are centered. The
+// others' board takes what the forge's leaves of the box's length, so the
+// layer is as long as the rest: its margin is a little over special_margin.
 special_forge = [special_forge_w + 2 * special_margin, box.y - 1];
-special_others = [special_size.x - special_others_x0 + 2 * special_margin, box.y - 1];
+special_others = [box.x - 1 - special_forge.x - gap, box.y - 1];
+assert(special_others.x >= special_size.x - special_others_x0 + 2 * special_margin, "the special boards are too long for the box");
 // A tile's pocket outline, in board coordinates: outside corners rounded by
 // the clearance, inside corners sharp.
 module pocket_2d(st) offset(r = pocket_clear) translate(st[2]) for (c = st[1]) translate(c * unit) square(unit);
@@ -1211,10 +1214,12 @@ module special_plate(size, tiles, at, corner_r = 0) {
     }
 }
 module special_board(section) {
-    m = special_margin;
     size = section == "forge" ? special_forge : special_others;
     x0 = section == "forge" ? 0 : special_others_x0;
-    special_plate(size, [for (st = special_tiles) if (st[0] == section) st], [m - x0, (size.y - special_size.y) / 2, 0],
+    // The section's width: it's centered on its board.
+    w = section == "forge" ? special_forge_w : special_size.x - x0;
+    special_plate(size, [for (st = special_tiles) if (st[0] == section) st],
+                  [(size.x - w) / 2 - x0, (size.y - special_size.y) / 2, 0],
                   special_corner_r)
         if (section == "forge") for (id = ["black", "orange"]) forge_icon(id, eps);
     if (section == "forge") {
