@@ -5,9 +5,37 @@ cd "$(git rev-parse --show-toplevel)" || exit
 # Moonraker and Fluidd on the printer.
 PRINTER="${PRINTER:-10.0.0.15}"
 
+# Map each changed file to its git status in $marks, in the symbols starship
+# uses: = conflicted, » renamed, ! modified, + staged, ? untracked.
+declare -A marks
+git_marks() {
+  local line xy mark
+  marks=()
+  while IFS= read -r -d '' line; do
+    xy="${line:0:2}"
+    case "$xy" in
+      '??') mark='?' ;;
+      DD | AU | UD | UA | DU | AA | UU) mark='=' ;;
+      *)
+        mark=""
+        if [[ $xy == *R* ]]; then mark+='»'; fi
+        if [[ ${xy:1:1} == [MT] ]]; then mark+='!'; fi
+        if [[ ${xy:0:1} == [MAT] ]]; then mark+='+'; fi
+        ;;
+    esac
+    if [[ -n $mark ]]; then
+      marks["${line:3}"]="$mark"
+    fi
+    # A rename or copy is followed by the path it came from.
+    if [[ $xy == *[RC]* ]]; then
+      IFS= read -r -d '' _ || true
+    fi
+  done < <(git status --porcelain -z --untracked-files=all)
+}
+
 # Pick a design into $file and its $kind (scad or gcode), starting from the query $1.
 pick() {
-  local files rows width cols margin
+  local files rows list path row mark longest width cols margin
   files="$({
     fd --extension scad
     fd --extension py . gcode
@@ -15,14 +43,27 @@ pick() {
   # Show path components as aligned columns, without the suffix;
   # the real path rides along in a hidden first field.
   rows="$(echo "$files" | sed -E 's/\.(scad|py)$//' | column -t -s/ -o '  ')"
+  # Each file's git status goes in a last column.
+  git_marks
+  width="$(echo "$rows" | wc -L)"
+  longest=0
+  list=""
+  while IFS=$'\t' read -r path row; do
+    mark="${marks[$path]-}"
+    if [[ -n $mark ]]; then
+      row="$(printf '%-*s  \033[1;31m%s\033[0m' "$width" "$row" "$mark")"
+      longest="$((${#mark} > longest ? ${#mark} : longest))"
+    fi
+    list+="$path"$'\t'"$row"$'\n'
+  done < <(paste <(echo "$files") <(echo "$rows"))
   # Only as wide as the longest row (plus fzf's gutter).
-  width="$(($(echo "$rows" | wc -L) + 4))"
+  width="$((width + (longest > 0 ? longest + 2 : 0) + 4))"
   cols="$(stty size </dev/tty | cut -d' ' -f2)"
   margin="$((cols > width ? cols - width : 0))"
   clear
   file="$(
-    paste <(echo "$files") <(echo "$rows") |
-      fzf --delimiter '\t' --with-nth 2 --height '~40%' --reverse \
+    printf '%s' "$list" |
+      fzf --ansi --delimiter '\t' --with-nth 2 --height '~40%' --reverse \
         --margin "0,$margin,0,0" --query "$1" --select-1 |
       cut -f1
   )"
