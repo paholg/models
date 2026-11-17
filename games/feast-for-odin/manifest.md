@@ -2,7 +2,7 @@
 
 All measurements are in mm.
 
-Box inner dimensions: 218 width, 306 length, 117.5 height
+Box inner dimensions: 218 width, 306 length, 119 height
 Height is flexible, as we can have the lid not close all the way if needed.
 
 For the goods and money, we'd like to have everything divided into 2 symmetric
