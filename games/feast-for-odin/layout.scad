@@ -1441,7 +1441,28 @@ module frame_half() let ($setup = true) body() difference() {
         linear_extrude(eps) square(in);
         translate([-chamfer_out, -chamfer_out, chamfer_out]) linear_extrude(eps) square(in + 2 * [chamfer_out, chamfer_out]);
     }
+    // Finger detents, one in each long side: round holes down through the
+    // wall and the shelf, to get a fingertip under the player boards' edge.
+    for (m = [0, 1]) translate([frame_detent_x, m * frame_half.y, 0]) mirror([0, m, 0])
+        translate([0, frame_detent_skin + frame_detent_r, 0]) {
+            translate([0, 0, -1]) cylinder(r = frame_detent_r, h = board_stack_h + 2);
+            // Its rims: bottom, top, and the shelf's, inside the boards' well.
+            translate([0, 0, -eps]) cylinder(r1 = frame_detent_r + chamfer_out, r2 = frame_detent_r, h = chamfer_out);
+            translate([0, 0, board_stack_h - chamfer_out]) cylinder(r1 = frame_detent_r, r2 = frame_detent_r + chamfer_out, h = chamfer_out + eps);
+            intersection() {
+                translate([0, 0, frame_shelf_h - chamfer_out]) cylinder(r1 = frame_detent_r, r2 = frame_detent_r + chamfer_out, h = chamfer_out + eps);
+                translate([-frame_detent_r - 1, frame_side - frame_detent_skin - frame_detent_r, 0]) cube([2 * frame_detent_r + 2, 2 * frame_detent_r, board_stack_h]);
+            }
+        }
 }
+// The long sides' thickness, round the player boards.
+frame_side = (frame_half.y - player_board.y - frame_clear) / 2;
+// The detents: their radius, the wall left outside them, and where along the
+// half they sit.
+frame_detent_r = 14;
+frame_detent_skin = 3;
+frame_detent_x = frame_half.x / 2;
+assert(frame_detent_skin + 2 * frame_detent_r > frame_side + (player_board.y - action_board.y) / 2, "detent doesn't reach through the shelf");
 module board_frame() {
     frame_half();
     translate([inner.x, 0, 0]) mirror([1, 0, 0]) frame_half();
