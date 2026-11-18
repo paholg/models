@@ -21,12 +21,10 @@ height; I set mine to around 0.16, whereas Orca wanted to put them closer to 0.3
 
 ## License
 
-This insert directly uses, unmodified, the wonderful
+This insert uses, cut a little shorter and with a lip added at each end, the
+wonderful
 [Remixed A Feast for Odin card trays](https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays)
 by Printables user [@DewLeen_91662](https://www.printables.com/@DewLeen_91662),
 a remix of A Feast for Odin (+exp) Organizer / Insert by
 [@RiftForge3D3](https://www.printables.com/@RiftForge3D3). They are licensed
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
-
-Everything else is an original creation (with heavy help from an LLM) and is
-licensed CC0.

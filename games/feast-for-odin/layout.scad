@@ -90,7 +90,8 @@ fillet_r = 1; // inside corners and floor edges of wells
 // https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays,
 // a remix of "A Feast for Odin (+exp) Organizer / Insert" by RiftForge 3D
 // (@RiftForge3D3). Licensed CC BY-NC-SA 4.0; see card-trays/README.md. The
-// STLs are exported unchanged.
+// STLs here are as downloaded; deck_tray() adapts them (shorter, and a lip at
+// each end), and what's exported is under their license.
 // Cards stand on their long edges, the deck running along the tray.
 // [name, file, the STL's minimum corner, its size, setup-only]
 // How much is cut out of each one's length: the decks are shorter than the
@@ -1574,16 +1575,42 @@ module special_boards() {
 // out of its length (its y): a slice from where its section is the same all
 // along, the back part moved up to the front one.
 module deck_whole(i) let (d = deck_trays[i]) translate(-d[2]) import(d[1], convexity = 4);
-module deck_tray(i) let (d = deck_trays[i], $setup = d[4], c = deck_cut[i], y0 = deck_cut_at * d[3].y) body() {
-    intersection() {
-        deck_whole(i);
-        translate([-1, -1, -1]) cube([d[3].x + 2, y0 + 1, d[3].z + 2]);
+// At each end it gets a lip across the floor, deck_lip high over it, from side
+// wall to side wall: the trays come with only the floor's edge there, and the
+// side walls' ends, for the next thing in the box to sit against.
+// render(): the preview draws the cut STL's faces striped.
+deck_lip = 4;
+module deck_tray(i) let (d = deck_trays[i], $setup = d[4], c = deck_cut[i], y0 = deck_cut_at * d[3].y,
+                         len = d[3].y - c, h = deck_floor + deck_lip, r = chamfer)
+    body() render(convexity = 6) union() {
+        intersection() {
+            deck_whole(i);
+            translate([-1, -1, -1]) cube([d[3].x + 2, y0 + 1, d[3].z + 2]);
+        }
+        translate([0, -c, 0]) intersection() {
+            deck_whole(i);
+            translate([-1, y0 + c, -1]) cube([d[3].x + 2, d[3].y, d[3].z + 2]);
+        }
+        // The lips, their top edges rounded, and trimmed to the tray's own
+        // outside: its corners and bottom edges are rounded over, and a
+        // square bar would stand proud of them.
+        intersection() {
+            for (y = [0, len - wall]) translate([0, y, 0]) rotate([90, 0, 90]) linear_extrude(d[3].x) hull() {
+                square([wall, h - r]);
+                for (x = [r, wall - r]) translate([x, h - r]) circle(r, $fn = 24);
+            }
+            hull() {
+                intersection() {
+                    deck_whole(i);
+                    translate([-1, -1, -1]) cube([d[3].x + 2, y0 + 1, d[3].z + 2]);
+                }
+                translate([0, -c, 0]) intersection() {
+                    deck_whole(i);
+                    translate([-1, y0 + c, -1]) cube([d[3].x + 2, d[3].y, d[3].z + 2]);
+                }
+            }
+        }
     }
-    translate([0, -c, 0]) intersection() {
-        deck_whole(i);
-        translate([-1, y0 + c, -1]) cube([d[3].x + 2, d[3].y, d[3].z + 2]);
-    }
-}
 // In a row along the front, each deck running along x.
 module deck_holders() for (i = [0:len(deck_trays) - 1]) {
     x = sum([for (j = [0:1:i - 1]) deck_len(j)]);
