@@ -499,16 +499,8 @@ module vp_tray() {
                         r = money_inset - fillet_r);
     }
 }
-// Spacers: open boxes that only fill a gap or hold up what's over them.
-// Beside the VP tray:
+// Beside the VP tray, a spacer: see honeycomb().
 spacer = [corner_x - vp.x, front_y];
-module spacer_box(size, h) let ($setup = true) body() difference() {
-    cbox(size, h);
-    translate([wall, wall, 0]) {
-        well(size - 2 * [wall, wall], floor_t, h);
-        rim(size - 2 * [wall, wall], h);
-    }
-}
 // A round well, floor at z0, open past h: floor edge filleted, rim chamfered.
 module round_well(r, z0, h, f = fillet_r, c = chamfer) rotate_extrude($fn = 96) polygon(concat(
     [[0, z0]],
@@ -519,12 +511,15 @@ module octahedron(c) polyhedron(
     [[c, 0, 0], [-c, 0, 0], [0, c, 0], [0, -c, 0], [0, 0, c], [0, 0, -c]],
     [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]]);
 
-// The wooden goods, in the top tier beside the buildings: a bin each, as wide
-// as it needs for all of its pieces to lie about one deep.
+// The wooden goods, in the top tier beside the buildings: a bin each. Ore and
+// stone are as wide as each other, a little over what stone needs for all of
+// its pieces to lie about one deep; wood has the rest, still more than the
+// 61 mm bin it was roomy in.
+wood_bin = 48;
 wood_rows = [
     [-1, [
-        ["ore", 40, [11, 11], 0, c_wood],
-        ["stone", 46, [20, 13], 0, c_wood],
+        ["ore", wood_bin, [11, 11], 0, c_wood],
+        ["stone", wood_bin, [20, 13], 0, c_wood],
         ["wood", -1, [21, 14], 0, c_wood],
     ]],
 ];
@@ -668,46 +663,57 @@ building = [139, 54.5];
 // Front to back, these stacks get less room than stack_clear.
 card_clear_y = 1;
 bld = [building.x + stack_clear + 2 * post_t, building.y + card_clear_y + 2 * post_t];
-// The riser fills out the big tiles' footprint round that tray, for them to
-// sit on: an L, behind the setup buildings and beside them, and a honeycomb,
-// as it holds nothing: big cells, riser_cell from flat to flat, with walls
-// thinner than its border, as all they do is hold up a tray.
+// A piece that only fills a gap, or holds up what's over it, is a honeycomb:
+// the 2D outline (children), h tall, its outside edges chamfered top and
+// bottom, with a border as thick as a wall, and inside that big cells,
+// honey_cell from flat to flat, in walls thinner than the border, as all they
+// do is hold something up.
+// The cells' walls run along y, half a pitch apart, or along x if turned. The
+// cells are set across those so that no wall runs close beside an edge of the
+// outline, leaving a slot: edges are where its edges that way are, and of the
+// shifts within half a pitch, the one that leaves the nearest wall furthest
+// from any of them is used.
+// render(): the preview can't draw this many cells cut from one body, and
+// shows their walls as holes.
+honey_cell = 20;
+honey_wall = 0.8;
+honey_pitch = honey_cell + honey_wall;
+function honey_near(s, edges) = min([for (e = edges)
+    let (d = ((e - s) % (honey_pitch / 2) + honey_pitch / 2) % (honey_pitch / 2)) min(d, honey_pitch / 2 - d)]);
+function honey_shift(edges) = let (shifts = [for (s = [0:0.1:honey_pitch / 2]) s],
+                                   nears = [for (s = shifts) honey_near(s, edges)])
+    shifts[search(max(nears), nears)[0]];
+module honeycomb(size, h, edges, turned = false) let ($setup = true, shift = honey_shift(edges)) body()
+    render(convexity = 4) difference() {
+        union() {
+            chamfered(chamfer_out) children();
+            translate([0, 0, chamfer_out - eps]) linear_extrude(h - 2 * chamfer_out + 2 * eps) children();
+            translate([0, 0, h - chamfer_out]) chamfered(chamfer_out, true) children();
+        }
+        // union(): generate.py runs OpenSCAD with lazy-union, under which a
+        // bare for's iterations would each be intersected.
+        translate([0, 0, -1]) linear_extrude(h + 2) intersection() {
+            offset(r = -wall) children();
+            union() for (j = [-1:ceil(max(size) / (honey_pitch * sqrt(3) / 2)) + 1], i = [-1:ceil(max(size) / honey_pitch) + 1])
+                let (across = shift + (i + (j % 2) / 2) * honey_pitch, along = j * honey_pitch * sqrt(3) / 2)
+                    translate(turned ? [along, across] : [across, along]) rotate(turned ? 0 : 30)
+                        circle(honey_cell / sqrt(3), $fn = 6);
+        }
+    }
+// A rectangle with its corners rounded, for one.
+module honey_rect(size) offset(r = chamfer_corner) offset(delta = -chamfer_corner) square(size);
+
+// The riser fills out the big tiles' footprint round the setup buildings'
+// tray, for them to sit on: an L, behind that tray and beside it.
 riser = [big.x, back_y];
-riser_cell = 20;
-riser_wall = 0.8;
-riser_pitch = riser_cell + riser_wall;
-// The cells are set along x so that no wall runs close beside the border's
-// ends or the leg's edge, leaving a slot. Their walls along y are half a
-// pitch apart: of the shifts within that, this is the one that leaves the
-// nearest wall furthest from any of those three edges.
-function riser_near(s) = min([for (e = [wall, riser.x - wall, bld.x + wall])
-    let (d = ((e - s) % (riser_pitch / 2) + riser_pitch / 2) % (riser_pitch / 2)) min(d, riser_pitch / 2 - d)]);
-riser_shifts = [for (s = [0:0.1:riser_pitch / 2]) s];
-riser_nears = [for (s = riser_shifts) riser_near(s)];
-riser_shift = riser_shifts[search(max(riser_nears), riser_nears)[0]];
-echo(riser_shift = riser_shift, nearest_wall = max(riser_nears));
 module riser_2d() offset(r = chamfer_corner) offset(delta = -chamfer_corner)
     offset(r = -chamfer_corner) offset(delta = chamfer_corner)
     polygon([[bld.x, 0], [riser.x, 0], [riser.x, riser.y], [0, riser.y], [0, bld.y], [bld.x, bld.y]]);
-// render(): the preview can't draw this many cells cut from one body, and
-// shows their walls as holes.
-module riser() let ($setup = true, pitch = riser_pitch) body() render(convexity = 4) difference() {
-    // Its outside edges chamfered, top and bottom.
-    union() {
-        chamfered(chamfer_out) riser_2d();
-        translate([0, 0, chamfer_out - eps]) linear_extrude(base_h - 2 * chamfer_out + 2 * eps) riser_2d();
-        translate([0, 0, base_h - chamfer_out]) chamfered(chamfer_out, true) riser_2d();
-    }
-    // The cells, pointing along y, within a wall's thickness of the outline.
-    // union(): generate.py runs OpenSCAD with lazy-union, under which a bare
-    // for's iterations would each be intersected.
-    translate([0, 0, -1]) linear_extrude(base_h + 2) intersection() {
-        offset(r = -wall) riser_2d();
-        union() for (j = [0:ceil(riser.y / (pitch * sqrt(3) / 2))], i = [-1:ceil(riser.x / pitch)])
-            translate([riser_shift + (i + (j % 2) / 2) * pitch, j * pitch * sqrt(3) / 2]) rotate(30)
-                circle(riser_cell / sqrt(3), $fn = 6);
-    }
-}
+// Its ends, and the leg's inside edge, are the edges its walls run along.
+module riser() honeycomb(riser, base_h, [wall, riser.x - wall, bld.x + wall]) riser_2d();
+// The spacer is narrow, so its cells are turned: their walls cross it.
+module spacer() honeycomb(spacer, vp_h, [wall, spacer.y - wall], true) honey_rect(spacer);
+
 module setup_buildings_tray() let ($setup = true, $tray_floor = base_h - setup_n * card_t) {
     in = building + [stack_clear, card_clear_y];
     body() open_tray(bld, base_h, [[[post_t, post_t], in]], clear = [stack_clear, card_clear_y]);
@@ -1724,7 +1730,7 @@ module assembly() {
         if (show(6)) translate([0, 0, 2 * e]) {
             translate([decks_x, 0, boat_h]) {
                 vp_tray();
-                translate([vp.x, 0, 0]) spacer_box(spacer, vp_h);
+                translate([vp.x, 0, 0]) spacer();
             }
             translate([0, front_y, base_h + tier_h]) {
                 wood_tray();
@@ -1762,7 +1768,7 @@ module the_part() {
     else if (part == "setup_buildings") setup_buildings_tray();
     else if (part == "strips") strips_tray();
     else if (part == "riser") riser();
-    else if (part == "spacer") spacer_box(spacer, vp_h);
+    else if (part == "spacer") spacer();
     else if (part == "frame") board_frame();
     else if (part == "frame_half") frame_half();
     else if (part == "wood") wood_tray();

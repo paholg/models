@@ -12,7 +12,8 @@ At old sizes:
 - Printed: 3, 4, 8, 9
 
 At new sizes:
- - Printing: 1
+ - Printed: Frame
+ - Printing: Special (lg)
 
 ## The Fox in the Forest
 
