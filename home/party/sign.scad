@@ -2,8 +2,7 @@
 // address, raised in black on a white panel. It stands in two feet, which
 // slot onto its bottom edge, and pack into pockets in its back, held there
 // by magnets: three of 5 x 1 mm glued into each foot, and one over each of
-// them in its pocket. Glue each pair while they hold each other, to have
-// them attract.
+// them in its pocket, each in a hole with crush ribs.
 // Or it hangs, feet packed, by a keyhole in its back, on a screw's head.
 //
 // The panel prints face up, the feet flat beside it, a left and a right.
@@ -60,7 +59,7 @@ back_h = 32;
 jaw_h = 6.5;
 // The front jaw's thickness, and the width of the bars the rest is made of.
 jaw_w = 5;
-bar = 8;
+bar = 5;
 // The slot, over the panel's thickness, and how far the bumps on each of its
 // walls stand in: twice that, less the first, is what holds the panel.
 slot_clear = 0.3;
@@ -72,6 +71,10 @@ magnet_h = 1;
 // Room for glue: around the magnet, and under it.
 magnet_gap = 0.15;
 magnet_deep = 0.2;
+// Crush ribs down each hole's wall, and how far into the magnet they reach.
+magnet_ribs = 4;
+magnet_rib_w = 0.8;
+magnet_rib_press = 0.1;
 // Foot around its magnet.
 magnet_wall = 1.35;
 // Their places along the foot's base, from the panel's face, and up its back,
@@ -86,8 +89,9 @@ top_gap = 0.4;
 // The pockets' bottom, from the panel's, and the wall between the two.
 stow_y = 24;
 stow_wall = 6;
-// The scoop for a finger, at the feet's heels.
+// The scoop for a finger, and how far past the feet's heels its middle is.
 finger_r = 8;
+finger_up = 2;
 // Off the bed's edges of the feet and their pockets.
 bed_chamfer = 0.4;
 
@@ -162,11 +166,14 @@ bump_r = 0.6;
 hole_d = magnet_d + 2 * magnet_gap;
 hole_h = magnet_h + magnet_deep;
 boss_r = hole_d / 2 + magnet_wall;
+// A magnet's center, in from its bar's outer edge: the boss stands into the
+// foot's middle, not out of it.
+magnet_in = max(boss_r, bar / 2);
 // Each magnet's place in the foot's side, and the turn from the foot's y to
 // the way across the bar it is in.
 magnets = [
-  for (x = magnet_base) [[x, bar / 2], 0],
-  for (u = magnet_up) [slot_xy(slot_w + bar / 2, u), 90 - lean],
+  for (x = magnet_base) [[x, magnet_in], 0],
+  for (u = magnet_up) [slot_xy(slot_w + magnet_in, u), 90 - lean],
 ];
 // The layers under a pocket's magnet that bridge down to its hole.
 layer = 0.2;
@@ -175,7 +182,7 @@ lead = 2 * layer;
 assert(t - pocket_d - lead - hole_h >= 0.8, "the skin over the magnets is too thin");
 assert(foot_t - hole_h >= 0.8, "the foot under its magnet is too thin");
 assert(t - hang_lip - hang_head_h >= 1.2, "the skin over the keyhole is too thin");
-assert(h - hang_top - hang_len - hang_head_d / 2 > stow_y + foot_front + foot_back + finger_r + 2,
+assert(h - hang_top - hang_len - hang_head_d / 2 > stow_y + foot_front + foot_back + finger_up + finger_r + 2,
        "the keyhole runs into the pockets");
 assert(jaw_h < margin - url_size * 0.4, "the front jaw would cover the address");
 assert(qr_w + 2 * quiet_w <= w, "the code's quiet zone is wider than the panel");
@@ -248,9 +255,20 @@ module foot_2d() {
 module foot() {
   difference() {
     stepped(foot_t, -bed_chamfer, -bed_chamfer) foot_2d();
-    for (m = magnets) translate([m[0].x, m[0].y, foot_t - hole_h])
-      cylinder(d = hole_d, h = hole_h + eps);
+    for (m = magnets) translate([m[0].x, m[0].y, foot_t - hole_h]) rotate(m[1]) {
+      // The ribs stop a layer short of the mouth, for the magnet to start in.
+      linear_extrude(hole_h - layer + eps) magnet_hole_2d();
+      translate([0, 0, hole_h - layer]) cylinder(d = hole_d, h = layer + eps);
+    }
   }
+}
+
+// A magnet's hole, less its crush ribs: one in the middle of each side of the
+// square that a pocket's hole starts as, to hang over it the least.
+module magnet_hole_2d() difference() {
+  circle(d = hole_d);
+  for (i = [0:magnet_ribs - 1]) rotate(i * 360 / magnet_ribs)
+    translate([magnet_d / 2 - magnet_rib_press, -magnet_rib_w / 2]) square([1, magnet_rib_w]);
 }
 
 // The holes over a pocket for its magnets, from the pocket's ceiling up. A hole
@@ -261,7 +279,7 @@ module magnet_holes() for (m = magnets) translate([m[0].x, m[0].y, pocket_d]) ro
   across = max(boss_r, bar / 2) + gap;
   translate([-hole_d / 2, -across, -eps]) cube([hole_d, 2 * across, layer + eps]);
   translate([-hole_d / 2, -hole_d / 2, 0]) cube([hole_d, hole_d, lead]);
-  cylinder(d = hole_d, h = lead + hole_h);
+  translate([0, 0, lead - eps]) linear_extrude(hole_h + eps) magnet_hole_2d();
 }
 
 // A foot's place in the panel's back: side s, heel up, its base to the middle.
@@ -290,7 +308,13 @@ module body() {
         magnet_holes();
       }
       translate([0, stow_y + foot_front + foot_back, 0])
-        stepped(pocket_d + eps, bed_chamfer) circle(finger_r);
+        stepped(pocket_d + eps, bed_chamfer) difference() {
+          translate([0, finger_up]) circle(finger_r);
+          // The wall between the pockets runs on to the heels' ends: without
+          // it, the ceiling would bridge both heels and the scoop in one go.
+          translate([-stow_wall / 2 + gap, -2 * finger_r])
+            square([stow_wall - 2 * gap, 2 * finger_r + gap]);
+        }
       translate([0, h - hang_top, 0]) keyhole();
     }
   }
