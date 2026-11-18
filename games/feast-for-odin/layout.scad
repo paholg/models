@@ -672,10 +672,16 @@ bld = [building.x + stack_clear + 2 * post_t, building.y + card_clear_y + 2 * po
 riser = [big.x, back_y];
 riser_cell = 20;
 riser_wall = 0.8;
+// The cells are set along x so that no wall runs close beside the border's
+// ends or the leg's edge, leaving a slot: their walls along y are half a
+// pitch apart, and this puts those edges about midway between two.
+riser_shift = 6;
 module riser_2d() offset(r = chamfer_corner) offset(delta = -chamfer_corner)
     offset(r = -chamfer_corner) offset(delta = chamfer_corner)
     polygon([[bld.x, 0], [riser.x, 0], [riser.x, riser.y], [0, riser.y], [0, bld.y], [bld.x, bld.y]]);
-module riser() let ($setup = true, pitch = riser_cell + riser_wall) body() difference() {
+// render(): the preview can't draw this many cells cut from one body, and
+// shows their walls as holes.
+module riser() let ($setup = true, pitch = riser_cell + riser_wall) body() render(convexity = 4) difference() {
     // Its outside edges chamfered, top and bottom.
     union() {
         chamfered(chamfer_out) riser_2d();
@@ -688,7 +694,7 @@ module riser() let ($setup = true, pitch = riser_cell + riser_wall) body() diffe
     translate([0, 0, -1]) linear_extrude(base_h + 2) intersection() {
         offset(r = -wall) riser_2d();
         union() for (j = [0:ceil(riser.y / (pitch * sqrt(3) / 2))], i = [-1:ceil(riser.x / pitch)])
-            translate([(i + (j % 2) / 2) * pitch, j * pitch * sqrt(3) / 2]) rotate(30)
+            translate([riser_shift + (i + (j % 2) / 2) * pitch, j * pitch * sqrt(3) / 2]) rotate(30)
                 circle(riser_cell / sqrt(3), $fn = 6);
     }
 }
@@ -1006,12 +1012,14 @@ module buildings_demo() {
 }
 // Behind the boats, a bin for the moose (35 x 30 x 11), the d8 and d12, and
 // the cube: all setup-only. The d12 is 22 across and 18.8 tall, and the bin no
-// wider than the boats leave: so thinner walls.
+// wider than the boats leave: so thinner walls, and less of a chamfer each
+// side of their top, to leave a rim between the two.
 misc = [corner_x, front_y - boat.y];
 misc_wall = 0.8;
+misc_rim = 0.2;
 misc_rows = [[-1, [["", -1, [16, 16], 0, "lightgray"]]]];
-module misc_tray() let ($setup = true, $side_scoop = true, $wall = misc_wall) body() difference() {
-    cbox(misc, boat_h);
+module misc_tray() let ($setup = true, $side_scoop = true, $wall = misc_wall, $rim = misc_rim) body() difference() {
+    cbox(misc, boat_h, ct = misc_rim);
     bin_cuts(misc, boat_h, misc_rows);
 }
 // Vikings: a bin per player color, each a piece of its own, scooped up every
@@ -1053,6 +1061,8 @@ $scoop_fit = false;
 $side_scoop = false;
 // With $all_scoop, it's scooped up all four walls.
 $all_scoop = false;
+// A bin's rim is chamfered by $rim.
+$rim = chamfer;
 // With $scoop_r, every scoop is that radius instead.
 $scoop_r = undef;
 function scoop_for(d, fp) = min(scoop_max, max(scoop_min, (d - fp.y) / ($back_scoop && $scoop_fit ? 2 : 1)));
@@ -1066,15 +1076,17 @@ module chamfered(c, flip = false) minkowski() {
     linear_extrude(eps) offset(r = -c) children();
     cylinder(r1 = flip ? c : 0, r2 = flip ? 0 : c, h = c, $fn = 24);
 }
-// A box with every outside edge chamfered.
-module cbox(size, h, co = chamfer_out, cc = chamfer_corner) {
+// A box with every outside edge chamfered: its top edges by ct, if that's not
+// to be co.
+module cbox(size, h, co = chamfer_out, cc = chamfer_corner, ct) {
+    top = is_undef(ct) ? co : ct;
     module sh(d) offset(delta = cc, chamfer = true)
         translate([cc + d, cc + d])
         square([size.x - 2 * (cc + d), size.y - 2 * (cc + d)]);
     hull() {
         linear_extrude(eps) sh(co);
-        translate([0, 0, co]) linear_extrude(h - 2 * co) sh(0);
-        translate([0, 0, h - eps]) linear_extrude(eps) sh(co);
+        translate([0, 0, co]) linear_extrude(h - co - top) sh(0);
+        translate([0, 0, h - eps]) linear_extrude(eps) sh(top);
     }
 }
 
@@ -1208,7 +1220,7 @@ module bin_cuts(size, h, rows) {
                     b = rows[ri][1][bi];
                     well([ws[bi], ds[ri]], floor_t, h, sc, $back_scoop && !(len(b) > 6 && b[6]) ? sc : 0);
                 }
-                rim([ws[bi], ds[ri]], h, chamfer, $all_scoop ? bowl_r : fillet_r);
+                rim([ws[bi], ds[ri]], h, $rim, $all_scoop ? bowl_r : fillet_r);
             }
     }
 }
