@@ -242,8 +242,10 @@ money_rows = [
 stack_clear = 1.5;
 island = 129;
 island_n = 8;
-big = [169, back_y];
-islands = [inner.x - big.x, back_y];
+// The islands' tray is square, as they are, and as deep as the back of the
+// box; the big tiles take the rest of its length.
+islands = [back_y, back_y];
+big = [inner.x - islands.x, back_y];
 islands_h = floor_t + island_n * card_t;
 assert(islands.x >= island + stack_clear + 2 * post_t, "the islands don't fit beside the big tiles");
 big_clear = (big.x - 4 * wall - 13 * unit) / 3;
@@ -672,16 +674,23 @@ bld = [building.x + stack_clear + 2 * post_t, building.y + card_clear_y + 2 * po
 riser = [big.x, back_y];
 riser_cell = 20;
 riser_wall = 0.8;
+riser_pitch = riser_cell + riser_wall;
 // The cells are set along x so that no wall runs close beside the border's
-// ends or the leg's edge, leaving a slot: their walls along y are half a
-// pitch apart, and this puts those edges about midway between two.
-riser_shift = 6;
+// ends or the leg's edge, leaving a slot. Their walls along y are half a
+// pitch apart: of the shifts within that, this is the one that leaves the
+// nearest wall furthest from any of those three edges.
+function riser_near(s) = min([for (e = [wall, riser.x - wall, bld.x + wall])
+    let (d = ((e - s) % (riser_pitch / 2) + riser_pitch / 2) % (riser_pitch / 2)) min(d, riser_pitch / 2 - d)]);
+riser_shifts = [for (s = [0:0.1:riser_pitch / 2]) s];
+riser_nears = [for (s = riser_shifts) riser_near(s)];
+riser_shift = riser_shifts[search(max(riser_nears), riser_nears)[0]];
+echo(riser_shift = riser_shift, nearest_wall = max(riser_nears));
 module riser_2d() offset(r = chamfer_corner) offset(delta = -chamfer_corner)
     offset(r = -chamfer_corner) offset(delta = chamfer_corner)
     polygon([[bld.x, 0], [riser.x, 0], [riser.x, riser.y], [0, riser.y], [0, bld.y], [bld.x, bld.y]]);
 // render(): the preview can't draw this many cells cut from one body, and
 // shows their walls as holes.
-module riser() let ($setup = true, pitch = riser_cell + riser_wall) body() render(convexity = 4) difference() {
+module riser() let ($setup = true, pitch = riser_pitch) body() render(convexity = 4) difference() {
     // Its outside edges chamfered, top and bottom.
     union() {
         chamfered(chamfer_out) riser_2d();
