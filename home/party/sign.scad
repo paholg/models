@@ -1,11 +1,12 @@
 // A table sign: "Play Music", a QR code with a note in its middle, and its
-// address, raised in black on a white panel. It stands in two feet, which
+// address, inlaid in black, flush in a white panel. It stands in two feet, which
 // slot onto its bottom edge, and pack into pockets in its back, held there
 // by magnets: three of 5 x 1 mm glued into each foot, and one over each of
-// them in its pocket, each in a hole with crush ribs.
+// them in its pocket's floor, each in a hole with crush ribs.
 // Or it hangs, feet packed, by a keyhole in its back, on a screw's head.
 //
-// The panel prints face up, the feet flat beside it, a left and a right.
+// The panel prints face down, its pockets and keyhole open to the top, the
+// feet flat beside it, a left and a right.
 //
 // x is right and y is up, as it reads; z is out of the face, the back at z = 0.
 
@@ -27,8 +28,8 @@ edge_chamfer = 0.8;
 margin = 9;
 
 /* [Face] */
-// How far the black stands out of the white.
-emboss = 0.6;
+// How deep the black goes into the white.
+inlay = 0.6;
 // One square of the code.
 module_w = 2.4;
 // Clear white around the code, in squares. Scanners want four.
@@ -77,29 +78,38 @@ magnet_rib_w = 0.8;
 magnet_rib_press = 0.1;
 // Foot around its magnet.
 magnet_wall = 1.35;
+// How much deeper the pockets' holes are: the magnets that far apart, for a
+// foot to come out by a finger.
+magnet_sink = 0.4;
 // Their places along the foot's base, from the panel's face, and up its back,
 // from the slot's floor.
 magnet_base = [20, 34];
 magnet_up = [18];
 
 /* [Pockets] */
-// Around a stowed foot, and over it: what the pocket's ceiling bridges across.
+// Around a stowed foot, and how far under the panel's back it lies.
 gap = 0.3;
-top_gap = 0.4;
+top_gap = 0.2;
 // The pockets' bottom, from the panel's, and the wall between the two.
 stow_y = 24;
 stow_wall = 6;
 // The scoop for a finger, and how far past the feet's heels its middle is.
 finger_r = 8;
 finger_up = 2;
-// Off the bed's edges of the feet and their pockets.
+// How far short of the heels' ends the wall between the pockets stops, for a
+// finger to reach both heels.
+wall_back = 12;
+// Off the feet's edges, top and bottom, and the mouths of what's cut in the
+// panel's back.
 bed_chamfer = 0.4;
 
 /* [Keyhole] */
 // The screw's head goes in at the bottom, and its shank slides up the slot.
 hang_head_d = 9;
 hang_shank_d = 4.4;
-// What the head hangs on, and the room behind that for it.
+// What the head hangs on, and the room behind that for it: the lip prints as
+// a ceiling, so the room narrows to the slot at 45 degrees, as a countersunk
+// head does.
 hang_lip = 1.4;
 hang_head_h = 3;
 // How far the screw slides.
@@ -175,18 +185,20 @@ magnets = [
   for (x = magnet_base) [[x, magnet_in], 0],
   for (u = magnet_up) [slot_xy(slot_w + magnet_in, u), 90 - lean],
 ];
-// The layers under a pocket's magnet that bridge down to its hole.
+// The steps that chamfers are made of, and the mouth of a magnet's hole.
 layer = 0.2;
-lead = 2 * layer;
+// The keyhole's room, from the head's width to the shank's.
+hang_taper = (hang_head_d - hang_shank_d) / 2;
 
-assert(t - pocket_d - lead - hole_h >= 0.8, "the skin over the magnets is too thin");
+assert(t - pocket_d - magnet_sink - hole_h - inlay >= 0.5, "the white under the magnets is too thin");
 assert(foot_t - hole_h >= 0.8, "the foot under its magnet is too thin");
-assert(t - hang_lip - hang_head_h >= 1.2, "the skin over the keyhole is too thin");
+assert(t - hang_lip - hang_head_h - inlay >= 0.6, "the white under the keyhole is too thin");
+assert(hang_taper <= hang_head_h, "the keyhole's room is too shallow to narrow to its slot");
 assert(h - hang_top - hang_len - hang_head_d / 2 > stow_y + foot_front + foot_back + finger_up + finger_r + 2,
        "the keyhole runs into the pockets");
 assert(jaw_h < margin - url_size * 0.4, "the front jaw would cover the address");
 assert(qr_w + 2 * quiet_w <= w, "the code's quiet zone is wider than the panel");
-echo(str("Sign is ", w, " x ", h, " x ", t + emboss, " mm, and leans back ", lean, " degrees"));
+echo(str("Sign is ", w, " x ", h, " x ", t, " mm, and leans back ", lean, " degrees"));
 
 // A plate with rounded corners, chamfered top and bottom, from the origin.
 module plate(size, r, k) {
@@ -263,23 +275,18 @@ module foot() {
   }
 }
 
-// A magnet's hole, less its crush ribs: one in the middle of each side of the
-// square that a pocket's hole starts as, to hang over it the least.
+// A magnet's hole, less its crush ribs.
 module magnet_hole_2d() difference() {
   circle(d = hole_d);
   for (i = [0:magnet_ribs - 1]) rotate(i * 360 / magnet_ribs)
     translate([magnet_d / 2 - magnet_rib_press, -magnet_rib_w / 2]) square([1, magnet_rib_w]);
 }
 
-// The holes over a pocket for its magnets, from the pocket's ceiling up. A hole
-// in a ceiling has nothing to print its edge on, so it starts as a strip right
-// across the pocket, beside which the ceiling's lines still reach from wall to
-// wall, then a square, whose lines lie on those, then the round.
+// The holes in a pocket's floor for its magnets. As in the feet, the ribs stop
+// a layer short of the mouth.
 module magnet_holes() for (m = magnets) translate([m[0].x, m[0].y, pocket_d]) rotate(m[1]) {
-  across = max(boss_r, bar / 2) + gap;
-  translate([-hole_d / 2, -across, -eps]) cube([hole_d, 2 * across, layer + eps]);
-  translate([-hole_d / 2, -hole_d / 2, 0]) cube([hole_d, hole_d, lead]);
-  translate([0, 0, lead - eps]) linear_extrude(hole_h + eps) magnet_hole_2d();
+  translate([0, 0, -eps]) cylinder(d = hole_d, h = layer + eps);
+  translate([0, 0, layer - eps]) linear_extrude(magnet_sink + hole_h - layer + eps) magnet_hole_2d();
 }
 
 // A foot's place in the panel's back: side s, heel up, its base to the middle.
@@ -289,14 +296,20 @@ module stow(s) translate([s * stow_wall / 2, stow_y + foot_front, 0])
 // A foot's pocket, which it drops into: the magnets are what hold it.
 module pocket_2d() offset(delta = gap) foot_2d();
 
-// The keyhole, where the screw ends up: at the origin, on the bed.
+// The keyhole, where the screw ends up: at the origin, in the panel's back.
 module keyhole() {
   module run(d) hull() for (y = [0, -hang_len]) translate([0, y]) circle(d = d);
   stepped(hang_lip + eps, bed_chamfer) {
     run(hang_shank_d);
     translate([0, -hang_len]) circle(d = hang_head_d);
   }
-  translate([0, 0, hang_lip]) linear_extrude(hang_head_h) run(hang_head_d);
+  translate([0, 0, hang_lip]) {
+    hull() {
+      linear_extrude(eps) run(hang_shank_d);
+      translate([0, 0, hang_taper]) linear_extrude(hang_head_h - hang_taper) run(hang_head_d);
+    }
+    translate([0, -hang_len]) cylinder(d = hang_head_d, h = hang_head_h);
+  }
 }
 
 module body() {
@@ -308,15 +321,18 @@ module body() {
         magnet_holes();
       }
       translate([0, stow_y + foot_front + foot_back, 0])
-        stepped(pocket_d + eps, bed_chamfer) difference() {
+        stepped(pocket_d + eps, bed_chamfer) {
           translate([0, finger_up]) circle(finger_r);
-          // The wall between the pockets runs on to the heels' ends: without
-          // it, the ceiling would bridge both heels and the scoop in one go.
-          translate([-stow_wall / 2 + gap, -2 * finger_r])
-            square([stow_wall - 2 * gap, 2 * finger_r + gap]);
+          // The wall's end, round.
+          a = stow_wall / 2 - gap;
+          difference() {
+            translate([-a - eps, -wall_back - a]) square([2 * a + 2 * eps, wall_back + a]);
+            translate([0, -wall_back - a]) circle(a);
+          }
         }
       translate([0, h - hang_top, 0]) keyhole();
     }
+    face(eps);
   }
 }
 
@@ -337,8 +353,9 @@ module note(s) {
   resize([0, s], auto = true) import("note.svg", center = true);
 }
 
-module face() {
-  translate([0, 0, t - eps]) linear_extrude(emboss + eps) {
+// The black, in the face: `more` further out of it, to cut its place.
+module face(more = 0) {
+  translate([0, 0, t - inlay]) linear_extrude(inlay + more) {
     translate([0, title_y]) text(title, size = title_size, font = font, halign = "center");
     code();
     translate([0, qr_y + qr_w / 2]) note(note_n * module_w);
@@ -352,6 +369,8 @@ module placed() {
   if (part == "stand") {
     at = slot_xy(slot_clear / 2 + t, 0);
     translate([0, at.x, at.y]) rotate([90 - lean, 0, 0]) children();
+  } else if (part == "print") {
+    translate([0, 0, t]) rotate([0, 180, 0]) children();
   } else {
     children();
   }
