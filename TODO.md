@@ -12,8 +12,8 @@ At old sizes:
 - Printed: 3, 4, 8, 9
 
 At new sizes:
- - Printed: Frame
- - Printing: Special (lg)
+ - Printed: Frame, Special (lg)
+ - Queued: Plate 5, 9
 
 ## The Fox in the Forest
 
@@ -24,7 +24,6 @@ At new sizes:
 ## SET
 
 - Measure the cards and the deck, set `sleeve` and `deck`
-- Get purple, lavender filament
 - Print the body and the lid
 
 ## Magic Octagon
@@ -45,7 +44,3 @@ At new sizes:
 ## Lattices (gcode/lattice)
 
 - Print strands (now as one raft)
-
-## Party sign
-
-- Print it
