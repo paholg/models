@@ -13,8 +13,9 @@
 //    the mountain strips, in two stacks. At its end: the boat market and the
 //    misc bin (4), and over them the VP and penalty tokens and the 2x5 money
 //    (6), beside a spacer.
-//    back, at the big tiles' end: the setup buildings, in a riser (4);
-//    the big tiles (5); the wooden goods (6).
+//    back, at the big tiles' end: the setup buildings, and a riser behind
+//    them (4); the big tiles, which reach over onto the vikings (5); the
+//    wooden goods (6).
 //    back, at the islands' end: the vikings (4); the islands (5); the in-game
 //    buildings, which reach over onto the big tiles (6).
 //
@@ -247,7 +248,12 @@ island_n = 8;
 // box; the big tiles take the rest of its length.
 islands = [back_y, back_y];
 big = [inner.x - islands.x, back_y];
-islands_h = floor_t + island_n * card_t;
+// It's a tier tall, standing on the vikings' bins, which are as low as the
+// setup buildings beside them: what the islands don't need of that is floor, and the
+// tray, big and open and lifted out full, is the stiffer for it.
+islands_h = tier_h;
+islands_floor = islands_h - island_n * card_t;
+assert(islands_floor >= floor_t, "the islands' tray is too low for its stack");
 assert(islands.x >= island + stack_clear + 2 * post_t, "the islands don't fit beside the big tiles");
 big_clear = (big.x - 4 * wall - 13 * unit) / 3;
 function big_w(n) = n * unit + big_clear;
@@ -656,7 +662,7 @@ module corner_post(h, h_y, t_y = post_t, t_x = post_t) {
 }
 
 // Islands, one stack, beside the big tiles, over the vikings.
-module islands_tray() let ($setup = true) stack_tray(islands, islands_h, [island, island], 1);
+module islands_tray() let ($setup = true, $tray_floor = islands_floor) stack_tray(islands, islands_h, [island, island], 1);
 
 // The setup buildings, 6 of them, in one stack: an open tray.
 building = [139, 54.5];
@@ -703,14 +709,11 @@ module honeycomb(size, h, edges, turned = false) let ($setup = true, shift = hon
 // A rectangle with its corners rounded, for one.
 module honey_rect(size) offset(r = chamfer_corner) offset(delta = -chamfer_corner) square(size);
 
-// The riser fills out the big tiles' footprint round the setup buildings'
-// tray, for them to sit on: an L, behind that tray and beside it.
-riser = [big.x, back_y];
-module riser_2d() offset(r = chamfer_corner) offset(delta = -chamfer_corner)
-    offset(r = -chamfer_corner) offset(delta = chamfer_corner)
-    polygon([[bld.x, 0], [riser.x, 0], [riser.x, riser.y], [0, riser.y], [0, bld.y], [bld.x, bld.y]]);
-// Its ends, and the leg's inside edge, are the edges its walls run along.
-module riser() honeycomb(riser, base_h, [wall, riser.x - wall, bld.x + wall]) riser_2d();
+// The riser fills the gap behind the setup buildings' tray, as long as it
+// is, for the big tiles to sit on; the vikings' bins take what's beside the
+// two.
+riser = [bld.x, back_y - bld.y];
+module riser() honeycomb(riser, base_h, [wall, riser.x - wall]) honey_rect(riser);
 // The spacer is narrow, so its cells are turned: their walls cross it.
 module spacer() honeycomb(spacer, vp_h, [wall, spacer.y - wall], true) honey_rect(spacer);
 
@@ -1040,11 +1043,12 @@ module misc_tray() let ($setup = true, $side_scoop = true, $wall = misc_wall, $r
 }
 // Vikings: a bin per player color, each a piece of its own, scooped up every
 // wall, and all its color: no icon, the color says whose it is. The four sit
-// two by two under the islands, and are as tall as brings those level with
-// the big tiles.
-vik = islands;
+// two by two beside the setup buildings and the riser, as tall as those, so
+// the whole of the back is level there: under the islands, and under the end
+// of the big tiles.
+vik = [inner.x - bld.x, back_y];
 vik_bin = vik / 2;
-vik_h = base_h + tier_h - islands_h;
+vik_h = base_h;
 vik_scoop = 10;
 // A bin's volume, less what its four scoops fill in.
 vik_in = vik_bin - 2 * [wall, wall];
@@ -1718,8 +1722,8 @@ module assembly() {
             translate([decks_x, boat.y, 0]) misc_tray();
             translate([0, front_y, 0]) {
                 setup_buildings_tray();
-                riser();
-                for (k = [0:3]) translate([big.x + (k % 2) * vik_bin.x, floor(k / 2) * vik_bin.y, 0]) vik_bin(k);
+                translate([0, bld.y, 0]) riser();
+                for (k = [0:3]) translate([bld.x + (k % 2) * vik_bin.x, floor(k / 2) * vik_bin.y, 0]) vik_bin(k);
             }
         }
         if (show(5)) translate([0, 0, e]) {
