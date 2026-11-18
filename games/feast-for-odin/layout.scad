@@ -714,114 +714,212 @@ module strips_tray(k) {
     }
 }
 // The in-game buildings, in one tray: a stack per kind, each leaning on its
-// own ramp, like shingles, and all at one angle. A stack's low edge is on the
+// own ramp, like shingles, all at one angle. A stack's low edge is on the
 // floor, against a stop; its high half lies over the next stack, whose ramp
-// carries it: so a building comes out of any stack, up its ramp, and the
-// stacks over it stay put. The first stack is the bottom one, with nothing
-// under it, and comes out the back.
-// The tray is one profile from end to end, and prints standing on its end
-// wall; the other end is a cap, glued on, plugged into the hollows under the
-// ramps.
-// Buildings a stack, bottom stack first.
+// carries it. A ramp stops short of its stack's high edge, to get a finger
+// under and lift, and reaches a little over the low edge of the stack before
+// it; the front wall has a lip that does the same for the last stack. So a
+// building comes out up its ramp, and the stacks over it stay put.
+// The tray is one section from end to end, between two end walls, and prints
+// standing on one of them, with no overhangs. The other is a cap, glued on.
+// Its section is drawn in [u, v]: u from the tray's front to its back, v up.
+
+// Buildings a stack, back stack first: the one with nothing under it.
 bld_stacks = [3, 3, 5];
 // How much of a covered stack shows, of a building's width. More, and the
 // tray is deeper and leans less, so it's lower: this much brings it under
 // the tier's height.
 bld_show = 0.75;
 bld_ramp_t = 1.2;
-// Between a stack and the ramp over it.
+// Between a stack and the ramp, or lip, over it.
 bld_over = 0.6;
-// A ramp stops this short of its buildings' high edge, to get a finger under
-// them. Not the bottom stack's: its ramp is the tray's back wall too.
+// A ramp stops this short of its buildings' high edge. The back stack's too:
+// the back wall stands under its ramp's end, with the buildings' overhang
+// behind it.
 bld_grip = 8;
+// Under that overhang, from the back wall to the tray's edge, the tray is
+// solid this far up from the floor: a face for the next tray to sit against,
+// and low enough to leave the way in under the buildings.
+bld_lip = 4;
 bld_end_t = 1.2;
 // Along the buildings, in all: it has to turn into the back of the box.
 bld_len_clear = 1;
+// The section's own edges are rounded over by this, and filleted by that where
+// its walls meet. (The end walls' outline has chamfer_corner for both.)
+bld_round = 0.4;
+bld_fillet = 0.5;
+// The cap's plugs: how tall, their fit in the hollows each side, and how far
+// their crush ribs stand out.
 bld_plug_h = 4;
-// A plug's fit in its hollow, each side, and how far its crush ribs stand out.
 bld_plug_clear = 0.2;
 bld_rib = 0.35;
+// The hollows under the ramps are closed off just below the plugs, making each
+// a socket. A plug is glued by its end alone, to its socket's floor, which it
+// stops bld_glue_gap short of; what glue is pushed aside has the room round
+// the end's chamfer (bld_plug_lead).
+// The socket's floor is bld_socket_floor thick, on a roof that closes in from
+// the hollow's walls at 45 degrees: no bridge, which the slicer would run the
+// long way.
+bld_socket_floor = 1;
+bld_glue_gap = 0.2;
+// A plug's top edge is chamfered by this, to lead it in.
+bld_plug_lead = 0.6;
+
+bld_last = len(bld_stacks) - 1;
 function bld_t(i) = bld_stacks[i] * card_t;
 // The thickest stack with another over it sets the angle.
-bld_a = atan((max([for (i = [0:len(bld_stacks) - 2]) bld_t(i)]) + bld_over + bld_ramp_t) / (bld_show * building.y));
-// Along and square to the ramps, in the profile's [y, z].
+bld_a = atan((max([for (i = [0:bld_last - 1]) bld_t(i)]) + bld_over + bld_ramp_t) / (bld_show * building.y));
+// Along and square to the ramps.
 bld_d = [cos(bld_a), sin(bld_a)];
 bld_n = [-sin(bld_a), cos(bld_a)];
 // From one stack's low corner to the next's.
 bld_step = bld_show * building.y / cos(bld_a);
-bld_last = len(bld_stacks) - 1;
-// Each stack's low corner, where its ramp leaves the floor.
+// How far a ramp reaches over the stack under it, from that stack's low edge.
+bld_reach = building.y - bld_grip - bld_step * cos(bld_a);
+// Stack i: where its ramp leaves the floor, under its low edge; and the low
+// and high corners of its top.
 function bld_p(i) = [wall + bld_t(bld_last) * sin(bld_a) + (bld_last - i) * bld_step, floor_t];
+function bld_low(i) = bld_p(i) + bld_t(i) * bld_n;
+function bld_high(i) = bld_low(i) + building.y * bld_d;
+// Its top's height at u, and beyond.
+function bld_top(i, u) = bld_low(i).y + (u - bld_low(i).x) * tan(bld_a);
+// The lip over the last stack: its top's low and high ends.
+bld_front = bld_p(bld_last) + (bld_t(bld_last) + bld_over + bld_ramp_t) * bld_n;
+bld_front_end = bld_front + bld_reach * bld_d;
+bld_front_h = bld_front.y - bld_front.x * tan(bld_a);
+bld_depth = bld_p(0).x + building.y * bld_d.x;
+// The back wall's outside face.
+bld_back = bld_p(0).x + (building.y - bld_grip) * bld_d.x;
+// A plug's foot is its hollow, 1 + bld_plug_clear in from every side: so it
+// starts this far from the hollow's point, where the ramp meets the floor.
+bld_plug_from = (1 + bld_plug_clear) / tan(bld_a / 2);
 bld_in_x = building.x + bld_len_clear;
-bld_tray = [bld_in_x + 2 * bld_end_t, bld_p(0).x + building.y * bld_d.x,
-            max([for (i = [0:bld_last]) (bld_p(i) + building.y * bld_d + bld_t(i) * bld_n).y])];
+bld_tray = [bld_in_x + 2 * bld_end_t, bld_depth, max([for (i = [0:bld_last]) bld_high(i).y])];
 echo(bld_angle = bld_a, bld_tray = bld_tray);
 assert(bld_tray.x <= back_y && bld_tray.z <= tier_h, str("the buildings tray doesn't fit its tier: ", bld_tray));
 // The wooden goods take the rest of the top tier at the back.
 wood = [inner.x - bld_tray.y, back_y];
+
+// The end walls' outline: the tray's silhouette with its buildings in. From
+// the front it's the lip's top, a step down to the last stack's, then each
+// stack's top to the high corner of the next, where it steps straight up. At
+// the back it runs on to the tray's edge, and straight down. Every corner is
+// rounded.
+module bld_outline() offset(r = chamfer_corner) offset(delta = -chamfer_corner)
+    offset(r = -chamfer_corner) offset(delta = chamfer_corner) polygon([
+        [0, 0], [bld_depth, 0], [bld_depth, bld_top(0, bld_depth)],
+        for (i = [1:bld_last]) each [[bld_high(i).x, bld_top(i - 1, bld_high(i).x)], bld_high(i)],
+        [bld_front_end.x, bld_top(bld_last, bld_front_end.x)], bld_front_end, [0, bld_front_h],
+    ]);
 // A slab along the ramps' slope from p: len long, t thick, under the line.
 module bld_slab(p, len, t) polygon([p, p + len * bld_d, p + len * bld_d - t * bld_n, p - t * bld_n]);
+// The section. It's all within the outline, which only takes its outside
+// corners off.
+module bld_section() intersection() {
+    bld_outline();
+    offset(r = -bld_fillet) offset(delta = bld_fillet) offset(r = bld_round) offset(delta = -bld_round) union() {
+        square([bld_depth, floor_t]);
+        for (i = [0:bld_last]) let (p = bld_p(i), up = bld_step * sin(bld_a) - bld_ramp_t / 2) {
+            // Ramp: down through the floor.
+            intersection() {
+                bld_slab(p - 5 * bld_d, 5 + building.y - bld_grip, bld_ramp_t);
+                square([bld_depth, bld_tray.z]);
+            }
+            // Stop at the stack's low edge, up into the next ramp.
+            if (i < bld_last) polygon([p, p + up * bld_n, p - wall * bld_d + up * bld_n, p - wall * bld_d]);
+        }
+        // The last stack's stop is the front wall, with its lip.
+        let (p = bld_p(bld_last), under = bld_front - bld_ramp_t * bld_n)
+            polygon([[0, 0], [p.x, 0], p, under, under + bld_reach * bld_d, bld_front_end, [0, bld_front_h]]);
+        // Back wall, under the end of the back stack's ramp; and the solid
+        // part behind it.
+        translate([bld_back - wall, 0]) square([wall, bld_top(0, bld_back) - bld_t(0) / cos(bld_a) - bld_ramp_t / 2]);
+        translate([bld_back - wall, 0]) square([bld_depth - bld_back + wall, floor_t + bld_lip]);
+    }
+}
 // The hollow under ramp i: floor, ramp, and the stop (or back wall) of the
 // stack before.
 function bld_hollow(i) = let (p = bld_p(i), a = [p.x + bld_ramp_t / sin(bld_a), floor_t])
-    i == 0 ? [a, [bld_tray.y - wall, floor_t],
-              [bld_tray.y - wall, floor_t + (bld_tray.y - wall - p.x) * tan(bld_a) - bld_ramp_t / cos(bld_a)]]
+    i == 0 ? [a, [bld_back - wall, floor_t],
+              [bld_back - wall, floor_t + (bld_back - wall - p.x) * tan(bld_a) - bld_ramp_t / cos(bld_a)]]
     : let (q = bld_p(i - 1)) [a, [q.x - wall / cos(bld_a), floor_t],
                               q - wall * bld_d + (bld_step * sin(bld_a) - bld_ramp_t) * bld_n];
-// The stacks themselves, for the outline and the preview.
-module bld_cards_2d(i, clear = 0)
-    polygon([for (c = [[-clear, 0], [building.y + clear, 0], [building.y + clear, bld_t(i) + clear], [-clear, bld_t(i) + clear]])
-        bld_p(i) + c.x * bld_d + c.y * bld_n]);
-module bld_profile() intersection() {
-    square([bld_tray.y, bld_tray.z + 10]);
-    // Corners rounded, then inside corners filleted.
-    offset(r = -0.5) offset(delta = 0.5) offset(r = 0.4) offset(delta = -0.4) union() {
-        square([bld_tray.y, floor_t]);
-        for (i = [0:bld_last]) {
-            p = bld_p(i);
-            // Ramp: down through the floor, which clips it.
-            bld_slab(p - 5 * bld_d, 5 + building.y - (i == 0 ? 0 : bld_grip), bld_ramp_t);
-            // Stop at the low edge: up to the next ramp, or as tall as the stack.
-            if (i < bld_last) polygon([p, p + (bld_step * sin(bld_a) - bld_ramp_t / 2) * bld_n,
-                                       p - wall * bld_d + (bld_step * sin(bld_a) - bld_ramp_t / 2) * bld_n, p - wall * bld_d]);
-            else polygon([[0, 0], [p.x, 0], p, p + bld_t(i) * bld_n, [0, (p + bld_t(i) * bld_n).y]]);
-        }
-        // Back wall, under the bottom stack's ramp.
-        translate([bld_tray.y - wall, 0]) square([wall, (bld_p(0) + building.y * bld_d).y - bld_ramp_t / 2]);
+// The circle that fits a triangle, as [center, radius]: where its sides meet
+// if they all come in at one rate, and how far in that is.
+function bld_incircle(h) = let (a = norm(h[2] - h[1]), b = norm(h[0] - h[2]), c = norm(h[1] - h[0]),
+                               area = abs((h[1] - h[0]).x * (h[2] - h[0]).y - (h[1] - h[0]).y * (h[2] - h[0]).x) / 2)
+    [(a * h[0] + b * h[1] + c * h[2]) / (a + b + c), 2 * area / (a + b + c)];
+
+// The outline, c in from its edge at z = 0 and sloping out to it at z = c: a
+// true chamfer, for an outline that isn't convex and so can't be hulled. With
+// flip, the other way up.
+module bld_chamfered(c, flip = false) minkowski() {
+    linear_extrude(eps) offset(r = -c) bld_outline();
+    cylinder(r1 = flip ? c : 0, r2 = flip ? 0 : c, h = c, $fn = 24);
+}
+// An end wall: a plate of the outline, bld_end_t thick, outside face down.
+// Its outside edge is chamfered all round, by chamfer_out. Its inside edge is
+// chamfered, by chamfer, where the wall stands clear of the section: where
+// that meets the edge, it's left whole, to run flush.
+module bld_end_plate() {
+    mid = bld_end_t - chamfer_out - chamfer;
+    bld_chamfered(chamfer_out);
+    translate([0, 0, chamfer_out - eps]) linear_extrude(mid + 2 * eps) bld_outline();
+    translate([0, 0, bld_end_t - chamfer]) {
+        bld_chamfered(chamfer, true);
+        linear_extrude(chamfer) bld_section();
     }
 }
-// The end walls' outline: round everything, the buildings too.
-module bld_outline() offset(r = chamfer_corner) offset(delta = -chamfer_corner) hull() {
-    square([bld_tray.y, floor_t]);
-    for (i = [0:bld_last]) bld_cards_2d(i);
-}
-// A plate of that outline, t thick, its outside (z = 0) edge chamfered.
-module bld_end(t) hull() {
-    linear_extrude(eps) offset(delta = -chamfer_out) bld_outline();
-    translate([0, 0, chamfer_out]) linear_extrude(t - chamfer_out) bld_outline();
-}
-// As it lies in the box: x along the buildings, the bottom stack at the back.
+// As it lies in the box: x along the buildings, u along y.
 module bld_upright() multmatrix([[0, 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 0]]) children();
-module buildings_tray() body() bld_upright() {
-    bld_end(bld_end_t);
-    translate([0, 0, bld_end_t - eps]) linear_extrude(bld_in_x + eps) bld_profile();
+// A hollow, filled, and grown into the walls round it.
+module bld_fill(h) intersection() {
+    offset(delta = 0.6) polygon(h);
+    bld_outline();
 }
-// The cap: the other end wall, with a plug for each hollow. Drawn as printed,
-// outside face down.
-module buildings_cap() body() {
-    bld_end(bld_end_t);
-    for (i = [0:bld_last]) {
-        h = bld_hollow(i);
-        c = (h[0] + h[1] + h[2]) / 3;
-        translate([0, 0, bld_end_t - eps]) hull() {
-            linear_extrude(bld_plug_h - 1) offset(r = 1) offset(delta = -1 - bld_plug_clear) polygon(h);
-            linear_extrude(bld_plug_h) offset(r = 1) offset(delta = -1.6 - bld_plug_clear) polygon(h);
+// union(), and no bare for inside an intersection(): generate.py runs OpenSCAD
+// with lazy-union.
+module buildings_tray() body() bld_upright() union() {
+    bld_end_plate();
+    translate([0, 0, bld_end_t - eps]) linear_extrude(bld_in_x + eps) bld_section();
+    // The sockets' floors, and the roof under each: the hollow ends in a
+    // pyramid, its faces at 45 degrees, its point over the middle.
+    for (i = [0:bld_last]) let (h = bld_hollow(i), ic = bld_incircle(h),
+                                z1 = bld_end_t + bld_in_x - bld_plug_h - bld_glue_gap - bld_socket_floor) {
+        translate([0, 0, z1 - eps]) linear_extrude(bld_socket_floor + eps) bld_fill(h);
+        translate([0, 0, z1 - ic[1]]) difference() {
+            linear_extrude(ic[1]) bld_fill(h);
+            hull() {
+                translate([0, 0, -eps]) linear_extrude(eps) polygon(h);
+                translate([ic[0].x, ic[0].y, ic[1]]) cube(eps, center = true);
+            }
         }
-        // Crush ribs, at the middle of each side, standing out past the clearance.
-        for (k = [0:2]) let (m = (h[k] + h[(k + 1) % 3]) / 2, v = (c - m) / norm(c - m))
-            translate([0, 0, bld_end_t - eps]) translate(m + (bld_plug_clear + 0.5 - bld_rib) * v) hull() {
-                cylinder(r = 0.5, h = bld_plug_h - 1.5, $fn = 16);
-                translate(0.5 * v) cylinder(r = 0.2, h = bld_plug_h - 0.5, $fn = 16);
+    }
+}
+// The cap: the other end wall, with a plug for each socket. Drawn as printed,
+// outside face down.
+module bld_plug_foot(i) offset(r = 1) offset(delta = -1 - bld_plug_clear) polygon(bld_hollow(i));
+module buildings_cap() body() union() {
+    bld_end_plate();
+    for (i = [0:bld_last]) let (h = bld_hollow(i), c = (h[0] + h[1] + h[2]) / 3) translate([0, 0, bld_end_t - eps]) {
+        // A plug, its top edge chamfered.
+        hull() {
+            linear_extrude(bld_plug_h - bld_plug_lead) bld_plug_foot(i);
+            linear_extrude(bld_plug_h) offset(delta = -bld_plug_lead) bld_plug_foot(i);
+        }
+        // Crush ribs, in pairs: one on the floor's side and one on the ramp's,
+        // squeezing the plug between them. Two pairs, a fifth of the way in
+        // from each end of the plug, which starts where the hollow is tall
+        // enough for it: bld_plug_from along either side from the hollow's
+        // point (h[0]). They stand out past the clearance and taper in toward
+        // the top. None on the short side: the plug needs no squeezing there.
+        for (k = [1, 2], f = [0.2, 0.8]) let (e = (h[k] - h[0]) / norm(h[k] - h[0]),
+                                              to = min(norm(h[1] - h[0]), norm(h[2] - h[0])) - 1 - bld_plug_clear,
+                                              m = h[0] + (bld_plug_from + f * (to - bld_plug_from)) * e,
+                                              v0 = [-e.y, e.x], v = v0 * (c - m) > 0 ? v0 : -v0)
+            hull() {
+                translate(m + (bld_plug_clear + 0.5 - bld_rib) * v) cylinder(r = 0.5, h = bld_plug_h - 2, $fn = 16);
+                translate(m + (bld_plug_clear + 1.2) * v) cylinder(r = 0.3, h = bld_plug_h - 1, $fn = 16);
             }
     }
 }
@@ -834,7 +932,7 @@ module buildings_capped() {
 module buildings_demo() {
     buildings_capped();
     for (i = [0:bld_last], k = [0:bld_stacks[i] - 1]) color(["peru", "sienna", "goldenrod"][i]) bld_upright()
-        translate([0, 0, bld_end_t + stack_clear / 2]) linear_extrude(building.x) translate(k * card_t * bld_n)
+        translate([0, 0, bld_end_t + bld_len_clear / 2]) linear_extrude(building.x) translate(k * card_t * bld_n)
             polygon([for (c = [[0, 0.1], [building.y, 0.1], [building.y, card_t - 0.1], [0, card_t - 0.1]])
                 bld_p(i) + c.x * bld_d + c.y * bld_n]);
 }

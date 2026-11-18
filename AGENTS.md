@@ -50,6 +50,9 @@ getting a single print does everything. When in doubt, ask me.
 Most edges should have chamfers or fillets. When designing parts for glue, use
 crush ribs and joints; try to make installation easy and secure.
 
+Don't design for particular slicer settings (layer height, etc) unless a part
+truly requires it, in which case it should be set with `orca()` with a reason.
+
 ## TODO
 
 In TODO.md is a very brief list of the next steps for each project.
