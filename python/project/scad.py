@@ -8,6 +8,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import xml.etree.ElementTree as ET
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -36,6 +37,7 @@ NO_PIECE = ("", "[]")
 
 # Each color a file has named, as OpenSCAD writes it.
 _values: dict[str, str] = {}
+_values_lock = threading.Lock()
 
 
 @dataclass
@@ -96,25 +98,26 @@ def meshes(path: Path) -> tuple[list[str], list[ET.Element]]:
 
 def color_values(names: set[str]) -> dict[str, str]:
     """What OpenSCAD makes of each color name, as it writes it in a 3MF."""
-    if new := sorted(names - set(_values)):
-        with tempfile.TemporaryDirectory() as tmp:
-            scad, mesh = Path(tmp) / "colors.scad", Path(tmp) / "colors.3mf"
-            scad.write_text(
-                "".join(
-                    f"translate([{2 * i}, 0, 0]) color({json.dumps(n)}) cube(1);\n"
-                    for i, n in enumerate(new)
+    with _values_lock:
+        if new := sorted(names - set(_values)):
+            with tempfile.TemporaryDirectory() as tmp:
+                scad, mesh = Path(tmp) / "colors.scad", Path(tmp) / "colors.3mf"
+                scad.write_text(
+                    "".join(
+                        f"translate([{2 * i}, 0, 0]) color({json.dumps(n)}) cube(1);\n"
+                        for i, n in enumerate(new)
+                    )
                 )
-            )
-            subprocess.run(
-                ["openscad", "--enable=lazy-union", "-o", mesh, scad],
-                check=True,
-                capture_output=True,
-            )
-            colors, objects = meshes(mesh)
-        # A color is on the object's triangles, if not the object.
-        for n, o in zip(new, objects):
-            triangle = child(o, ".//m:triangle", NS)
-            _values[n] = colors[int(triangle.get("p1", o.get("pindex", "0")))]
+                subprocess.run(
+                    ["openscad", "--enable=lazy-union", "-o", mesh, scad],
+                    check=True,
+                    capture_output=True,
+                )
+                colors, objects = meshes(mesh)
+            # A color is on the object's triangles, if not the object.
+            for n, o in zip(new, objects):
+                triangle = child(o, ".//m:triangle", NS)
+                _values[n] = colors[int(triangle.get("p1", o.get("pindex", "0")))]
     return {n: _values[n] for n in names}
 
 

@@ -75,9 +75,13 @@ Usage: generate.py FILE.scad
 
 import io
 import math
+import os
 import sys
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Self
 
 from project import layout, orca, scad
 
@@ -98,6 +102,32 @@ def directives(text: str, name: str) -> list[str]:
 
 def directive(text: str, name: str) -> str:
     return next(iter(directives(text, name)), "")
+
+
+class Told:
+    """Stands in for stdout while threads work, keeping what each prints apart."""
+
+    def __enter__(self) -> Self:
+        self.out, self.local = sys.stdout, threading.local()
+        sys.stdout = self
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        sys.stdout = self.out
+
+    def write(self, text: str) -> int:
+        return getattr(self.local, "said", self.out).write(text)
+
+    def flush(self) -> None:
+        self.out.flush()
+
+    def to(self, said: io.StringIO, work, *args):
+        """Run `work` in this thread, with what it prints going to `said`."""
+        self.local.said = said
+        try:
+            return work(*args)
+        finally:
+            del self.local.said
 
 
 def combine(
@@ -182,19 +212,34 @@ def generate(file: Path) -> None:
     wanted: dict[str, dict[str, str]] = {}  # each part's settings, presets and all
     filaments: dict[str, str] = {}  # the filament each color the file names stands for
     renders: dict[str, scad.Render] = {}
-    for part in dict.fromkeys(exports + [p for g in groups for p in g]):
-        target = out_dir / f"{file.stem}-{part}.3mf"
+
+    def build(part: str) -> tuple[scad.Render, orca.Assembly]:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             print(f"{part}: openscad")
             render = scad.render(file, part, work)
             if render.pauses and any(part in g for g in groups):
                 print(f"  warning: {file.stem}-all won't pause for {part}")
-            filaments.update(render.filaments)
-            wanted[part] = render.settings
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
-            built[part] = orca.assemble(render.solids, render.box, work)
-            renders[part] = render
+            return render, orca.assemble(render.solids, render.box, work)
+
+    # The parts at once: they wait on OpenSCAD and Orca, a core apiece.
+    names = list(dict.fromkeys(exports + [p for g in groups for p in g]))
+    with Told() as told, ThreadPoolExecutor(os.cpu_count()) as pool:
+        runs = [
+            (said := io.StringIO(), pool.submit(told.to, said, build, part))
+            for part in names
+        ]
+        for part, (said, run) in zip(names, runs):
+            try:
+                renders[part], built[part] = run.result()
+            except BaseException:
+                pool.shutdown(cancel_futures=True)
+                raise
+            finally:
+                told.out.write(said.getvalue())
+            filaments.update(renders[part].filaments)
+            wanted[part] = renders[part].settings
     colors = {
         p: list(dict.fromkeys(s.color for s in r.solids)) for p, r in renders.items()
     }
