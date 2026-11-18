@@ -369,4 +369,4 @@ module feet() {
 
 piece("sign") color("white") placed() body();
 piece("feet") color("white") feet();
-piece("sign") color("black") placed() face();
+piece("text") color("black") placed() face();
