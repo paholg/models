@@ -441,19 +441,22 @@ module vp_tray() {
         pen_floor_2d();
         translate([wall + fillet_r, 0]) square([vp.x, vp.y - wall - fillet_r]);
     }
-    module pen_opening(steps = 4) {
+    module pen_opening() {
         // Mirrored in the corner's diagonal, for the back wall's end.
         pen_wall_end();
         translate([0, vp.y, 0]) mirror([1, 1, 0]) translate([0, -vp.y, 0]) pen_wall_end();
         translate([-1, pen_c.y, pen_floor]) cube([pen_a + 1, pen_a + 1, vp_h]);
         translate([0, 0, -1]) linear_extrude(pen_floor + 1 + eps) pen_floor_2d();
-        // Chamfers, in steps finer than a layer: the cut's bottom edge, and
-        // the tongue's top one.
-        for (i = [0:steps - 1]) {
-            translate([0, 0, i * chamfer_out / steps - eps]) linear_extrude(chamfer_out / steps + eps)
-                offset(r = chamfer_out * (1 - (i + 0.5) / steps)) pen_floor_2d();
-            translate([0, 0, pen_floor - chamfer + i * chamfer / steps]) linear_extrude(chamfer / steps + eps)
-                offset(r = chamfer * (i + 0.5) / steps) pen_floor_top_2d();
+        // Chamfers: the cut's bottom edge, and the tongue's top one. The cut
+        // isn't convex, so each is its outline swept round with a cone, not a
+        // hull.
+        translate([0, 0, -eps]) minkowski() {
+            linear_extrude(eps) pen_floor_2d();
+            cylinder(r1 = chamfer_out, r2 = 0, h = chamfer_out, $fn = 24);
+        }
+        translate([0, 0, pen_floor - chamfer]) minkowski() {
+            linear_extrude(eps) pen_floor_top_2d();
+            cylinder(r1 = 0, r2 = chamfer, h = chamfer + eps, $fn = 24);
         }
     }
     money_at = [vp.x - wall - money_well.x, (vp.y - money_well.y) / 2];
@@ -1043,14 +1046,6 @@ module floor_slab(size, z0, h, s = 0) intersection() {
     well(size, z0, h, s);
 }
 
-// Same, for any 2D outline (children).
-// In steps of a printed layer (0.2 mm), which is what prints anyway; the
-// parts using it are render()ed so the preview doesn't shimmer on the steps.
-// (A true slope needs a minkowski() per outline, some 20x slower.)
-module rim_2d(h, c = chamfer, steps = 2) {
-    for (i = [0:steps - 1]) translate([0, 0, h - c + i * c / steps])
-        linear_extrude(c / steps + eps) offset(delta = (i + 1) * c / steps) children();
-}
 // The standard pinch slot: an opening w wide down to z = bz in a wall h
 // tall. The wall rounds over into it at the top, on a radius of top_r (so the
 // opening is w + 2 * top_r wide at the rim), and its floor corners are
