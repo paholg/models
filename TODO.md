@@ -8,12 +8,8 @@
 
 ## A Feast for Odin
 
-At old sizes:
-- Printed: 3, 4, 8, 9
-
-At new sizes:
- - Printed: Frame, Special (lg)
- - Queued: Plate 5, 9
+Printing: Forge Special
+To Print: Vikings Yellow, Red, Blue
 
 ## The Fox in the Forest
 
