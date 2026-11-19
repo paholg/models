@@ -34,7 +34,7 @@ seam_chamfer = 0.2;
 
 /* [Knurling] */
 // Reeds around the edge, as on a quarter: flat-topped, with a groove between
-// each two. A multiple of 8, for one at each vertex.
+// each two. A multiple of the bumps, for one at each.
 knurls = 96;
 // The grooves, at the edge and at their floors.
 groove_w = 0.65;
@@ -73,17 +73,28 @@ rib_w = 0.8;
 rib_press = 0.1;
 
 /* [Colors] */
-c_half = ["Gold", "Black"];
-c_arrow = ["Black", "Gold"];
+c_half = ["Gold", "#5c6470"];
+c_arrow = ["#5c6470", "Gold"];
 
 /* [Hidden] */
 $fn = 64;
 eps = 0.01;
 
+// For rotating.scad, which builds on this coin.
+function coin_d() = d;
+// rotating.scad's coin is thicker: it sets $half_t.
+function half_t() = is_undef($half_t) ? half_t : $half_t;
+function coin_inlay() = inlay;
+function coin_angles() = angles;
+function coin_colors() = [c_half, c_arrow];
+
 shapes = ["octagon", "round", "knurled"];
 // What is drawn is of $shape.
 $shape = shape;
-assert(knurls % 8 == 0, "knurls must be a multiple of 8");
+// The knurled coin's bumps, evenly around it; and where the pin is, with the
+// hole opposite it across the x axis. coin120.scad sets $bumps and $pin_a.
+function bumps() = is_undef($bumps) ? 8 : $bumps;
+function pin_a() = is_undef($pin_a) ? 45 : $pin_a;
 
 module outline(inset = 0) {
   if ($shape == "octagon")
@@ -98,15 +109,15 @@ module chamfered() {
   hull() {
     linear_extrude(eps) { $inset = face_chamfer; children(); }
     translate([0, 0, face_chamfer])
-      linear_extrude(half_t - face_chamfer - seam_chamfer) { $inset = 0; children(); }
-    translate([0, 0, half_t - eps]) linear_extrude(eps) { $inset = seam_chamfer; children(); }
+      linear_extrude(half_t() - face_chamfer - seam_chamfer) { $inset = 0; children(); }
+    translate([0, 0, half_t() - eps]) linear_extrude(eps) { $inset = seam_chamfer; children(); }
   }
 }
 
 // A groove between two reeds, into the edge at +x. The faces' chamfers are
 // deeper than it, so it runs out before the face and leaves a rim.
 module groove() {
-  translate([d / 2, 0, -eps]) linear_extrude(half_t + 2 * eps) polygon([
+  translate([d / 2, 0, -eps]) linear_extrude(half_t() + 2 * eps) polygon([
     [1, groove_w / 2 + 1], [0, groove_w / 2], [-groove_d, groove_floor / 2],
     [-groove_d, -groove_floor / 2], [0, -groove_w / 2], [1, -groove_w / 2 - 1],
   ]);
@@ -126,7 +137,8 @@ module blank() {
       chamfered() outline($inset);
       for (i = [0:knurls - 1]) rotate((i + 0.5) * 360 / knurls) groove();
     }
-    for (i = [0:7]) rotate(i * 45) chamfered() bump_2d();
+    assert(knurls % bumps() == 0, "knurls must be a multiple of the bumps");
+    for (i = [0:bumps() - 1]) rotate(i * 360 / bumps()) chamfered() bump_2d();
   } else {
     chamfered() outline($inset);
   }
@@ -148,10 +160,10 @@ module arrow(angle) {
   rotate(angle) linear_extrude(inlay) arrow_2d();
 }
 
-// The pin is at +45 degrees and the hole at -45, so that flipping a half over
+// The pin is at +pin_a() and the hole at -pin_a(), so that flipping a half over
 // the x axis puts each over the other.
-module at_pin() { rotate(45) translate([pin_r, 0, half_t]) children(); }
-module at_hole() { rotate(-45) translate([pin_r, 0, half_t]) children(); }
+module at_pin() { rotate(pin_a()) translate([pin_r, 0, half_t()]) children(); }
+module at_hole() { rotate(-pin_a()) translate([pin_r, 0, half_t()]) children(); }
 
 module pin() {
   cylinder(d = pin_d, h = pin_h - pin_chamfer);
@@ -187,7 +199,7 @@ module half(angle) {
 // Into place on the coin: the second half goes on upside down.
 module place(i, e = 0) {
   if (i == 0) translate([0, 0, -e]) children();
-  else translate([0, 0, 2 * half_t + e]) rotate([180, 0, 0]) children();
+  else translate([0, 0, 2 * half_t() + e]) rotate([180, 0, 0]) children();
 }
 
 // Each shape's two halves are a row on the bed.

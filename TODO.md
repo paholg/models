@@ -29,6 +29,12 @@ At new sizes:
 ## Magic Octagon
 
 - Print variants
+- Rotating coin: get 2×2 cylinder magnets (three stack as the radial pin),
+  3×1 discs, wave washers, and a strong unlock magnet; print the radial and
+  the axial, tune `wedge_fit` and `hold_gap` (radial) or `cone_fit` and the
+  hold magnets (axial)
+- Rotating coin: the washer is squeezed from 1.8 to 1; if it turns too
+  stiffly or rattles, change `spring_h`
 
 ## Jenga
 
