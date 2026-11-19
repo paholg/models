@@ -1,4 +1,4 @@
-// A Feast for Odin + The Norwegians: whole-box layout.
+// A Feast for Odin + The Norwegians: whole-box insert.
 //
 // x is the box length (305), y its width (216), z up.
 //
