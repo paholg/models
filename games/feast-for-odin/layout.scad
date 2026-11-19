@@ -990,9 +990,10 @@ module buildings_tray() body() bld_upright() union() {
     }
 }
 // The cap: the other end wall, with a plug for each socket. Drawn as printed,
-// outside face down.
+// outside face down: so the section is mirrored, as it's seen from the tray's
+// other end.
 module bld_plug_foot(i) offset(r = 1) offset(delta = -1 - bld_plug_clear) polygon(bld_hollow(i));
-module buildings_cap() body() union() {
+module buildings_cap() body() translate([bld_depth, 0, 0]) mirror([1, 0, 0]) union() {
     bld_end_plate();
     for (i = [0:bld_last]) let (h = bld_hollow(i), c = (h[0] + h[1] + h[2]) / 3) translate([0, 0, bld_end_t - eps]) {
         // A plug, its top edge chamfered.
@@ -1019,7 +1020,8 @@ module buildings_cap() body() union() {
 // The tray with its cap on.
 module buildings_capped() {
     buildings_tray();
-    translate([bld_tray.x, 0, 0]) mirror([1, 0, 0]) bld_upright() buildings_cap();
+    // Turned onto the tray's end, not mirrored: as the printed part goes on.
+    translate([bld_tray.x, bld_depth, 0]) rotate(180) bld_upright() buildings_cap();
 }
 // And its buildings in.
 module buildings_demo() {
@@ -1604,8 +1606,10 @@ module deck_tray(i) let (d = deck_trays[i], $setup = d[4], c = deck_cut[i], y0 =
         // The lips, their top edges rounded, and trimmed to the tray's own
         // outside: its corners and bottom edges are rounded over, and a
         // square bar would stand proud of them.
+        // union(): a bare for is a child apiece, under generate.py's
+        // lazy-union, and the two lips have nothing in common.
         intersection() {
-            for (y = [0, len - wall]) translate([0, y, 0]) rotate([90, 0, 90]) linear_extrude(d[3].x) hull() {
+            union() for (y = [0, len - wall]) translate([0, y, 0]) rotate([90, 0, 90]) linear_extrude(d[3].x) hull() {
                 square([wall, h - r]);
                 for (x = [r, wall - r]) translate([x, h - r]) circle(r, $fn = 24);
             }
