@@ -1,14 +1,27 @@
 """Projects drawn with build123d: a project file ends with `project()`."""
 
 import io
+import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from build123d import Color, Compound, Shape, export_step, export_stl
+from OCP.Font import Font_FontMgr  # ty: ignore[import-not-found]  # OCP has no stub for it
 
 from . import build, scad
+
+# build123d points fontconfig at /etc/fonts/fonts.conf when it first sets
+# text, whose files are newer than the fontconfig OCP bundles and warn at every
+# line. Starting OCCT's font manager first, on the flake's list of the fonts,
+# keeps those out and the fonts the same everywhere.
+if fonts := os.environ.get("CAD_FONTCONFIG_FILE"):
+    system = os.environ.get("FONTCONFIG_FILE")
+    os.environ["FONTCONFIG_FILE"] = fonts
+    Font_FontMgr.GetInstance_s()
+    if system is not None:
+        os.environ["FONTCONFIG_FILE"] = system
 
 # How far a mesh may stray from the shape it is made of, in mm and in radians
 # of a curve's turn: well under what a printer can show.

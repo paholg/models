@@ -57,6 +57,12 @@
             '';
           };
 
+        # Every font a model names: Liberation Sans is also OpenSCAD's default.
+        fonts = [
+          pkgs.liberation_ttf
+          pkgs.gyre-fonts
+        ];
+
         # Include native dependencies for build123d with uv.
         uv = pkgs.symlinkJoin {
           name = "uv";
@@ -152,13 +158,17 @@
           # the presets Orca copies into ~/.config/OrcaSlicer/system.
           ORCA_SOURCE = orca-source;
 
-          FONTCONFIG_FILE = pkgs.makeFontsConf {
-            # Every font a model names: Liberation Sans is also OpenSCAD's default.
-            fontDirectories = [
-              pkgs.liberation_ttf
-              pkgs.gyre-fonts
-            ];
-          };
+          FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = fonts; };
+          # For build123d, whose fontconfig is older than the system's and warns at
+          # every line of its config files: only the fonts. python/build/cad.py.
+          CAD_FONTCONFIG_FILE = pkgs.writeText "cad-fonts.conf" ''
+            <?xml version="1.0"?>
+            <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+            <fontconfig>
+              ${pkgs.lib.concatMapStrings (font: "<dir>${font}</dir>") fonts}
+              <cachedir prefix="xdg">fontconfig-cad</cachedir>
+            </fontconfig>
+          '';
         };
       }
     );
