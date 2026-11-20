@@ -109,15 +109,17 @@ def compare(old: Path, new: Path, out: Path) -> list[str]:
         return [kind]
     a, b = import_brep(old), import_brep(new)
     found = []
-    for kind, solid in (("added", b - a), ("removed", a - b), ("common", b & a)):
-        if (
-            solid is not None
-            and solid.compute_volume()
-            and (kind == "common" or thickness(solid) >= FILM)
-        ):
+    for kind, solid in (("added", b - a), ("removed", a - b)):
+        if solid is not None and solid.compute_volume() and thickness(solid) >= FILM:
             export_brep(solid, out / f"{kind}.brep")
             found.append(kind)
-    return [k for k in found if k != "common"]
+    # What stays is only there to see the change by, and is the slowest of the
+    # three: a piece drawn the same, though not to the same bytes, skips it.
+    if found:
+        common = b & a
+        if common is not None and common.compute_volume():
+            export_brep(common, out / "common.brep")
+    return found
 
 
 def view(objects: dict[str, dict[str, Path]], title: str, path: Path) -> None:
