@@ -229,7 +229,8 @@ draw() {
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
     printf '  \033[1mv\033[0m    view a generated object in FreeCAD\n'
-    below=6
+    printf '  \033[1md\033[0m    view what the changes since HEAD do, in FreeCAD\n'
+    below=7
   else
     draw_generate
     printf '  \033[1mv\033[0m    view the G-code\n'
@@ -402,6 +403,21 @@ while true; do
       status="Opened $view in FreeCAD."
       if [[ $state == stale ]]; then
         status+=" It's stale; press g to bring it up to date."
+      fi
+      ;;
+    cad:d)
+      printf '\nDiffing against HEAD...\n'
+      # Leave the log on screen, to read.
+      keep=1
+      # It writes no diff if no piece differs.
+      diffed=tmp/diff/diff.step
+      if ! uv --project python run python/diff.py "$file" --no-open 2>&1; then
+        status="Diff failed."
+      elif [[ ! -e $diffed ]]; then
+        status="No piece of $file differs from HEAD."
+      else
+        launch diff freecad "$diffed" nix/fit.FCMacro
+        status="Opened $diffed in FreeCAD."
       fi
       ;;
     *:c)
