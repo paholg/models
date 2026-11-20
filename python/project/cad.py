@@ -1,36 +1,4 @@
-"""The build123d side: a model written in Python, into the same Orca projects.
-
-A model is a Python file where its .scad would be. It draws its parts with
-build123d, and ends by saying what they are:
-
-    from build123d import *
-    from project.cad import Piece, model
-
-    def lid() -> Part: ...
-
-    model(__file__, parts={"lid": lid, "base": base}, orca={"layer_height": 0.1})
-
-A part is a function, called only when the part is wanted. It gives one shape,
-or for a print of several pieces a list of them, each a part in Orca with its
-own name, color, filament and settings:
-
-    def lid() -> list[Piece]:
-        return [
-            Piece(body, "body", "lightsteelblue", filament="main"),
-            Piece(text, "text", "black", settings={"top_surface_pattern": "concentric"}),
-        ]
-
-`orca` is the whole print's settings, by their names in Orca's presets, and
-`plates` the groups of parts to print together, as a .scad file's `// plate:`
-lines have them: `plates=["lid*2 base"]`. generate.py's docstring has what
-becomes of all of these. `views` are drawn the same way as parts, but only to
-look at, never printed: the whole thing put together, say.
-
-Run with no arguments, the model writes its projects to gen/. With
-`--view PART` it writes tmp/view/<stem>-<part>.step instead, to look at in
-FreeCAD: a tree of the pieces by name, in their colors; PART can be a view.
-`--parts` lists the views, then the parts.
-"""
+"""Models drawn with build123d: a model file ends with `model()`."""
 
 import io
 import sys
@@ -50,7 +18,7 @@ ANGULAR_TOLERANCE = 0.1
 
 @dataclass
 class Piece:
-    """One part of a print, as Orca has it."""
+    """One part of an object, as Orca has it."""
 
     shape: Shape
     name: str
@@ -59,12 +27,17 @@ class Piece:
     settings: Mapping[str, object] = field(default_factory=dict)  # its own
 
 
-Part = Callable[[], Shape | list[Piece]]
+@dataclass
+class Object:
+    """An object to print or a view."""
+
+    draw: Callable[[], Shape | list[Piece]]  # called only when it's wanted
+    description: str  # shown beside its name
 
 
-def pieces(part: str, draw: Part) -> list[Piece]:
-    drawn = draw()
-    return drawn if isinstance(drawn, list) else [Piece(drawn, part)]
+def pieces(name: str, obj: Object) -> list[Piece]:
+    drawn = obj.draw()
+    return drawn if isinstance(drawn, list) else [Piece(drawn, name)]
 
 
 def texts(settings: Mapping[str, object]) -> dict[str, str]:
@@ -83,15 +56,15 @@ def hex_color(name: str) -> str:
 
 
 def render(
-    part: str, draw: Part, orca: Mapping[str, object], work: Path
+    name: str, obj: Object, orca: Mapping[str, object], work: Path
 ) -> scad.Render:
-    """Draw a part, and write a mesh of each of its pieces into `work`."""
+    """Draw an object, and write a mesh of each of its pieces into `work`."""
     solids = []
     filaments = {}
     low, high = [float("inf")] * 3, [float("-inf")] * 3
-    for i, piece in enumerate(pieces(part, draw), 1):
+    for i, piece in enumerate(pieces(name, obj), 1):
         if not piece.shape.is_valid:
-            sys.exit(f"{part}: {piece.name} is not a valid solid")
+            sys.exit(f"{name}: {piece.name} is not a valid solid")
         stl = work / f"{i}.stl"
         export_stl(piece.shape, stl, TOLERANCE, ANGULAR_TOLERANCE)
         color = hex_color(piece.color)
@@ -106,45 +79,55 @@ def render(
     return scad.Render(solids, (tuple(low), tuple(high)), [], filaments, texts(orca))
 
 
-def view(file: Path, part: str, draw: Part) -> Path:
-    """Write a part as a STEP file: its pieces by name, in their colors."""
+def view(file: Path, name: str, obj: Object) -> Path:
+    """Write an object as a STEP file: its pieces by name, in their colors."""
     shapes = []
-    for piece in pieces(part, draw):
+    for piece in pieces(name, obj):
         piece.shape.label = piece.name
         if piece.color:
             piece.shape.color = Color(piece.color)
         shapes.append(piece.shape)
-    out = build.ROOT / "tmp/view" / f"{file.stem}-{part}.step"
+    out = build.ROOT / "tmp/view" / f"{file.stem}-{name}.step"
     out.parent.mkdir(parents=True, exist_ok=True)
-    export_step(Compound(label=f"{file.stem} {part}", children=shapes), out)
+    export_step(Compound(label=f"{file.stem} {name}", children=shapes), out)
     return out
 
 
 def model(
     file: str,
-    parts: Mapping[str, Part],
+    objects: Mapping[str, Object],
     orca: Mapping[str, object] | None = None,
     plates: list[str] | None = None,
-    views: Mapping[str, Part] | None = None,
+    views: Mapping[str, Object] | None = None,
 ) -> None:
-    """What a model file ends with: see this module's docstring."""
+    """Write the model's projects to gen/: one per object, and one of `plates`,
+    each a group like "lid*2 base". `orca` is settings for all of them; views
+    are only to look at.
+
+    `--view NAME` writes tmp/view/<stem>-<name>.step instead, for FreeCAD.
+    `--objects` lists views, then objects: kind, name and description, tabbed.
+    """
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     path = Path(file).resolve()
-    shown = {**(views or {}), **parts}
+    shown = {**(views or {}), **objects}
     match sys.argv[1:]:
         case []:
             build.run(
                 path,
-                list(parts),
+                list(objects),
                 build.groups_of(plates or []),
                 "build123d",
-                lambda part, work: render(part, parts[part], orca or {}, work),
+                lambda name, work: render(name, objects[name], orca or {}, work),
             )
-        case ["--parts"]:
-            print("\n".join(shown))
-        case ["--view", part] if part in shown:
-            print(view(path, part, shown[part]).relative_to(build.ROOT))
+        case ["--objects"]:
+            for name, obj in shown.items():
+                kind = "object" if name in objects else "view"
+                # One line each, however the description is written.
+                description = " ".join(obj.description.split())
+                print(f"{kind}\t{name}\t{description}")
+        case ["--view", name] if name in shown:
+            print(view(path, name, shown[name]).relative_to(build.ROOT))
         case _:
-            sys.exit(f"usage: {path.name} [--parts | --view PART]")
+            sys.exit(f"usage: {path.name} [--objects | --view OBJECT]")

@@ -26,7 +26,7 @@ from build123d import (
     offset,
 )
 
-from project.cad import model
+from project.cad import Object, model
 
 # Light
 
@@ -173,4 +173,7 @@ def louver() -> Part:
     return honeycomb() + tabs()
 
 
-model(__file__, parts={"print": louver})
+model(
+    __file__,
+    objects={"print": Object(louver, "Honeycomb louver, with tabs to screw it in")},
+)

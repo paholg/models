@@ -236,7 +236,7 @@ draw() {
   elif [[ $kind == cad ]]; then
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
-    printf '  \033[1mv\033[0m    view a part in FreeCAD\n'
+    printf '  \033[1mv\033[0m    view an object in FreeCAD\n'
     below=6
   else
     draw_generate
@@ -392,20 +392,37 @@ while true; do
       status="Opened $project in OrcaSlicer."
       ;;
     cad:v)
-      parts="$(uv --project python run "$file" --parts)" || {
-        status="Couldn't list the parts of $file."
+      objects="$(uv --project python run "$file" --objects)" || {
+        status="Couldn't list the objects of $file."
         keep=1
         continue
       }
       printf '\n'
-      part="$(fzf --height '~40%' --reverse --select-1 <<<"$parts")" || continue
+      # Each line is a kind (view or object), a name and a description; show
+      # them as columns, the kind in color and the description dimmed.
+      object="$(
+        awk -F '\t' '
+          { kind[NR] = $1; name[NR] = $2; desc[NR] = $3 }
+          length($2) > width { width = length($2) }
+          END {
+            for (i = 1; i <= NR; i++) {
+              color = kind[i] == "view" ? "36" : "33"
+              printf "%s\t\033[%sm%-6s\033[0m  %-*s  \033[2m%s\033[0m\n",
+                name[i], color, kind[i], width, name[i], desc[i]
+            }
+          }' <<<"$objects" |
+          fzf --ansi --delimiter '\t' --with-nth 2 --height '~40%' \
+            --reverse --select-1 |
+          cut -f1
+      )" || continue
+      [[ -n $object ]] || continue
       printf '\nExporting...\n'
-      if ! uv --project python run "$file" --view "$part" 2>&1; then
+      if ! uv --project python run "$file" --view "$object" 2>&1; then
         status="Export failed."
         keep=1
         continue
       fi
-      view="tmp/view/$(basename "$file" .py)-$part.step"
+      view="tmp/view/$(basename "$file" .py)-$object.step"
       launch freecad freecad "$view"
       status="Opened $view in FreeCAD."
       ;;

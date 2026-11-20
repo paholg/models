@@ -38,10 +38,10 @@ generate file:
         *) uv --project python run python/generate.py "{{file}}" ;;
     esac
 
-# Write a part of a build123d model to tmp/view/<stem>-<part>.step and open it in FreeCAD.
-view file part:
-    uv --project python run "{{file}}" --view "{{part}}"
-    setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{part}}.step" >/dev/null 2>&1 &
+# Write an object of a build123d model to tmp/view/<stem>-<object>.step and open it in FreeCAD.
+view file object:
+    uv --project python run "{{file}}" --view "{{object}}"
+    setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" >/dev/null 2>&1 &
 
 # Open OpenSCAD on what the working tree's changes since a commit do to each part they reach:
 # green for what they add, red for what they remove (see python/diff.py).

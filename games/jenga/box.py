@@ -45,7 +45,7 @@ from build123d import (
     extrude,
 )
 
-from project.cad import Piece, model
+from project.cad import Object, Piece, model
 
 # Views
 
@@ -411,12 +411,12 @@ def assembly() -> list[Piece]:
 
 model(
     __file__,
-    parts={
-        "stacker": stacker_print,
-        "lid": lid_print,
-        "strip": strip_print,
-        "joint": joint_test,
+    objects={
+        "stacker": Object(stacker_print, "Back and right walls and an end cap"),
+        "lid": Object(lid_print, "Front and left walls, the other end cap and a lip"),
+        "strip": Object(strip_print, "The lid's right lip, glued in"),
+        "joint": Object(joint_test, "Dovetail test pieces, one per clearance"),
     },
-    views={"assembly": assembly},
+    views={"assembly": Object(assembly, "The box closed, around the tower")},
     plates=["stacker lid strip"],
 )

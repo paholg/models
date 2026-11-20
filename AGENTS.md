@@ -35,17 +35,18 @@ to name, color and put together, and ends with `model()` from
 `python/project/cad.py`, whose docstring has the details. `just generate` and
 `f` take it, and the older .scad models too, which work as before.
 
-* Each part is a function, giving one shape or a list of `Piece`s: a part in
-  Orca each, with its own name, color, filament and settings. Model in the
-  object's own orientation, as it's used; the part functions turn it as it
-  prints.
+* `model()` takes `objects`, the ones to print, and `views`, ones only to look
+  at, each an `Object`: a function, giving one shape or a list of `Piece`s,
+  and a description to show beside its name. Each piece is a part of the
+  object in Orca, with its own name, color, filament and settings. Draw the
+  model as it's used; the objects' functions turn their pieces to print.
 * Slicer settings: `model(orca={...})` for the whole print, a `Piece`'s
   `settings` for that piece. Keys are the settings' names in Orca.
-* Multi-part objects should always have an `assembly` view with the object as
-  assembled, and should specify `plates` when calling `model()`.
-* `just view FILE.py PART` writes `tmp/view/<stem>-<part>.step` and opens it in
-  FreeCAD: the pieces by name, to hide, cut through and measure. PART can be a
-  view.
+* A model of several objects should always have an `assembly` view of them
+  put together, and should specify `plates` when calling `model()`.
+* `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens
+  it in FreeCAD: the pieces by name, to hide, cut through and measure. OBJECT
+  can be a view.
 * Draw in 2D and extrude, rather than cut solids from solids. Something of many
   cells, a honeycomb say, is one `Face(outline, holes)` extruded once: cutting
   each cell, `chamfer()` on each cell's edges and `loft()` between faces with
