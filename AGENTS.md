@@ -40,8 +40,11 @@ to name, color and put together, and ends with `project()` from
   and a description to show beside its name. Each piece is a part of the
   object in Orca, with its own name, color, filament and settings. Draw the
   assembly as it's used; the objects' functions turn their pieces to print.
-* Slicer settings: `project(orca={...})` for the whole print, a `Piece`'s
-  `settings` for that piece. Keys are the settings' names in Orca.
+* Slicer settings: `project(orca={...})` for the whole print, an `Object`'s
+  `settings` for its own prints (a layer height, say, which Orca keeps for a
+  whole object), a `Piece`'s `settings` for that piece. Keys are the
+  settings' names in Orca. An `Object`'s `pauses=[z]` pauses the print to put
+  something in.
 * A project of several objects should always have an `assembly` view of them
   put together, and should specify `plates` when calling `project()`.
 * `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens

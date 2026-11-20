@@ -2,7 +2,7 @@
 
 import io
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,7 +24,9 @@ class Piece:
     name: str
     color: str = ""  # a name build123d knows, or none for the filament's own
     filament: str = ""  # what to call the filament the color stands for
-    settings: Mapping[str, object] = field(default_factory=dict)  # its own
+    # Its own. One that Orca keeps for a whole object, a brim say, makes the
+    # piece an object of its own, beside the rest.
+    settings: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -33,6 +35,12 @@ class Object:
 
     draw: Callable[[], Shape | list[Piece]]  # called only when it's wanted
     description: str  # shown beside its name
+    # Its prints' own, over the project's: a layer height, say, which Orca keeps
+    # for a whole object, so that no piece can carry it for the rest.
+    settings: Mapping[str, object] = field(default_factory=dict)
+    # Heights to pause at, to put something in: the print pauses once it's that
+    # high, or a layer sooner, so leave a layer's room over what goes in.
+    pauses: Sequence[float] = ()
 
 
 def pieces(name: str, obj: Object) -> list[Piece]:
@@ -76,7 +84,13 @@ def render(
         box = piece.shape.bounding_box()
         low = [min(a, b) for a, b in zip(low, tuple(box.min))]
         high = [max(a, b) for a, b in zip(high, tuple(box.max))]
-    return scad.Render(solids, (tuple(low), tuple(high)), [], filaments, texts(orca))
+    return scad.Render(
+        solids,
+        (tuple(low), tuple(high)),
+        list(obj.pauses),
+        filaments,
+        texts({**orca, **obj.settings}),
+    )
 
 
 def view(file: Path, name: str, obj: Object) -> Path:
@@ -101,8 +115,11 @@ def project(
     views: Mapping[str, Object] | None = None,
 ) -> None:
     """Write the project's .3mf files to gen/: one per object, and one of `plates`,
-    each a group like "lid*2 base". `orca` is settings for all of them; views
-    are only to look at.
+    each a group like "lid*2 base". `orca` is settings for all of them, an
+    object's own `settings` for its prints, and a piece's for that piece; views
+    are only to look at. The plates' project applies what its objects share, and
+    puts the rest on each object, where Orca lets an object have it; it doesn't
+    pause.
 
     `--view NAME` writes tmp/view/<stem>-<name>.step instead, for FreeCAD.
     `--objects` lists views, then objects: kind, name and description, tabbed.
