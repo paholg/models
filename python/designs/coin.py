@@ -105,6 +105,8 @@ HALF_COLORS = ("gold", "#5c6470")
 ARROW_COLORS = HALF_COLORS[::-1]
 # What the slate gray stands for.
 FILAMENTS = ("", "black")
+# Each half's group in FreeCAD, with its arrow.
+HALVES = ("gold", "black")
 
 
 def sketch(shape: Shape) -> Sketch:
@@ -286,9 +288,17 @@ class Coin:
             piece
             for i in (0, 1)
             for piece in (
-                Piece(self.place(i, self.half(i), apart), f"half {i}", HALF_COLORS[i]),
                 Piece(
-                    self.place(i, self.arrow(i), apart), f"arrow {i}", ARROW_COLORS[i]
+                    self.place(i, self.half(i), apart),
+                    f"half {i}",
+                    HALF_COLORS[i],
+                    parent=HALVES[i],
+                ),
+                Piece(
+                    self.place(i, self.arrow(i), apart),
+                    f"arrow {i}",
+                    ARROW_COLORS[i],
+                    parent=HALVES[i],
                 ),
             )
         ]
@@ -306,6 +316,7 @@ class Coin:
                     HALF_COLORS[i],
                     FILAMENTS[i],
                     half_settings(self.shape),
+                    parent=HALVES[i],
                 ),
                 Piece(
                     Pos(i * pitch) * self.arrow(i),
@@ -313,6 +324,7 @@ class Coin:
                     ARROW_COLORS[i],
                     FILAMENTS[1 - i],
                     arrow_settings(self.angles[i]),
+                    parent=HALVES[i],
                 ),
             )
         ]
@@ -320,10 +332,16 @@ class Coin:
 
 def row(coins: dict[str, Coin], apart: float = 0) -> list[Piece]:
     """Coins side by side, glued, or pulled `apart`: their pieces named for
-    them."""
+    them, in a group of each."""
     pitch = D + 2 * BUMP_H + 5
     return [
-        Piece(Pos(k * pitch) * p.shape, f"{name} {p.name}", p.color, p.filament)
+        Piece(
+            Pos(k * pitch) * p.shape,
+            f"{name} {p.name}",
+            p.color,
+            p.filament,
+            parent=f"{name}/{name} {p.parent}",
+        )
         for k, (name, coin) in enumerate(coins.items())
         for p in coin.assembly(apart)
     ]
