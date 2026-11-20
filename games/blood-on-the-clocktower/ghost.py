@@ -10,8 +10,9 @@ the slot hold it. The ghost and the vote are separate prints, and each pauses
 for what goes in it, then prints over.
 
 The ghost's face is white with black eyes inlaid, and its mouth is sunk into
-it, black at the back. The slot leaves the mouth's back, sheathed in black so
-that no white shows down it.
+it, black at the back. The slot leaves the mouth's back, its lips rounded over
+into it, its sides a long way to lead the vote in at an angle, and is lined
+with black, so that no white shows down it.
 
 The ghost faces -y, standing on z = 0, its axis the z axis. In the vote's own
 frame its face is at z = 0, and the end that goes in the mouth is at -x.
@@ -22,13 +23,14 @@ holding its vote.
 """
 
 from functools import cache
-from math import cos, exp, radians, sin, sqrt
+from math import atan2, cos, degrees, exp, pi, radians, sin, sqrt
 
 from build123d import (
     Align,
     Axis,
     Box,
     Circle,
+    Cylinder,
     Edge,
     Ellipse,
     Face,
@@ -37,7 +39,6 @@ from build123d import (
     Location,
     Part,
     Plane,
-    Polygon,
     Pos,
     Rectangle,
     RectangleRounded,
@@ -112,26 +113,32 @@ fit_press = [0, 0.1, 0.2, 0.3]
 mouth_z = 18.8
 mouth_w = 25
 mouth_h = 12
-# How far the mouth is sunk into the face, and how thick its black back is.
+# How far the mouth is sunk into the face, and about how thick its black
+# back is: the back's back is round the axis, where the face is nearly. It's
+# thick enough to hold the slot's rounds.
 mouth_depth = 2
-mouth_back = 2
+mouth_back = 3.5
 # Rounds the mouth's rim over. OCCT can't fillet it by 0.8, where the face
 # meets the mouth's sides at a sharp angle, curving away at its corners.
 mouth_round = 0.7
-# The slot leaves the face this far above the mouth's middle: the vote's
-# corners leave it lower, where the face curves away.
-slot_rise = 1.2
-# The vote sticks out of the mouth this far above level.
+# The middle of the slot's thickness leaves the face this high, and the vote
+# sticks out of it this far above level.
+slot_z = 22
 slot_angle = 30
-slot_depth = 10
-# The black around the slot, inside the ghost.
-slot_wall = 0.6
-slot_c = 0.35
-# On the slot's edges, at the back of the mouth: its long edges chamfered,
-# its ends further, to lead the vote in from either side. Chamfered, not
-# rounded: OCCT can't fillet the ends.
-slot_chamfer = 0.5
-slot_end_chamfer = 1.5
+# From the face to the slot's end, along its middle.
+slot_depth = 12
+# Around the vote: on its faces, and at its sides.
+slot_c = 0.4
+slot_side_c = 0.5
+slot_corner = 0.4
+# Where the slot meets the mouth's back, its edges round over into it: its
+# sides a long way, to lead in a vote coming at an angle, its top and bottom
+# a little, and its corners round between.
+slot_side_round = 3.25
+slot_lip = 0.8
+slot_opening_corner = 2.8
+# The black lining the slot, inside the white.
+lining = 0.6
 
 # Vote
 
@@ -165,8 +172,9 @@ mag_n = 2
 mag_c = 0.1
 # From the vote's end to the ghost's magnets.
 mag_inset = 1
-# Between the slot and the ghost's magnet.
-mag_skin = 0.6
+# Between the slot and the ghost's magnet: less than the slot's lining, so
+# the magnets' pocket starts within it, not on its face.
+mag_skin = 0.5
 # Open above the magnets, under what bridges them. Their pocket is open straight
 # up to the pause, so whatever the layers, the first to cover it is this far
 # above them or more.
@@ -174,7 +182,7 @@ mag_over = 0.2
 
 r = d / 2
 slot_t = vote_t + 2 * slot_c
-slot_h = vote_h + 2 * slot_c
+slot_h = vote_h + 2 * slot_side_c
 mag_r = mag_d / 2 + mag_c
 mag_depth = mag_n * mag_h + 2 * mag_c
 # What's left hollow in the vote, in its middle, and the skin under it, which
@@ -183,6 +191,7 @@ hollow = (insert[0] + 2 * insert_c, insert[1] + 2 * insert_c, insert[2] + insert
 hollow_z = (vote_t - hollow[2]) / 2
 
 assert inlay < hollow_z, "the vote's inlay reaches its insert"
+assert mag_skin < lining, "the magnets' pocket starts on the lining's face"
 
 
 # The skin
@@ -245,7 +254,7 @@ def inner(depth: float) -> Part:
     return Pos(0, 0, shoulder * (1 - f)) * scale(skin(), f)
 
 
-# Eyes and mouth: holes into the face, from the axis out
+# Eyes: holes into the face, from the axis out
 
 
 def into_face(x: float, z: float, w: float, tall: float) -> Part:
@@ -262,54 +271,156 @@ def mouth_hole() -> Part:
     return into_face(0, mouth_z, mouth_w, mouth_h)
 
 
-# The slot
+# The slot: points are in its frame, (along, across, up), as in `slot_frame()`.
+
+
+def slot_axes() -> tuple[Vector, Vector]:
+    """Out of the slot along it, and up through the vote."""
+    c, n = cos(radians(slot_angle)), sin(radians(slot_angle))
+    return Vector(0, -c, n), Vector(0, n, c)
+
+
+def skin_y(z: float) -> float:
+    """Where the face is, in the middle, z high."""
+    q = radius(z, 270)
+    return -q
+
+
+@cache
+def slot_origin() -> Vector:
+    """The slot's end at its floor, in the middle."""
+    out, up = slot_axes()
+    leave = Vector(0, skin_y(slot_z), slot_z)
+    return leave - slot_depth * out - slot_t / 2 * up
 
 
 def slot_frame() -> Location:
     """The slot's own frame: x runs out of the mouth from the slot's end, y
     across the vote, and z up through it, from the slot's floor."""
-    c, n = cos(radians(slot_angle)), sin(radians(slot_angle))
-    z = mouth_z + slot_rise
-    out, up = Vector(0, -c, n), Vector(0, n, c)
-    o = Vector(0, -body_r(z), z) - slot_depth * out - slot_t / 2 * up
-    return Location(Plane(o, x_dir=out, z_dir=up))
+    out, up = slot_axes()
+    return Location(Plane(slot_origin(), x_dir=out, z_dir=up))
 
 
 def in_slot(x: float, y: float, z: float) -> Vector:
     """A point in the slot's frame, in the ghost's."""
-    return (slot_frame() * Pos(x, y, z)).position
+    out, up = slot_axes()
+    return slot_origin() + out * x + Vector(y, 0, 0) + up * z
 
 
-def slot_box(x0: float, x1: float, w: float, z0: float, z1: float) -> Part:
-    """A box in the slot's frame: x from x0 to x1, w across, z from z0 to z1."""
-    align = (Align.MIN, Align.CENTER, Align.MIN)
-    return slot_frame() * Pos(x0, 0, z0) * Box(x1 - x0, w, z1 - z0, align=align)
+def behind_back(p: Vector) -> float:
+    """How far p is behind the mouth's back, `inner(mouth_depth)`, across
+    from the axis: less than 0 in front of it."""
+    f = 1 - mouth_depth / r
+    x, y, z = p.X / f, p.Y / f, (p.Z - shoulder * (1 - f)) / f
+    across = sqrt(x * x + y * y)
+    if not 0 < z < h:
+        return -across
+    return radius(z, degrees(atan2(y, x)) % 360) - across
 
 
+def back_along(w: float, v: float) -> float:
+    """How far along the slot its line w across and v up leaves the back: by
+    false position, which the back's smoothness makes quick. From the slot's
+    end to d along, which is out of the ghost and still below its crown."""
+    lo, hi = 0.0, d
+    flo, fhi = behind_back(in_slot(lo, w, v)), behind_back(in_slot(hi, w, v))
+    side = 0
+    for _ in range(60):
+        m = (lo * fhi - hi * flo) / (fhi - flo)
+        fm = behind_back(in_slot(m, w, v))
+        if abs(fm) < 1e-7:
+            break
+        if fm > 0:
+            lo, flo = m, fm
+            fhi, side = (fhi / 2, 1) if side == 1 else (fhi, 1)
+        else:
+            hi, fhi = m, fm
+            flo, side = (flo / 2, -1) if side == -1 else (flo, -1)
+    return m
+
+
+def opening_ring(t: float) -> list[list[tuple[float, float, float]]]:
+    """Round the slot's edge, at t of the way, from 0 on its walls to 90° on
+    the mouth's back: the slot's section, grown in a quarter circle by its
+    rounds, each of its points that far behind the back. Its sides, top and
+    bottom, and corners, each as points (across, up, along)."""
+    grow_s, grow_t = (q * (1 - cos(t)) for q in (slot_side_round, slot_lip))
+    a, b = slot_h / 2 + grow_s, slot_t / 2 + grow_t
+    k = slot_corner + (slot_opening_corner - slot_corner) * (1 - cos(t))
+    # Past the back at the end, to cross it, not to end on it.
+    past = 0.4
+
+    def point(w: float, v: float, side: float) -> tuple[float, float, float]:
+        rounds = slot_side_round * side + slot_lip * (1 - side)
+        behind = (rounds + past) * (1 - sin(t)) - past
+        return (w, v, back_along(w, v) - behind)
+
+    n = 6
+    edges = []
+    for j in range(4):
+        # Counter-clockwise from the right side, each corner after its side.
+        c, s = cos(pi / 2 * j), sin(pi / 2 * j)
+        half_along, half_from = (b - k, a) if j % 2 == 0 else (a - k, b)
+        side = 1.0 if j % 2 == 0 else 0.0
+        straight = []
+        for i in range(n + 1):
+            f, g = half_from, half_along * (2 * i / n - 1)
+            straight.append(point(f * c - g * s, slot_t / 2 + f * s + g * c, side))
+        corner = []
+        for i in range(n + 1):
+            q = pi / 2 * (j + i / n)
+            cx = (a - k) * (1 if j in (0, 3) else -1)
+            cy = (b - k) * (1 if j in (0, 1) else -1)
+            blend = cos(q - pi / 2 * j) ** 2 if j % 2 == 0 else sin(q - pi / 2 * j) ** 2
+            corner.append(point(cx + k * cos(q), slot_t / 2 + cy + k * sin(q), blend))
+        edges += [straight, corner]
+    return edges
+
+
+@cache
 def slot() -> Part:
-    """Out through the face, and well past it."""
-    return slot_box(0, slot_depth + d, slot_h, 0, slot_t)
+    """The slot, from its end out along its walls, which round over into the
+    mouth's back, and out through the mouth, which is open: lofted through
+    rings round its edge, from and to flat ends, to close the loft.
+
+    The rounds cross the back, not meet it face on face: OCCT is slow to
+    cut surfaces that touch, and can fail to."""
+    out, _ = slot_axes()
+    rings = [opening_ring(radians(t)) for t in range(0, 91, 15)]
+
+    def wire(
+        edges: list[list[tuple[float, float, float]]], along: float | None = None
+    ) -> Wire:
+        return Wire(
+            [
+                Edge.make_spline(
+                    [in_slot(q if along is None else along, w, v) for w, v, q in e]
+                )
+                for e in edges
+            ]
+        )
+
+    start = min(q for e in rings[0] for _, _, q in e) - 0.3
+    end = max(q for e in rings[-1] for _, _, q in e) + 1
+    ends = [wire(rings[0], start), wire(rings[-1], end)]
+    lofted = Solid.make_loft([ends[0], *map(wire, rings), ends[1]], ruled=True)
+    # Back to the slot's end, from the loft's own end, to meet it exactly.
+    return Part() + [lofted, extrude(Face(ends[0]), start, -out)]
 
 
-def sheath() -> Part:
-    """The black around the slot, from its end out to the face: the vote's
-    corners pass the mouth's rim."""
-    w = slot_wall
-    return slot_box(-w, slot_depth + 1, slot_h + 2 * w, -w, slot_t + w)
-
-
-def before_sheath() -> Part:
-    """All that's in front of the sheath, out to the face and past it: within
-    the mouth, it would be an island of white in each layer."""
-    w = slot_wall
-    ends, out = (-w, slot_t + w), slot_depth + 1
-    corners = [in_slot(-w, 0, z) for z in ends] + [
-        in_slot(out, 0, z) for z in ends[::-1]
-    ]
-    # The sheath's side, in y and z, and the same d further out, toward -y.
-    side = [Polygon(*[(p.Y - k, p.Z) for p in corners], align=None) for k in (0, d)]
-    hull = make_hull([e for f in side for e in f.edges()])
-    return extrude(Plane.YZ * hull, slot_h / 2 + w, both=True)
+def lining_tube() -> Part:
+    """Black round the slot, from its end into the mouth's black back."""
+    outline = RectangleRounded(
+        slot_h + 2 * lining, slot_t + 2 * lining, slot_corner + lining
+    )
+    tube = (
+        slot_frame()
+        * Pos(-lining, 0, slot_t / 2)
+        * Rot(0, 90, 0)
+        * extrude(Rot(0, 0, 90) * outline, slot_depth)
+    )
+    middle = body_r(mouth_z) - mouth_depth - mouth_back / 2
+    return tube & Cylinder(middle, h, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
 
 def magnet_pocket() -> Part:
@@ -417,25 +528,24 @@ vote_settings = {
 
 def ghost() -> list[Piece]:
     """The ghost as it prints, standing."""
+    # The white and the black are each cut from the same shapes, not one from
+    # the other: they meet face on face, and OCCT takes tens of seconds to
+    # cut one from the other there. Nor does anything cut from either meet
+    # its faces face on face: each reaches past what it leaves.
     whole = skin()
-    eyes = whole & (eye_holes() - inner(eye_depth))
+    eye_cut = eye_holes() - inner(eye_depth)
     hole = mouth_hole()
-    deep = inner(mouth_depth + mouth_back)
-    sunk = hole - deep
-    # What's not white about the mouth, from the face in: the black of it is
-    # what's deeper than the mouth's sunk face. The sheath reaches the face,
-    # and is open down to the black where it passes the mouth's rim.
-    rest = sheath() + (hole & before_sheath() & deep)
-    slot_cut = slot() + magnet_pocket()
-    # The rest cut from the mouth once it's sunk and rounded, and none of it
-    # again: cut twice, face on face with the mouth's sides, OCCT leaves no
-    # solid.
-    white = round_rim(whole - sunk) - eyes - rest - socket(press) - slot_cut
-    mouth = (inner(mouth_depth) & (sunk + rest)) - slot_cut
+    deep = hole - Cylinder(body_r(mouth_z) - mouth_depth - mouth_back, h)
+    # The slot is within its lining and the mouth's back, so the white needn't
+    # be cut by it too.
+    magnets = magnet_pocket()
+    tube = lining_tube()
+    white = round_rim(whole - deep) - (tube + eye_cut + socket(press) + magnets)
+    black = ((deep + tube) & inner(mouth_depth)) - (slot() + magnets)
     return [
-        Piece(white, "ghost", "white", settings=sheet_settings),
-        Piece(eyes, "eyes", "black"),
-        Piece(lead_in(mouth), "mouth", "black"),
+        Piece(white, "sheet", "white", settings=sheet_settings, parent="ghost"),
+        Piece(whole & eye_cut, "eyes", "black", parent="ghost"),
+        Piece(black, "mouth", "black", parent="ghost"),
     ]
 
 
@@ -446,26 +556,10 @@ def shared(a: Face, b: Face) -> list[Edge]:
 
 def round_rim(sunk: Part) -> Part:
     """The mouth's rim rounded over, where its sides meet the face: on the skin
-    with nothing but the mouth sunk into it, its rim whole. Rounded after the
-    slot crosses it, OCCT fills the mouth back in."""
+    with nothing but the mouth sunk into it, its rim whole."""
     face = max(sunk.faces().filter_by(GeomType.BSPLINE), key=lambda f: f.area)
     sides = sunk.faces().filter_by(GeomType.EXTRUSION)
     return fillet([e for f in sides for e in shared(f, face)], mouth_round)
-
-
-def lead_in(mouth: Part) -> Part:
-    """The slot's edges at the back of the mouth: its long ones chamfered, and
-    its ends further, within the mouth. Each on its own, then both: OCCT can't
-    chamfer the two kinds of edge in one go, where they meet."""
-    back = max(mouth.faces().filter_by(GeomType.BSPLINE), key=lambda f: f.area)
-    walls = slot().faces()
-    edges = [
-        e for e in back.edges() if any(w.distance_to(e.center()) < 1e-4 for w in walls)
-    ]
-    ends = [e for e in edges if e.length < slot_h / 2]
-    sides = [e for e in edges if e.length >= slot_h / 2]
-    assert len(ends) == 2 and len(sides) == 2, "the slot's mouth isn't four edges"
-    return chamfer(sides, slot_chamfer) & chamfer(ends, slot_end_chamfer)
 
 
 def vote_face() -> Sketch:
@@ -496,8 +590,8 @@ def vote() -> list[Piece]:
 
 def placed_vote(at: Location) -> list[Piece]:
     return [
-        Piece(at * vote_body(), "vote", "firebrick"),
-        Piece(at * vote_text(), "text", "white"),
+        Piece(at * vote_body(), "body", "firebrick", parent="vote"),
+        Piece(at * vote_text(), "text", "white", parent="vote"),
     ]
 
 
@@ -524,7 +618,7 @@ def fit() -> list[Piece]:
 
 def assembly() -> list[Piece]:
     """On its pencil, its vote in its mouth, face up."""
-    held = slot_frame() * Pos(vote_w / 2, 0, slot_t - slot_c) * Rot(180, 0, 0)
+    held = slot_frame() * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c) * Rot(180, 0, 0)
     pencil = Pos(0, 0, socket_depth - wand_l) * extrude(
         RegularPolygon(pencil_corners / 2, 6), wand_l
     )
