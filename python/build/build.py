@@ -1,5 +1,40 @@
-"""From a model's parts to its Orca projects, whatever drew them: OpenSCAD
-(generate.py) or build123d (cad.py). generate.py's docstring has what comes out."""
+"""From a build123d project's objects, which cad.py draws, to its Orca projects.
+
+Each object becomes gen/<dir>/<stem>-<object>.3mf, where <dir> is the project
+file's directory in this repo: one object in Orca, with a part for each of its
+pieces, each color on its own filament: the same one in every project of the
+file, the plates' too. The file's earlier projects are removed first.
+
+Opening a project applies its settings on top of whatever presets Orca has
+selected, and leaves everything else alone. `printer`, `process` and
+`filament` are not settings but presets, which Orca keeps as selected: those
+are for you to pick by hand. All of them are also shown, as the name of the
+plate and of the object.
+
+This uses Orca 2.5's "published" projects, which carry only the settings they
+list. Orca reads no plate names from a project without settings, so a project
+with none to apply still carries one, unlisted.
+
+A piece's own settings apply to just its part. Orca keeps some settings for a
+whole object, not a part: a brim or a raft, say. A piece with one of those
+becomes an object of its own, where it is, beside the object of everything
+else.
+
+An object can pause, to put something inside it: once the print is z high, or
+a layer sooner, so leave a layer's room over what goes in.
+
+The plates ask for one more project, gen/<dir>/<stem>-all.3mf, with everything
+in it, laid out on as many plates as it takes. It applies the settings its
+objects share; one that only some have goes on those objects' own, if Orca lets
+an object have it, and is left out with a warning if not. A plate pauses
+wherever one of its objects does, and everything on it with it. Each plate is a
+group of objects to print together, with `*N` for copies: "lid*2 base".
+
+A group that doesn't fit one plate goes on several. Its objects are packed by
+their bounding boxes, turned a quarter where that helps; nothing keeps room for
+a prime tower. Each plate's name says which filament goes on which tool head.
+With more colors than heads, those that never print together share one.
+"""
 
 import functools
 import io
@@ -10,15 +45,27 @@ import tempfile
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from . import layout, orca, scad
+from . import layout, orca
 
 ROOT = Path(__file__).resolve().parents[2]
 
 # Keys among the settings that name presets, not settings.
 PRESETS = {"printer", "process", "filament"}
+
+
+@dataclass
+class Render:
+    """An object, drawn."""
+
+    solids: list[orca.Solid]
+    box: tuple[tuple[float, ...], tuple[float, ...]]  # the corners round them all
+    pauses: list[float]  # the heights to pause at
+    filaments: dict[str, str]  # what to call the filament each color stands for
+    settings: dict[str, str]  # for the whole print, presets and all
 
 
 def groups_of(lines: list[str]) -> list[list[str]]:
@@ -92,7 +139,7 @@ def combine(
     """Write one published project of the parts as packed, a plate for each of `packed`.
 
     `colors` are each part's and `heads` the tool head for each; `filaments` names
-    the filament a color stands for, for the plates' names. `own` are the settings
+    the filament a color stands for, for the plates' names: its own hex, if not. `own` are the settings
     of each part alone, beyond `settings`. A plate pauses wherever one of its parts
     does, at each of `pauses`, which stops everything else on it there too.
     """
@@ -127,7 +174,7 @@ def combine(
             )
         name = ", ".join(p if n == 1 else f"{p} x{n}" for p, n in count.items())
         tools = ", ".join(
-            f"T{k} {filaments.get(c) or scad.color_name(c)}"
+            f"T{k} {filaments.get(c) or c or 'plain'}"
             for k, c in sorted({(heads[c], c) for p in count for c in colors[p]})
         )
         stops = sorted({z for p in count for z in pauses[p]})
@@ -144,12 +191,10 @@ def run(
     file: Path,
     exports: list[str],
     groups: list[list[str]],
-    tool: str,
-    render_part: Callable[[str, Path], scad.Render],
+    render_part: Callable[[str, Path], Render],
 ) -> None:
     """Write the projects of a model file: one for each of `exports`, and one of
-    the plates in `groups`, if any. `render_part` renders a part into a folder;
-    `tool` is what to say is doing it.
+    the plates in `groups`, if any. `render_part` draws a part into a folder.
     """
     out_dir = ROOT / "gen" / file.parent.relative_to(ROOT)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -159,12 +204,12 @@ def run(
     built: dict[str, orca.Assembly] = {}
     wanted: dict[str, dict[str, str]] = {}  # each part's settings, presets and all
     filaments: dict[str, str] = {}  # the filament each color the file names stands for
-    renders: dict[str, scad.Render] = {}
+    renders: dict[str, Render] = {}
 
-    def build(part: str) -> tuple[scad.Render, orca.Assembly]:
+    def build(part: str) -> tuple[Render, orca.Assembly]:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
-            print(f"{part}: {tool}")
+            print(f"{part}: build123d")
             render = render_part(part, work)
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
             return render, orca.assemble(render.solids, render.box, work)
@@ -220,8 +265,8 @@ def run(
 
     names = list(dict.fromkeys(exports + [p for g in groups for p in g]))
     with Told() as told, ThreadPoolExecutor(os.cpu_count()) as pool:
-        # The parts at once: they wait on OpenSCAD, build123d's workers and
-        # Orca, a core apiece.
+        # The parts at once: they wait on build123d's workers and Orca, a core
+        # apiece.
         for part, (render, assembly) in zip(
             names, at_once(told, pool, [functools.partial(build, p) for p in names])
         ):

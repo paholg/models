@@ -1,2 +1,2 @@
-"""What generate.py and slice.py are made of: .scad files and build123d projects
-into Orca projects."""
+"""What build123d projects and slice.py are made of: from drawn objects to Orca
+projects."""

@@ -1,6 +1,6 @@
-# Pick a design with fzf, then act on it with single keys. A design is a .scad
-# file or a build123d project (a .py file among them), which become Orca
-# projects, or a script in gcode/, which writes G-code.
+# Pick a design with fzf, then act on it with single keys. A design is a
+# build123d project (a .py file among them), which becomes Orca projects, or a
+# script in gcode/, which writes G-code.
 cd "$(git rev-parse --show-toplevel)" || exit
 
 # Moonraker and Fluidd on the printer.
@@ -34,11 +34,10 @@ git_marks() {
   done < <(git status --porcelain -z --untracked-files=all)
 }
 
-# Pick a design into $file and its $kind (scad, cad or gcode), starting from the query $1.
+# Pick a design into $file and its $kind (cad or gcode), starting from the query $1.
 pick() {
   local files rows list path row mark longest width cols margin
   files="$({
-    fd --extension scad
     # A project is told from any other script by what it imports.
     fd --extension py --exclude python --exclude gcode \
       --exec-batch grep --files-with-matches '^from build\.cad import' |
@@ -47,7 +46,7 @@ pick() {
   } | sort)"
   # Show path components as aligned columns, without the suffix;
   # the real path rides along in a hidden first field.
-  rows="$(echo "$files" | sed -E 's/\.(scad|py)$//' | column -t -s/ -o '  ')"
+  rows="$(echo "$files" | sed -E 's/\.py$//' | column -t -s/ -o '  ')"
   # Each file's git status goes in a last column.
   git_marks
   width="$(echo "$rows" | wc -L)"
@@ -73,9 +72,7 @@ pick() {
       cut -f1
   )"
   [[ -n $file ]] || return 1
-  if [[ $file == *.scad ]]; then
-    kind=scad
-  elif [[ $file != gcode/* ]]; then
+  if [[ $file != gcode/* ]]; then
     kind=cad
   else
     kind=gcode
@@ -88,7 +85,7 @@ detach() {
   setsid --fork "$@" >/dev/null 2>&1 </dev/null
 }
 
-# The programs launched from here, by name: {"openscad": {"pid": 1, "started": "2"}}.
+# The programs launched from here, by name: {"orca": {"pid": 1, "started": "2"}}.
 # Absolute, as Orca is launched from another directory.
 PIDS="$PWD/tmp/pids.json"
 
@@ -188,8 +185,8 @@ check_fresh_gcode() {
   state=fresh
 }
 
-# A model's sources are the .scad, .py, .svg and .json files beside it, which it
-# may include, import or read, and the shared designs in python/designs.
+# A model's sources are the .py, .svg and .json files beside it, which it may
+# import or read, and the shared designs in python/designs.
 check_fresh_model() {
   local oldest project src dir
   find_projects
@@ -205,7 +202,7 @@ check_fresh_model() {
   done
   dir="$(dirname "$file")"
   shopt -s nullglob
-  for src in "$dir"/*.scad "$dir"/*.py "$dir"/*.svg "$dir"/*.json python/designs/*.py; do
+  for src in "$dir"/*.py "$dir"/*.svg "$dir"/*.json python/designs/*.py; do
     if [[ $src -nt $oldest ]]; then
       shopt -u nullglob
       state=stale
@@ -228,12 +225,7 @@ draw() {
   check_fresh
   printf '\033[1m%s\033[0m\n\n' "$file"
   # $below is how far the cursor ends up below the generate line.
-  if [[ $kind == scad ]]; then
-    printf '  \033[1ms\033[0m    open in OpenSCAD\n'
-    draw_generate
-    printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
-    below=5
-  elif [[ $kind == cad ]]; then
+  if [[ $kind == cad ]]; then
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
     printf '  \033[1mv\033[0m    view an object in FreeCAD\n'
@@ -321,18 +313,6 @@ while true; do
   waiting=""
   status=""
   case "$kind:$key" in
-    scad:s)
-      launch openscad openscad "$file"
-      status="Opened $file in OpenSCAD."
-      ;;
-    scad:g)
-      printf '\nGenerating...\n'
-      # Leave the log on screen only if there is a failure in it to read.
-      if ! uv --project python run python/generate.py "$file" 2>&1; then
-        status="Generation failed."
-        keep=1
-      fi
-      ;;
     cad:g | gcode:g)
       printf '\nGenerating...\n'
       # Leave the log on screen only if there is a failure in it to read.
@@ -376,7 +356,7 @@ while true; do
       detach xdg-open "http://$PRINTER"
       status="Opened http://$PRINTER in a browser."
       ;;
-    scad:o | cad:o)
+    cad:o)
       find_projects
       if ((${#projects[@]} == 0)); then
         status="Nothing generated for $file yet; press g."

@@ -17,7 +17,8 @@ from build123d import Color, Compound, Shape, export_step
 from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
 from build123d.text import Font_FontMgr
 
-from . import build, scad
+from . import build
+from .orca import Solid
 
 # build123d points fontconfig at /etc/fonts/fonts.conf when it first sets
 # text, whose files are newer than the fontconfig OCP bundles and warn at every
@@ -82,7 +83,7 @@ def texts(settings: Mapping[str, object]) -> dict[str, str]:
 
 
 def hex_color(name: str) -> str:
-    """A color as an OpenSCAD 3MF would have it, which is what the plates go by."""
+    """A color as #RRGGBB, which is what the plates go by."""
     if not name:
         return ""
     r, g, b = (round(255 * c) for c in tuple(Color(name))[:3])
@@ -102,7 +103,7 @@ def write_stl(shape: Shape, path: Path) -> None:
 
 def render(
     name: str, obj: Object, orca: Mapping[str, object], work: Path
-) -> scad.Render:
+) -> build.Render:
     """Draw an object, and write a mesh of each of its pieces into `work`."""
     solids = []
     filaments = {}
@@ -113,15 +114,14 @@ def render(
         stl = work / f"{i}.stl"
         write_stl(piece.shape, stl)
         color = hex_color(piece.color)
-        solids.append(
-            scad.Solid(stl, color, piece.name, texts(piece.settings), piece.name)
-        )
-        if piece.filament:
-            filaments[color] = piece.filament
+        solids.append(Solid(stl, color, piece.name, texts(piece.settings)))
+        # Called what the piece calls it, or by its color's name.
+        if name := piece.filament or (piece.color if color != piece.color else ""):
+            filaments.setdefault(color, name)
         box = piece.shape.bounding_box()
         low = [min(a, b) for a, b in zip(low, tuple(box.min))]
         high = [max(a, b) for a, b in zip(high, tuple(box.max))]
-    return scad.Render(
+    return build.Render(
         solids,
         (tuple(low), tuple(high)),
         list(obj.pauses),
@@ -135,7 +135,7 @@ def render(
 given: dict | None = None
 
 
-def draw(name: str, work: Path) -> tuple[scad.Render, str]:
+def draw(name: str, work: Path) -> tuple[build.Render, str]:
     """In a worker, draw an object into `work`. Returns it and what it printed,
     which an error it raises carries instead, as `said`."""
     from . import worker  # the server's, so only in a worker
@@ -225,7 +225,7 @@ def project(
                 else contextlib.nullcontext()
             ) as pool:
 
-                def drawn(name: str, work: Path) -> scad.Render:
+                def drawn(name: str, work: Path) -> build.Render:
                     if pool is None:
                         return render(name, objects[name], orca or {}, work)
                     try:
@@ -241,7 +241,6 @@ def project(
                     path,
                     list(objects),
                     build.groups_of(plates or []),
-                    "build123d",
                     drawn,
                 )
         case ["--objects"]:

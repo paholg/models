@@ -2,14 +2,14 @@
 
 This is my repo for primarily 3d models for 3d printing.
 
-Models are generally created in OpenSCAD (with heavy LLM assistance) and then
-generated to Orca projects with a post-processing step to pre-select important
-slicer options.
+Models are drawn in Python with [build123d](https://github.com/gumyr/build123d)
+(with heavy LLM assistance) and then generated to Orca projects that
+pre-select important slicer options.
 
 The generated files are not checked-in; you can create them with:
 
 ```bash
-just generate path/to/file.scad
+just generate path/to/file.py
 ```
 
 this will generate files into `./gen/`.
@@ -21,8 +21,6 @@ Dependencies:
 * Without nix:
   - [`just`](https://just.systems/)
   - [`uv`](https://docs.astral.sh/uv/)
-  - [`openscad`](https://openscad.org/downloads.html#snapshots) development
-    snapshot, to support `--enable=lazy-union`.
   - [`orca-slicer`](https://github.com/OrcaSlicer/OrcaSlicer/releases) at least
     version 2.5.0 in your PATH
   - `$ORCA_SOURCE` set to a checkout of

@@ -1,5 +1,5 @@
-This repo is for 3d models with OpenSCAD and build123d for printing with a
-Snapmaker U1. New projects should use build123d; OpenSCAD is deprecated.
+This repo is for 3d models drawn with build123d for printing with a Snapmaker
+U1.
 
 I use OrcaSlicer, not Snapmaker Orca, and the Extended firmware.
 
@@ -19,9 +19,8 @@ so don't go looking for its files through the binary.
 * A model becomes Orca projects, with settings for the whole print or for
   single parts: see build123d below. What does it is in `python/build`:
   `build.py` writes the projects, `orca.py` reads and writes Orca's files,
-  `layout.py` packs plates, and `cad.py` (with `worker.py`) and `scad.py` are
-  build123d's and OpenSCAD's sides. `python/generate.py`'s docstring has what
-  comes out.
+  `layout.py` packs plates, and `cad.py` (with `worker.py`) is build123d's
+  side. `build.py`'s docstring has what comes out.
 * `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
   settings in the G-code rather than guess. Orca's own CLI ignores a
   project's settings, which only the GUI applies; `python/slice.py` lays them
@@ -34,7 +33,7 @@ so don't go looking for its files through the binary.
 A project is a Python file that draws with build123d, where a solid is a value
 to name, color and put together, and ends with `project()` from
 `python/build/cad.py`, whose docstring has the details. `just generate` and
-`f` take it, and the older .scad models too, which work as before.
+`f` take it.
 
 * `project()` takes `objects`, the ones to print, and `views`, ones only to look
   at, each an `Object`: a function, giving one shape or a list of `Piece`s,
@@ -73,7 +72,7 @@ to name, color and put together, and ends with `project()` from
 * First is general scope (home for home products, games for mostly boardgame
   inserts, etc.)
 * Next folder is more specific.
-* Then each build123d .py file (or older .scad file) for a full print.
+* Then each build123d .py file for a full print.
 * `gcode/` is the exception: scripts that write G-code directly, using
   `python/lib`, each to `tmp/<script name>.gcode`.
 * `f` (`nix/f.sh`) is a TUI over all of these: it generates, previews and uploads

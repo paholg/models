@@ -26,28 +26,16 @@ preview file:
         esac
     done <<< "$out"
 
-# Export each part a .scad file lists in its `// export:` line to gen/<dir>/<stem>-<part>.3mf,
-# where <dir> is the file's directory in this repo: an Orca project with one part per color, which
-# applies and shows the settings the file asks for with `orca()` (see python/generate.py). A
-# build123d project, a .py file, does the same for its objects (see python/build/cad.py).
+# Write each object of a build123d project to gen/<dir>/<stem>-<object>.3mf, where <dir> is the
+# file's directory in this repo: an Orca project that applies and shows the settings the file asks
+# for, and one of its plates (see python/build/build.py and python/build/cad.py).
 generate file:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "{{file}}" in
-        *.py) uv --project python run "{{file}}" ;;
-        *) uv --project python run python/generate.py "{{file}}" ;;
-    esac
+    uv --project python run "{{file}}"
 
 # Write an object of a build123d project to tmp/view/<stem>-<object>.step and open it in FreeCAD.
 view file object:
     uv --project python run "{{file}}" --view "{{object}}"
     setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" >/dev/null 2>&1 &
-
-# Open OpenSCAD on what the working tree's changes since a commit do to each part they reach:
-# green for what they add, red for what they remove (see python/diff.py).
-[positional-arguments]
-diff *args:
-    @uv --project python run python/diff.py "$@"
 
 # Slice one of those projects with Orca's CLI, to tmp/slice/<project>.gcode, for checking what a
 # print comes out as. Takes --machine, --process and --filament preset names (see python/slice.py).

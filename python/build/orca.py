@@ -17,9 +17,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape, unescape
 
-from .scad import CORE, Solid
 from .tree import attr, child
 
+# The 3MF core namespace.
+CORE = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
 PRODUCTION = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
 # Orca reads these names as they're written, prefix and all, whatever they're bound to.
 ET.register_namespace("", CORE)
@@ -36,6 +37,16 @@ PLATE_FILES = {
     "top_file": "Metadata/top_{}.png",
     "pick_file": "Metadata/pick_{}.png",
 }
+
+
+@dataclass
+class Solid:
+    """One piece of an object, as an STL."""
+
+    stl: Path
+    color: str  # as #RRGGBB, or none
+    name: str
+    settings: dict[str, str]  # its own
 
 
 def core(tag: str) -> str:
@@ -70,10 +81,10 @@ class Object:
 
 @dataclass
 class Assembly:
-    """A part of a .scad file, as Orca assembled it: an object, or several."""
+    """A drawn object, as Orca assembled it: an object, or several."""
 
     objects: list[Object]
-    box: tuple[tuple[float, ...], tuple[float, ...]]  # its corners, as in the .scad
+    box: tuple[tuple[float, ...], tuple[float, ...]]  # its corners, as drawn
     transform: str  # where Orca put it
     meshes: bytes  # the model of its volumes' meshes, as Orca wrote it
     archive: bytes  # Orca's project, for the files any project carries as they are
@@ -178,7 +189,7 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
         of_object = {k: v for k, v in solid.settings.items() if k in whole}
         own = {k: v for k, v in solid.settings.items() if k not in whole}
         obj = objects.setdefault(
-            solid.piece if of_object else "", Object(solid.piece, of_object, [])
+            solid.name if of_object else "", Object(solid.name, of_object, [])
         )
         i = attr(part, "id")
         obj.volumes.append(

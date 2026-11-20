@@ -1,5 +1,5 @@
 {
-  description = "OpenSCAD and build123d models";
+  description = "build123d models";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -57,7 +57,7 @@
             '';
           };
 
-        # Every font a model names: Liberation Sans is also OpenSCAD's default.
+        # Every font a model names.
         fonts = [
           pkgs.liberation_ttf
           pkgs.gyre-fonts
@@ -84,7 +84,7 @@
           '';
         };
 
-        # A small TUI: pick a .scad file, a build123d model or a G-code script
+        # A small TUI: pick a build123d model or a G-code script
         # with fzf, then open, generate, preview or upload it.
         f = pkgs.writeShellApplication {
           name = "f";
@@ -99,7 +99,6 @@
               inotify-tools
               jq
               ncurses
-              openscad-unstable
               prusa-slicer
               util-linux
               xdg-utils
@@ -111,23 +110,6 @@
           text = builtins.readFile ./nix/f.sh;
         };
 
-        # `just diff`, from anywhere in the repo: what the working tree's changes
-        # since a commit do to each part (see python/diff.py).
-        scadiff = pkgs.writeShellApplication {
-          name = "scadiff";
-          runtimeInputs =
-            with pkgs;
-            [
-              git
-              gnutar
-              openscad-unstable
-            ]
-            ++ [ uv ];
-          text = ''
-            cd "$(git rev-parse --show-toplevel)"
-            exec uv --project python run python/diff.py "$@"
-          '';
-        };
       in
       {
         devShells.default = pkgs.mkShell {
@@ -136,8 +118,6 @@
             [
               freecad
               just
-              openscad-lsp
-              openscad-unstable
               prusa-slicer
               ruff
               tombi
@@ -150,7 +130,6 @@
             ++ [
               f
               orca-slicer
-              scadiff
               uv
             ];
 
