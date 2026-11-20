@@ -42,6 +42,7 @@ are each put together, pulled apart, cut through the lock, and opened beside
 its black half.
 """
 
+from dataclasses import replace
 from math import atan, degrees, hypot, radians, tan
 
 from build123d import (
@@ -63,6 +64,7 @@ from designs.coin import (
     ARROW_COLORS,
     FILAMENTS,
     HALF_COLORS,
+    HALVES,
     INLAY,
     Coin,
     D,
@@ -425,7 +427,7 @@ def hardware(lock: str) -> list[Piece]:
             "magnets": on * magnet
             + [Rot(0, 0, apin_a + i * 360 / steps) * hold for i in range(steps)],
         }
-    return [Piece(s, n, hardware_colors[n]) for n, s in parts.items()]
+    return [Piece(s, n, hardware_colors[n], parent="lock") for n, s in parts.items()]
 
 
 # Put together
@@ -436,17 +438,19 @@ def assembly(lock: str, apart: float = 0, top: bool = True) -> list[Piece]:
     time."""
     lifts = {"hub": 1 / 3, "washer": 1 / 2, "ring": 2 / 3}
     pieces = [
-        Piece(half_a(lock), "half 0", HALF_COLORS[0]),
-        Piece(coin.arrow(0), "arrow 0", ARROW_COLORS[0]),
+        Piece(half_a(lock), "half 0", HALF_COLORS[0], parent=HALVES[0]),
+        Piece(coin.arrow(0), "arrow 0", ARROW_COLORS[0], parent=HALVES[0]),
     ] + [
-        Piece(Pos(0, 0, apart * lifts.get(p.name, 1)) * p.shape, p.name, p.color)
+        replace(p, shape=Pos(0, 0, apart * lifts.get(p.name, 1)) * p.shape)
         for p in hardware(lock)
     ]
     if top:
         z = 2 * half_t + 2 * apart
         pieces += [
-            Piece(flipped(half_b(lock), z), "half 1", HALF_COLORS[1]),
-            Piece(flipped(coin.arrow(1), z), "arrow 1", ARROW_COLORS[1]),
+            Piece(flipped(half_b(lock), z), "half 1", HALF_COLORS[1], parent=HALVES[1]),
+            Piece(
+                flipped(coin.arrow(1), z), "arrow 1", ARROW_COLORS[1], parent=HALVES[1]
+            ),
         ]
     return pieces
 
@@ -456,7 +460,7 @@ def section(lock: str) -> list[Piece]:
     turn = Rot(0, 0, pin_a if lock == "radial" else apin_a)
     keep = turn * Pos(0, D / 2, -5) * extrude(Rectangle(2 * D, D), 20)
     return [
-        Piece(cut, p.name, p.color)
+        replace(p, shape=cut)
         for p in assembly(lock)
         if (cut := p.shape & keep).volume > 0
     ]
@@ -465,8 +469,8 @@ def section(lock: str) -> list[Piece]:
 def inside(lock: str) -> list[Piece]:
     """The gold half with what's in it, and the black half beside it."""
     return assembly(lock, top=False) + [
-        Piece(Pos(D + 5) * half_b(lock), "half 1", HALF_COLORS[1]),
-        Piece(Pos(D + 5) * coin.arrow(1), "arrow 1", ARROW_COLORS[1]),
+        Piece(Pos(D + 5) * half_b(lock), "half 1", HALF_COLORS[1], parent=HALVES[1]),
+        Piece(Pos(D + 5) * coin.arrow(1), "arrow 1", ARROW_COLORS[1], parent=HALVES[1]),
     ]
 
 
@@ -488,6 +492,7 @@ def prints(lock: str) -> list[Piece]:
                 HALF_COLORS[i],
                 FILAMENTS[i],
                 half_settings(coin.shape),
+                parent=HALVES[i],
             )
             for i, half in enumerate([half_a(lock), half_b(lock)])
         ]
@@ -498,24 +503,28 @@ def prints(lock: str) -> list[Piece]:
                 ARROW_COLORS[i],
                 FILAMENTS[1 - i],
                 arrow_settings(coin.angles[i]),
+                parent=HALVES[i],
             )
             for i in (0, 1)
         ]
         + [
-            Piece(bed(0, 0.75) * ring(lock), "ring", gold),
-            Piece(bed(1, 0.75) * hub(), "hub", gold),
+            Piece(bed(0, 0.75) * ring(lock), "ring", gold, parent="lock"),
+            Piece(bed(1, 0.75) * hub(), "hub", gold, parent="lock"),
         ]
     )
     if lock == "radial":
         pieces.append(
             Piece(
-                bed(0.5, 0.75) * Rot(0, 0, 90) * Pos(-lock_r) * wedge(), "wedge", gold
+                bed(0.5, 0.75) * Rot(0, 0, 90) * Pos(-lock_r) * wedge(),
+                "wedge",
+                gold,
+                parent="lock",
             )
         )
     else:
         pieces += [
-            Piece(bed(0.3, 0.75) * sleeve(), "sleeve", gold),
-            Piece(bed(0.6, 0.75) * plunger(), "plunger", gold),
+            Piece(bed(0.3, 0.75) * sleeve(), "sleeve", gold, parent="lock"),
+            Piece(bed(0.6, 0.75) * plunger(), "plunger", gold, parent="lock"),
         ]
     return pieces
 
