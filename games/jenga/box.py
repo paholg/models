@@ -403,8 +403,8 @@ def assembly() -> list[Piece]:
     up = Pos(0, 0, lid_raise)
     return [
         Piece(stacker(), "stacker", "white"),
-        Piece(up * lid(), "lid", "lightgray"),
-        Piece(up * lip_strip(), "lip strip", "gainsboro"),
+        Piece(up * lid(), "lid shell", "lightgray", parent="lid"),
+        Piece(up * lip_strip(), "lip strip", "gainsboro", parent="lid"),
         Piece(tower(), "tower", "burlywood"),
     ]
 
