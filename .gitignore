@@ -6,4 +6,6 @@ gen/*
 
 .direnv/
 
+.claude/worktrees/
+
 __pycache__/
