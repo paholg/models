@@ -51,9 +51,10 @@ to name, color and put together, and ends with `project()` from
   something in; a plate pauses wherever one of its objects does.
 * A project of several objects should always have an `assembly` view of them
   put together, and should specify `plates` when calling `project()`.
-* `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens
-  it in FreeCAD: the pieces by name, to hide, cut through and measure. OBJECT
-  can be a view.
+* Generating also writes `gen/<dir>/<stem>-<name>.step` for each object and
+  view, which `f`'s `v` opens in FreeCAD: the pieces by name, to hide, cut
+  through and measure. `just view FILE.py OBJECT` writes just one, to
+  `tmp/view/`, and opens it. OBJECT can be a view.
 * `just diff [REF] [FILE.py...]` shows in FreeCAD what the working tree's
   changes since REF, HEAD by default, do to each piece of the projects they
   reach, or of those named: see `python/diff.py`.

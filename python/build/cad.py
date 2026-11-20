@@ -7,7 +7,7 @@ import os
 import sys
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,7 +17,7 @@ from build123d import Color, Compound, Shape, export_step
 from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
 from build123d.text import Font_FontMgr
 
-from . import build
+from . import build, progress
 from .orca import Solid
 
 # build123d points fontconfig at /etc/fonts/fonts.conf when it first sets
@@ -102,13 +102,15 @@ def write_stl(shape: Shape, path: Path) -> None:
 
 
 def render(
-    name: str, obj: Object, orca: Mapping[str, object], work: Path
+    name: str, obj: Object, orca: Mapping[str, object], work: Path, step: Path
 ) -> build.Render:
-    """Draw an object, and write a mesh of each of its pieces into `work`."""
+    """Draw an object, write a mesh of each of its pieces into `work`, and all of
+    them as a STEP file to `step`."""
     solids = []
     filaments = {}
     low, high = [float("inf")] * 3, [float("-inf")] * 3
-    for i, piece in enumerate(pieces(name, obj), 1):
+    drawn = pieces(name, obj)
+    for i, piece in enumerate(drawn, 1):
         if not piece.shape.is_valid:
             sys.exit(f"{name}: {piece.name} is not a valid solid")
         stl = work / f"{i}.stl"
@@ -121,6 +123,7 @@ def render(
         box = piece.shape.bounding_box()
         low = [min(a, b) for a, b in zip(low, tuple(box.min))]
         high = [max(a, b) for a, b in zip(high, tuple(box.max))]
+    write_step(drawn, step)
     return build.Render(
         solids,
         (tuple(low), tuple(high)),
@@ -135,26 +138,46 @@ def render(
 given: dict | None = None
 
 
-def draw(name: str, work: Path) -> tuple[build.Render, str]:
-    """In a worker, draw an object into `work`. Returns it and what it printed,
-    which an error it raises carries instead, as `said`."""
+def draw(name: str, work: Path, step: Path) -> tuple[build.Render, str]:
+    """In a worker, render an object (see render())."""
+    assert given is not None
+    return heard(render, name, given["objects"][name], given["orca"], work, step)
+
+
+def draw_view(name: str, step: Path) -> tuple[None, str]:
+    """In a worker, write a view as a STEP file."""
+    assert given is not None
+    return heard(write_step_of, name, given["views"][name], step)
+
+
+def write_step_of(name: str, obj: Object, out: Path) -> None:
+    """Draw an object or view, and write it as a STEP file."""
+    write_step(pieces(name, obj), out)
+
+
+def heard[T](work: Callable[..., T], *args) -> tuple[T, str]:
+    """In a worker, run `work`, hearing what it says. Returns what it returns and
+    what it printed, which an error it raises carries instead, as `said`."""
     from . import worker  # the server's, so only in a worker
 
-    assert given is not None
     said = io.StringIO()
     try:
-        with warnings.catch_warnings(), contextlib.redirect_stdout(said):
+        with (
+            warnings.catch_warnings(),
+            contextlib.redirect_stdout(said),
+            contextlib.redirect_stderr(said),
+        ):
             # The warnings the server quieted, heard again, and the file's
             # deprecations too, as they are where it runs as __main__.
             warnings.filters = list(worker.heard)
             warnings.filterwarnings(
                 "default", category=DeprecationWarning, module="__mp_main__"
             )
-            drawn = render(name, given["objects"][name], given["orca"], work)
+            done = work(*args)
     except BaseException as e:
         vars(e)["said"] = said.getvalue()  # for project() to show
         raise
-    return drawn, said.getvalue()
+    return done, said.getvalue()
 
 
 def workers(n: int) -> ProcessPoolExecutor:
@@ -172,18 +195,16 @@ def workers(n: int) -> ProcessPoolExecutor:
     return ProcessPoolExecutor(n, mp_context=context)
 
 
-def view(file: Path, name: str, obj: Object) -> Path:
-    """Write an object as a STEP file: its pieces by name, in their colors."""
+def write_step(drawn: list[Piece], out: Path) -> None:
+    """Write pieces as a STEP file, for FreeCAD: by name, in their colors."""
     shapes = []
-    for piece in pieces(name, obj):
+    for piece in drawn:
         piece.shape.label = piece.name
         if piece.color:
             piece.shape.color = Color(piece.color)
         shapes.append(piece.shape)
-    out = build.ROOT / "tmp/view" / f"{file.stem}-{name}.step"
     out.parent.mkdir(parents=True, exist_ok=True)
-    export_step(Compound(label=f"{file.stem} {name}", children=shapes), out)
-    return out
+    export_step(Compound(label=out.stem, children=shapes), out)
 
 
 def project(
@@ -193,63 +214,110 @@ def project(
     plates: list[str] | None = None,
     views: Mapping[str, Object] | None = None,
 ) -> None:
-    """Write the project's .3mf files to gen/: one per object, and one of `plates`,
+    """Write the project's .3mf files to gen/<dir>/: one per object, and one of `plates`,
     each a group like "lid*2 base". `orca` is settings for all of them, an
     object's own `settings` for its prints, and a piece's for that piece; views
     are only to look at. The plates' project applies what its objects share, and
     puts the rest on each object, where Orca lets an object have it, and pauses
     each plate wherever one of its objects pauses, stopping the rest there too.
 
-    With more than one object, they're drawn in workers, each of which runs the
-    file again (see workers()).
+    Beside them, for FreeCAD, go <stem>-<name>.step for each view and object,
+    an object as it's printed, and <stem>-views.tsv, which lists views, then
+    objects: kind, name and description, tabbed.
 
-    `--view NAME` writes tmp/view/<stem>-<name>.step instead, for FreeCAD.
-    `--objects` lists views, then objects: kind, name and description, tabbed.
+    With more than one thing to draw, they're drawn in workers, each of which
+    runs the file again (see workers()).
+
+    `--view NAME` writes just tmp/view/<stem>-<name>.step instead.
     """
+    views = views or {}
     if given is not None:
         # In a worker, which then draws what it's asked to (see workers()).
-        given.update(objects=objects, orca=orca or {})
+        given.update(objects=objects, views=views, orca=orca or {})
         return
+    if both := sorted(objects.keys() & views.keys()):
+        sys.exit(f"both an object and a view: {', '.join(both)}")
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     path = Path(file).resolve()
-    shown = {**(views or {}), **objects}
+    shown = {**views, **objects}
     match sys.argv[1:]:
         case []:
-            # The objects each in a worker, but for one alone, which isn't
-            # worth starting one for.
-            with (
-                workers(min(len(objects), os.cpu_count() or 1))
-                if len(objects) > 1
-                else contextlib.nullcontext()
-            ) as pool:
-
-                def drawn(name: str, work: Path) -> build.Render:
-                    if pool is None:
-                        return render(name, objects[name], orca or {}, work)
-                    try:
-                        done, said = pool.submit(draw, name, work).result()
-                    except BaseException as e:
-                        # What it printed before it failed, to see why.
-                        print(vars(e).get("said", ""), end="")
-                        raise
-                    print(said, end="")
-                    return done
-
-                build.run(
-                    path,
-                    list(objects),
-                    build.groups_of(plates or []),
-                    drawn,
-                )
-        case ["--objects"]:
-            for name, obj in shown.items():
-                kind = "object" if name in objects else "view"
-                # One line each, however the description is written.
-                description = " ".join(obj.description.split())
-                print(f"{kind}\t{name}\t{description}")
+            with progress.shown():
+                generate(path, objects, views, orca or {}, plates or [])
         case ["--view", name] if name in shown:
-            print(view(path, name, shown[name]).relative_to(build.ROOT))
+            out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
+            write_step_of(name, shown[name], out)
+            print(out.relative_to(build.ROOT))
         case _:
-            sys.exit(f"usage: {path.name} [--objects | --view OBJECT]")
+            sys.exit(f"usage: {path.name} [--view OBJECT]")
+
+
+def generate(
+    path: Path,
+    objects: Mapping[str, Object],
+    views: Mapping[str, Object],
+    orca: Mapping[str, object],
+    plates: list[str],
+) -> None:
+    """project()'s work with no arguments: everything it writes to gen/."""
+    out_dir = build.ROOT / "gen" / path.parent.relative_to(build.ROOT)
+    for old in [
+        *out_dir.glob(f"{path.stem}-*.step"),
+        out_dir / f"{path.stem}-views.tsv",
+    ]:
+        old.unlink(missing_ok=True)
+
+    def step(name: str) -> Path:
+        return out_dir / f"{path.stem}-{name}.step"
+
+    def result[T](future: Future[tuple[T, str]]) -> T:
+        try:
+            done, said = future.result()
+        except BaseException as e:
+            # What it printed before it failed, to see why.
+            print(vars(e).get("said", ""), end="")
+            raise
+        print(said, end="")
+        return done
+
+    def look(pool: ProcessPoolExecutor, name: str) -> Future[tuple[None, str]]:
+        """Start drawing a view, counted as it finishes, not when it's waited on."""
+        what = f"drawing {name}"
+        progress.start(what)
+        future = pool.submit(draw_view, name, step(name))
+        future.add_done_callback(lambda _: progress.finish(what))
+        return future
+
+    # Each in a worker, but for one alone, which isn't worth starting one for.
+    count = len(objects) + len(views)
+    with (
+        workers(min(count, os.cpu_count() or 1))
+        if count > 1
+        else contextlib.nullcontext() as pool,
+    ):
+        # The views go first, to draw while the objects are assembled in Orca.
+        # With any, there are workers.
+        progress.expect(len(views))
+        looks = {n: look(pool, n) for n in views if pool}
+
+        def drawn(name: str, work: Path) -> build.Render:
+            if pool is None:
+                return render(name, objects[name], orca, work, step(name))
+            return result(pool.submit(draw, name, work, step(name)))
+
+        build.run(path, list(objects), build.groups_of(plates), drawn)
+        for drawing in looks.values():
+            result(drawing)
+
+    rows = [("view", n, o) for n, o in views.items()]
+    rows += [("object", n, o) for n, o in objects.items()]
+    listed = out_dir / f"{path.stem}-views.tsv"
+    # One line each, however the description is written.
+    listed.write_text(
+        "".join(f"{k}\t{n}\t{' '.join(o.description.split())}\n" for k, n, o in rows)
+    )
+    print(
+        f"{listed.relative_to(build.ROOT)}: {len(views)} views, {len(objects)} objects"
+    )

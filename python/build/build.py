@@ -5,6 +5,9 @@ file's directory in this repo: one object in Orca, with a part for each of its
 pieces, each color on its own filament: the same one in every project of the
 file, the plates' too. The file's earlier projects are removed first.
 
+Beside them, cad.py writes <stem>-<name>.step of each object and view, for
+FreeCAD, and <stem>-views.tsv listing them (see its project()).
+
 Opening a project applies its settings on top of whatever presets Orca has
 selected, and leaves everything else alone. `printer`, `process` and
 `filament` are not settings but presets, which Orca keeps as selected: those
@@ -49,7 +52,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from . import layout, orca
+from . import layout, orca, progress
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -210,60 +213,69 @@ def run(
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             print(f"{part}: build123d")
-            render = render_part(part, work)
+            with progress.stage(f"drawing {part}"):
+                render = render_part(part, work)
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
-            return render, orca.assemble(render.solids, render.box, work)
+            with progress.stage(f"assembling {part}"):
+                return render, orca.assemble(render.solids, render.box, work)
 
     def export(part: str) -> None:
-        target = out_dir / f"{file.stem}-{part}.3mf"
-        render, assembly, order = renders[part], built[part], colors[part]
-        note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
-        settings = {k: v for k, v in render.settings.items() if k not in PRESETS}
-        name = f"{target.stem} [{note}]" if note else target.stem
-        placed = orca.Placed(assembly, name, assembly.transform, heads)
-        objects = orca.write(
-            target, settings, [orca.Plate(note, [placed], render.pauses)]
-        )
-        print(
-            f"{target.relative_to(ROOT)}: {len(render.solids)} parts, {len(order)} colors"
-            + (f", {objects} objects" if objects > 1 else "")
-            + "".join(f", pause at {z:g} mm" for z in render.pauses)
-        )
+        with progress.stage(f"writing {part}"):
+            target = out_dir / f"{file.stem}-{part}.3mf"
+            render, assembly, order = renders[part], built[part], colors[part]
+            note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
+            settings = {k: v for k, v in render.settings.items() if k not in PRESETS}
+            name = f"{target.stem} [{note}]" if note else target.stem
+            placed = orca.Placed(assembly, name, assembly.transform, heads)
+            objects = orca.write(
+                target, settings, [orca.Plate(note, [placed], render.pauses)]
+            )
+            print(
+                f"{target.relative_to(ROOT)}: {len(render.solids)} parts, {len(order)} colors"
+                + (f", {objects} objects" if objects > 1 else "")
+                + "".join(f", pause at {z:g} mm" for z in render.pauses)
+            )
 
     def plates() -> None:
-        # One project has one set of settings: those its parts agree on. The
-        # rest go on each part's own objects, where Orca lets an object have one.
-        parts = [wanted[p] for g in groups for p in g]
-        shared = {
-            k: v
-            for k, v in parts[0].items()
-            if k not in PRESETS and all(p.get(k) == v for p in parts)
-        }
-        rest = {
-            p: {k: v for k, v in wanted[p].items() if k not in PRESETS | set(shared)}
-            for g in groups
-            for p in g
-        }
-        ownable = orca.own_keys() if any(rest.values()) else frozenset()
-        own = {p: {k: v for k, v in r.items() if k in ownable} for p, r in rest.items()}
-        if dropped := sorted({k for r in rest.values() for k in r} - ownable):
-            print(
-                f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts"
-                " don't share, and an object can't have of its own"
+        with progress.stage("writing plates"):
+            # One project has one set of settings: those its parts agree on. The
+            # rest go on each part's own objects, where Orca lets an object have one.
+            parts = [wanted[p] for g in groups for p in g]
+            shared = {
+                k: v
+                for k, v in parts[0].items()
+                if k not in PRESETS and all(p.get(k) == v for p in parts)
+            }
+            rest = {
+                p: {
+                    k: v for k, v in wanted[p].items() if k not in PRESETS | set(shared)
+                }
+                for g in groups
+                for p in g
+            }
+            ownable = orca.own_keys() if any(rest.values()) else frozenset()
+            own = {
+                p: {k: v for k, v in r.items() if k in ownable} for p, r in rest.items()
+            }
+            if dropped := sorted({k for r in rest.values() for k in r} - ownable):
+                print(
+                    f"  warning: {file.stem}-all leaves out {', '.join(dropped)}, which its parts"
+                    " don't share, and an object can't have of its own"
+                )
+            combine(
+                out_dir / f"{file.stem}-all.3mf",
+                shared,
+                packed,
+                built,
+                colors,
+                heads,
+                filaments,
+                own,
+                {p: r.pauses for p, r in renders.items()},
             )
-        combine(
-            out_dir / f"{file.stem}-all.3mf",
-            shared,
-            packed,
-            built,
-            colors,
-            heads,
-            filaments,
-            own,
-            {p: r.pauses for p, r in renders.items()},
-        )
 
     names = list(dict.fromkeys(exports + [p for g in groups for p in g]))
+    progress.expect(2 * len(names) + len(exports) + bool(groups))
     with Told() as told, ThreadPoolExecutor(os.cpu_count()) as pool:
         # The parts at once: they wait on build123d's workers and Orca, a core
         # apiece.

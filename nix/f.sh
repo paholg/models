@@ -228,7 +228,7 @@ draw() {
   if [[ $kind == cad ]]; then
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
-    printf '  \033[1mv\033[0m    view an object in FreeCAD\n'
+    printf '  \033[1mv\033[0m    view a generated object in FreeCAD\n'
     below=6
   else
     draw_generate
@@ -315,10 +315,10 @@ while true; do
   case "$kind:$key" in
     cad:g | gcode:g)
       printf '\nGenerating...\n'
-      # Leave the log on screen only if there is a failure in it to read.
+      # Leave the log on screen, to read.
+      keep=1
       if ! uv --project python run "$file" 2>&1; then
         status="Generation failed."
-        keep=1
       fi
       ;;
     gcode:v)
@@ -372,11 +372,12 @@ while true; do
       status="Opened $project in OrcaSlicer."
       ;;
     cad:v)
-      objects="$(uv --project python run "$file" --objects)" || {
-        status="Couldn't list the objects of $file."
-        keep=1
+      # Generating writes each object and view as a STEP file, and lists them.
+      listed="gen/${file%.py}-views.tsv"
+      if [[ ! -e $listed ]]; then
+        status="Nothing generated for $file yet; press g."
         continue
-      }
+      fi
       printf '\n'
       # Each line is a kind (view or object), a name and a description; show
       # them as columns, the kind in color and the description dimmed.
@@ -390,21 +391,18 @@ while true; do
               printf "%s\t\033[%sm%-6s\033[0m  %-*s  \033[2m%s\033[0m\n",
                 name[i], color, kind[i], width, name[i], desc[i]
             }
-          }' <<<"$objects" |
+          }' "$listed" |
           fzf --ansi --delimiter '\t' --with-nth 2 --height '~40%' \
             --reverse --select-1 |
           cut -f1
       )" || continue
       [[ -n $object ]] || continue
-      printf '\nExporting...\n'
-      if ! uv --project python run "$file" --view "$object" 2>&1; then
-        status="Export failed."
-        keep=1
-        continue
-      fi
-      view="tmp/view/$(basename "$file" .py)-$object.step"
+      view="gen/${file%.py}-$object.step"
       launch freecad freecad "$view"
       status="Opened $view in FreeCAD."
+      if [[ $state == stale ]]; then
+        status+=" It's stale; press g to bring it up to date."
+      fi
       ;;
     *:c)
       close_all
