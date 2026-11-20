@@ -1,0 +1,7 @@
+# Look at what's open from an angle, fit to the view. Pass this to FreeCAD after
+# a STEP file: it leaves the camera of one opened from the command line looking
+# down at the origin, zoomed in.
+import FreeCADGui as Gui
+
+Gui.activeDocument().activeView().viewIsometric()
+Gui.SendMsgToActiveView("ViewFit")

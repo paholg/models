@@ -398,7 +398,7 @@ while true; do
       )" || continue
       [[ -n $object ]] || continue
       view="gen/${file%.py}-$object.step"
-      launch freecad freecad "$view"
+      launch freecad freecad "$view" nix/fit.FCMacro
       status="Opened $view in FreeCAD."
       if [[ $state == stale ]]; then
         status+=" It's stale; press g to bring it up to date."

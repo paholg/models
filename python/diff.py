@@ -198,7 +198,7 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
     print(path.relative_to(ROOT))
     if show:
         subprocess.Popen(
-            ["freecad", path],
+            ["freecad", path, ROOT / "nix/fit.FCMacro"],
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,

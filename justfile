@@ -35,7 +35,7 @@ generate file:
 # Write an object of a build123d project to tmp/view/<stem>-<object>.step and open it in FreeCAD.
 view file object:
     uv --project python run "{{file}}" --view "{{object}}"
-    setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" >/dev/null 2>&1 &
+    setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" nix/fit.FCMacro >/dev/null 2>&1 &
 
 # Open FreeCAD on what the working tree's changes since a commit (HEAD by default) do to each
 # piece of each project they reach, or of the projects named: green for what they add, red for
