@@ -11,7 +11,10 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from build123d import Color, Compound, Shape, export_step, export_stl
+from build123d import Color, Compound, Shape, export_step
+
+# OCP has no stubs for these; build123d imports them where ty can see them.
+from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
 from build123d.text import Font_FontMgr
 
 from . import build, scad
@@ -27,10 +30,16 @@ if fonts := os.environ.get("CAD_FONTCONFIG_FILE"):
     if system is not None:
         os.environ["FONTCONFIG_FILE"] = system
 
-# How far a mesh may stray from the shape it is made of, in mm and in radians
-# of a curve's turn: well under what a printer can show.
-TOLERANCE = 0.01
-ANGULAR_TOLERANCE = 0.1
+# How far a mesh may stray from the shape it is made of: at most TOLERANCE mm
+# anywhere, and ANGULAR_TOLERANCE radians of a curve's turn between facets.
+# 0.02 mm is a fifth of a 0.1 mm layer and a twentieth of the nozzle, too
+# little to see or to change a fit: a pocket's or pin's facets stand at most
+# that far inside its circle. The angle only matters below about 1 mm radius,
+# where 0.3 keeps a fillet's facets within 0.03 mm. build123d's export_stl
+# takes the tolerance as a fraction of each face's size instead, which lets a
+# large curve, the ghost's skin say, stray by a millimeter at the same angle.
+TOLERANCE = 0.02
+ANGULAR_TOLERANCE = 0.3
 
 
 @dataclass
@@ -80,6 +89,17 @@ def hex_color(name: str) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+def write_stl(shape: Shape, path: Path) -> None:
+    """A binary STL of the shape, to TOLERANCE in mm, not a fraction of its size."""
+    BRepMesh_IncrementalMesh(
+        shape.wrapped, TOLERANCE, False, ANGULAR_TOLERANCE, True
+    ).Perform()
+    writer = StlAPI_Writer()
+    writer.ASCIIMode = False
+    if not writer.Write(shape.wrapped, str(path)):
+        sys.exit(f"couldn't write {path}")
+
+
 def render(
     name: str, obj: Object, orca: Mapping[str, object], work: Path
 ) -> scad.Render:
@@ -91,7 +111,7 @@ def render(
         if not piece.shape.is_valid:
             sys.exit(f"{name}: {piece.name} is not a valid solid")
         stl = work / f"{i}.stl"
-        export_stl(piece.shape, stl, TOLERANCE, ANGULAR_TOLERANCE)
+        write_stl(piece.shape, stl)
         color = hex_color(piece.color)
         solids.append(
             scad.Solid(stl, color, piece.name, texts(piece.settings), piece.name)
