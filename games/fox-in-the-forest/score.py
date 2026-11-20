@@ -659,8 +659,8 @@ def assembly(apart: float = 0) -> list[Piece]:
     return [
         Piece(Pos(0, 0, -apart) * back(), "back", body_color),
         Piece(sliders, "sliders", body_color),
-        Piece(lift * top(), "top", body_color),
-        Piece(lift * numbers(), "numbers", number_color),
+        Piece(lift * top(), "top plate", body_color, parent="top"),
+        Piece(lift * numbers(), "numbers", number_color, parent="top"),
     ] + [
         Piece(
             Pos(0, 0, 2 * apart)
@@ -685,8 +685,8 @@ def grid(part: Part, n: int, dx: float, dy: float) -> Part:
 
 def top_print() -> list[Piece]:
     return [
-        Piece(face_down * top(), "top", body_color),
-        Piece(face_down * numbers(), "numbers", number_color),
+        Piece(face_down * top(), "top plate", body_color, parent="top"),
+        Piece(face_down * numbers(), "numbers", number_color, parent="top"),
     ]
 
 
@@ -727,7 +727,7 @@ def test() -> list[Piece]:
     ]
     rupees = Part() + [Pos(-test_x / 2 - 26, t.y * 0.7) * rupee() for t in test_tracks]
     return [
-        Piece(face_down * top_part, "top", body_color, settings=top_settings),
+        Piece(face_down * top_part, "top plate", body_color, settings=top_settings),
         Piece(
             Pos(test_x + 4, 0) * back_part,
             "back",
