@@ -189,7 +189,7 @@ check_fresh_gcode() {
 }
 
 # A model's sources are the .scad, .py and .svg files beside it, which it may
-# include or import.
+# include or import, and the shared designs in python/designs.
 check_fresh_model() {
   local oldest project src dir
   find_projects
@@ -205,7 +205,7 @@ check_fresh_model() {
   done
   dir="$(dirname "$file")"
   shopt -s nullglob
-  for src in "$dir"/*.scad "$dir"/*.py "$dir"/*.svg; do
+  for src in "$dir"/*.scad "$dir"/*.py "$dir"/*.svg python/designs/*.py; do
     if [[ $src -nt $oldest ]]; then
       shopt -u nullglob
       state=stale
@@ -265,7 +265,7 @@ draw_generate() {
 
 # Watch $file's sources and what it generates, signalling this shell when one changes.
 watch() {
-  local dirs=("$(dirname "$file")" gen)
+  local dirs=("$(dirname "$file")" python/designs gen)
   if [[ $kind == gcode ]]; then
     dirs=("$(dirname "$file")" python/lib tmp)
   fi
