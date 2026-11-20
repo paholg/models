@@ -23,11 +23,13 @@ own name, color, filament and settings:
 `orca` is the whole print's settings, by their names in Orca's presets, and
 `plates` the groups of parts to print together, as a .scad file's `// plate:`
 lines have them: `plates=["lid*2 base"]`. generate.py's docstring has what
-becomes of all of these.
+becomes of all of these. `views` are drawn the same way as parts, but only to
+look at, never printed: the whole thing put together, say.
 
 Run with no arguments, the model writes its projects to gen/. With
 `--view PART` it writes tmp/view/<stem>-<part>.step instead, to look at in
-FreeCAD: a tree of the pieces by name, in their colors. `--parts` lists the parts.
+FreeCAD: a tree of the pieces by name, in their colors; PART can be a view.
+`--parts` lists the views, then the parts.
 """
 
 import io
@@ -123,12 +125,14 @@ def main(
     parts: Mapping[str, Part],
     orca: Mapping[str, object] | None = None,
     plates: list[str] | None = None,
+    views: Mapping[str, Part] | None = None,
 ) -> None:
     """What a model file ends with: see this module's docstring."""
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     path = Path(file).resolve()
+    shown = {**(views or {}), **parts}
     match sys.argv[1:]:
         case []:
             build.run(
@@ -139,8 +143,8 @@ def main(
                 lambda part, work: render(part, parts[part], orca or {}, work),
             )
         case ["--parts"]:
-            print("\n".join(parts))
-        case ["--view", part] if part in parts:
-            print(view(path, part, parts[part]).relative_to(build.ROOT))
+            print("\n".join(shown))
+        case ["--view", part] if part in shown:
+            print(view(path, part, shown[part]).relative_to(build.ROOT))
         case _:
             sys.exit(f"usage: {path.name} [--parts | --view PART]")
