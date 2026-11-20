@@ -44,7 +44,7 @@ to name, color and put together, and ends with `project()` from
   `settings` for its own prints (a layer height, say, which Orca keeps for a
   whole object), a `Piece`'s `settings` for that piece. Keys are the
   settings' names in Orca. An `Object`'s `pauses=[z]` pauses the print to put
-  something in.
+  something in; a plate pauses wherever one of its objects does.
 * A project of several objects should always have an `assembly` view of them
   put together, and should specify `plates` when calling `project()`.
 * `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens

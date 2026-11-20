@@ -95,6 +95,7 @@ class Placed:
 class Plate:
     name: str
     placed: list[Placed]
+    pauses: Sequence[float] = ()  # heights to pause it at
 
 
 @functools.cache
@@ -227,28 +228,32 @@ def published(project: Path) -> dict[str, str]:
 PAUSE_OVER = 0.04
 
 
-def pause_xml(heights: Sequence[float]) -> bytes:
-    """Orca's custom G-code for the first plate: a pause at each height."""
+def pause_xml(plates: list[Plate]) -> bytes:
+    """Orca's custom G-code, which it keeps for each plate: a pause at each of a
+    plate's heights."""
     root = ET.Element("custom_gcodes_per_layer")
-    plate = ET.SubElement(root, "plate")
-    ET.SubElement(plate, "plate_info", id="1")
-    for z in heights:
-        # Orca gives each of these to the layer whose top is nearest, and runs it
-        # before that layer. The layers aren't known here, with variable layer
-        # height set in the GUI: so name a height just over the pause, by less than
-        # the thinnest layer. That's the first layer to cover z or the one below
-        # it, never one above. Type 1 is a pause.
-        ET.SubElement(
-            plate,
-            "layer",
-            top_z=f"{z + PAUSE_OVER:.4f}",
-            type="1",
-            extruder="1",
-            color="",
-            extra="",
-            gcode="",
-        )
-    ET.SubElement(plate, "mode", value="MultiExtruder")
+    for k, p in enumerate(plates, 1):
+        if not p.pauses:
+            continue
+        plate = ET.SubElement(root, "plate")
+        ET.SubElement(plate, "plate_info", id=str(k))
+        for z in p.pauses:
+            # Orca gives each of these to the layer whose top is nearest, and runs
+            # it before that layer. The layers aren't known here, with variable
+            # layer height set in the GUI: so name a height just over the pause, by
+            # less than the thinnest layer. That's the first layer to cover z or
+            # the one below it, never one above. Type 1 is a pause.
+            ET.SubElement(
+                plate,
+                "layer",
+                top_z=f"{z + PAUSE_OVER:.4f}",
+                type="1",
+                extruder="1",
+                color="",
+                extra="",
+                gcode="",
+            )
+        ET.SubElement(plate, "mode", value="MultiExtruder")
     return to_xml(root)
 
 
@@ -256,12 +261,11 @@ def write(
     dst: Path,
     settings: dict[str, str],
     plates: list[Plate],
-    pauses: Sequence[float] = (),
 ) -> int:
-    """Write a published project of the plates, applying `settings` to everything.
+    """Write a published project of the plates, applying `settings` to everything,
+    and pausing each at its heights.
 
-    `pauses` are the heights to pause the first plate at. Returns how many objects
-    it has: one for every copy of one, as Orca's GUI won't slice a plate that has
+    Returns how many objects it has: one for every copy of one, as Orca's GUI won't slice a plate that has
     only further instances of an object on another plate.
     """
     src = zipfile.ZipFile(io.BytesIO(plates[0].placed[0].assembly.archive))
@@ -406,6 +410,6 @@ def write(
             if m := re.fullmatch(r"(Metadata/\w*?)1((?:_small)?\.png)", name):
                 for k in range(1, len(plates) + 1):
                     zout.writestr(f"{m[1]}{k}{m[2]}", src.read(name))
-        if pauses:
-            zout.writestr("Metadata/custom_gcode_per_layer.xml", pause_xml(pauses))
+        if any(p.pauses for p in plates):
+            zout.writestr("Metadata/custom_gcode_per_layer.xml", pause_xml(plates))
     return count

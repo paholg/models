@@ -68,12 +68,14 @@ def combine(
     heads: dict[str, int],
     filaments: dict[str, str],
     own: dict[str, dict[str, str]],
+    pauses: dict[str, list[float]],
 ) -> None:
     """Write one published project of the parts as packed, a plate for each of `packed`.
 
     `colors` are each part's and `heads` the tool head for each; `filaments` names
     the filament a color stands for, for the plates' names. `own` are the settings
-    of each part alone, beyond `settings`.
+    of each part alone, beyond `settings`. A plate pauses wherever one of its parts
+    does, at each of `pauses`, which stops everything else on it there too.
     """
     cols = math.ceil(math.sqrt(len(packed)))
 
@@ -109,8 +111,12 @@ def combine(
             f"T{k} {filaments.get(c) or scad.color_name(c)}"
             for k, c in sorted({(heads[c], c) for p in count for c in colors[p]})
         )
-        print(f"  plate {i + 1}: {name}: {tools}")
-        plates.append(orca.Plate(f"{name}: {tools}", placed))
+        stops = sorted({z for p in count for z in pauses[p]})
+        print(
+            f"  plate {i + 1}: {name}: {tools}"
+            + "".join(f", pause at {z:g} mm" for z in stops)
+        )
+        plates.append(orca.Plate(f"{name}: {tools}", placed, stops))
     objects = orca.write(dst, settings, plates)
     print(f"{dst.relative_to(ROOT)}: {len(plates)} plates, {objects} objects")
 
@@ -141,8 +147,6 @@ def run(
             work = Path(tmp)
             print(f"{part}: {tool}")
             render = render_part(part, work)
-            if render.pauses and any(part in g for g in groups):
-                print(f"  warning: {file.stem}-all won't pause for {part}")
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
             return render, orca.assemble(render.solids, render.box, work)
 
@@ -187,7 +191,7 @@ def run(
         name = f"{target.stem} [{note}]" if note else target.stem
         placed = orca.Placed(assembly, name, assembly.transform, heads)
         objects = orca.write(
-            target, settings, [orca.Plate(note, [placed])], render.pauses
+            target, settings, [orca.Plate(note, [placed], render.pauses)]
         )
         print(
             f"{target.relative_to(ROOT)}: {len(render.solids)} parts, {len(order)} colors"
@@ -224,4 +228,5 @@ def run(
             heads,
             filaments,
             own,
+            {p: r.pauses for p, r in renders.items()},
         )

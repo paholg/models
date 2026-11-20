@@ -59,7 +59,8 @@ the print is z high, or a layer sooner: leave a layer's room over what goes in.
 `// plate:` lines ask for one more project, gen/<dir>/<stem>-all.3mf, with
 everything in it, laid out on as many plates as it takes. It applies the
 settings its parts share; one that only some have goes on those parts' own
-objects, if Orca lets an object have it, and is left out with a warning if not. Each line is a group
+objects, if Orca lets an object have it, and is left out with a warning if not. A plate
+pauses wherever one of its parts does, and everything on it with it. Each line is a group
 of parts to print together, with `*N` for copies:
 
     // plate: lid*2 base

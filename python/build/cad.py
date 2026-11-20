@@ -118,8 +118,8 @@ def project(
     each a group like "lid*2 base". `orca` is settings for all of them, an
     object's own `settings` for its prints, and a piece's for that piece; views
     are only to look at. The plates' project applies what its objects share, and
-    puts the rest on each object, where Orca lets an object have it; it doesn't
-    pause.
+    puts the rest on each object, where Orca lets an object have it, and pauses
+    each plate wherever one of its objects pauses, stopping the rest there too.
 
     `--view NAME` writes tmp/view/<stem>-<name>.step instead, for FreeCAD.
     `--objects` lists views, then objects: kind, name and description, tabbed.
