@@ -1,5 +1,5 @@
 {
-  description = "OpenSCAD models";
+  description = "OpenSCAD and build123d models";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -57,8 +57,29 @@
             '';
           };
 
-        # A small TUI: pick a .scad file or a G-code script with fzf, then open,
-        # generate, preview or upload it.
+        # Include native dependencies for build123d with uv.
+        uv = pkgs.symlinkJoin {
+          name = "uv";
+          paths = [ pkgs.uv ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            wrapProgram $out/bin/uv --prefix LD_LIBRARY_PATH : ${
+              pkgs.lib.makeLibraryPath (
+                with pkgs;
+                [
+                  expat
+                  libGL
+                  libx11
+                  stdenv.cc.cc.lib
+                  zlib
+                ]
+              )
+            }
+          '';
+        };
+
+        # A small TUI: pick a .scad file, a build123d model or a G-code script
+        # with fzf, then open, generate, preview or upload it.
         f = pkgs.writeShellApplication {
           name = "f";
           runtimeInputs =
@@ -66,6 +87,7 @@
             [
               curl
               fd
+              freecad
               fzf
               git
               inotify-tools
@@ -74,10 +96,12 @@
               openscad-unstable
               prusa-slicer
               util-linux
-              uv
               xdg-utils
             ]
-            ++ [ orca-slicer ];
+            ++ [
+              orca-slicer
+              uv
+            ];
           text = builtins.readFile ./nix/f.sh;
         };
 
@@ -85,12 +109,14 @@
         # since a commit do to each part (see python/diff.py).
         scadiff = pkgs.writeShellApplication {
           name = "scadiff";
-          runtimeInputs = with pkgs; [
-            git
-            gnutar
-            openscad-unstable
-            uv
-          ];
+          runtimeInputs =
+            with pkgs;
+            [
+              git
+              gnutar
+              openscad-unstable
+            ]
+            ++ [ uv ];
           text = ''
             cd "$(git rev-parse --show-toplevel)"
             exec uv --project python run python/diff.py "$@"
@@ -102,22 +128,24 @@
           packages =
             with pkgs;
             [
+              freecad
               just
               openscad-lsp
               openscad-unstable
               prusa-slicer
               ruff
+              tombi
               ty
               typst
               unzip
               util-linux
-              uv
               xdg-utils
             ]
             ++ [
               f
               orca-slicer
               scadiff
+              uv
             ];
 
           # src/libslic3r/PrintConfig.cpp defines every setting; resources/profiles holds

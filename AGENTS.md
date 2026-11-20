@@ -1,4 +1,5 @@
-This repo is for 3d models with OpenSCAD for printing with a Snapmaker U1.
+This repo is for 3d models with OpenSCAD and build123d for printing with a
+Snapmaker U1. New projects should use build123d; OpenSCAD is deprecated.
 
 I use OrcaSlicer, not Snapmaker Orca, and the Extended firmware.
 
@@ -26,15 +27,33 @@ so don't go looking for its files through the binary.
 * `solid_infill_direction` is the direction of the first layer's lines on the
   bed, in degrees counter-clockwise from +x: 0 runs along x, 90 along y.
 
+## build123d
+
+A model can be a Python file instead of a .scad one: it draws with build123d,
+where a solid is a value to name, color and put together, and ends with
+`main()` from `python/project/cad.py`, whose docstring has the details. `just
+generate` and `f` take either kind. New models are being tried this way; the
+.scad ones work as before.
+
+* `just view FILE.py PART` writes `tmp/view/<stem>-<part>.step` and opens it in
+  FreeCAD: the pieces by name, to hide, cut through and measure.
+* Draw in 2D and extrude, rather than cut solids from solids. Something of many
+  cells, a honeycomb say, is one `Face(outline, holes)` extruded once: cutting
+  each cell, `chamfer()` on each cell's edges and `loft()` between faces with
+  many holes all take minutes or never finish.
+* build123d comes from PyPI by way of uv, and is the reason Python stops
+  short of 3.15 in `python/pyproject.toml`; the flake's `uv` knows where the
+  libraries it loads are.
+
 ## Directory structure
 
 * First is general scope (home for home products, games for mostly boardgame
   inserts, etc.)
 * Next folder is more specific.
-* Then each .scad file for a full print.
+* Then each .scad file, or build123d .py file, for a full print.
 * `gcode/` is the exception: scripts that write G-code directly, using
   `python/lib`, each to `tmp/<script name>.gcode`.
-* `f` (`nix/f.sh`) is a TUI over both kinds: it generates, previews and uploads
+* `f` (`nix/f.sh`) is a TUI over all of these: it generates, previews and uploads
   to the printer. It never starts a print; I do that by hand.
 
 ## Instructions

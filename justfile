@@ -4,6 +4,7 @@ check:
     ruff format --check python gcode
     # By way of uv, to make the environment ty.toml points at.
     uv --project python run ty check
+    tombi lint --error-on-warnings
 
 up:
     nix flake update
@@ -27,9 +28,20 @@ preview file:
 
 # Export each part a .scad file lists in its `// export:` line to gen/<dir>/<stem>-<part>.3mf,
 # where <dir> is the file's directory in this repo: an Orca project with one part per color, which
-# applies and shows the settings the file asks for with `orca()` (see python/generate.py).
+# applies and shows the settings the file asks for with `orca()` (see python/generate.py). A
+# build123d model, a .py file, does the same for the parts it names (see python/project/cad.py).
 generate file:
-    uv --project python run python/generate.py {{file}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{file}}" in
+        *.py) uv --project python run "{{file}}" ;;
+        *) uv --project python run python/generate.py "{{file}}" ;;
+    esac
+
+# Write a part of a build123d model to tmp/view/<stem>-<part>.step and open it in FreeCAD.
+view file part:
+    uv --project python run "{{file}}" --view "{{part}}"
+    setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{part}}.step" >/dev/null 2>&1 &
 
 # Open OpenSCAD on what the working tree's changes since a commit do to each part they reach:
 # green for what they add, red for what they remove (see python/diff.py).

@@ -1,5 +1,6 @@
 # Pick a design with fzf, then act on it with single keys. A design is a .scad
-# file, which becomes Orca projects, or a script in gcode/, which writes G-code.
+# file or a build123d model (a .py file among them), which become Orca
+# projects, or a script in gcode/, which writes G-code.
 cd "$(git rev-parse --show-toplevel)" || exit
 
 # Moonraker and Fluidd on the printer.
@@ -33,11 +34,15 @@ git_marks() {
   done < <(git status --porcelain -z --untracked-files=all)
 }
 
-# Pick a design into $file and its $kind (scad or gcode), starting from the query $1.
+# Pick a design into $file and its $kind (scad, cad or gcode), starting from the query $1.
 pick() {
   local files rows list path row mark longest width cols margin
   files="$({
     fd --extension scad
+    # A model is told from any other script by what it imports.
+    fd --extension py --exclude python --exclude gcode \
+      --exec-batch grep --files-with-matches '^from project\.cad import' |
+      sed 's|^\./||' || true
     fd --extension py . gcode
   } | sort)"
   # Show path components as aligned columns, without the suffix;
@@ -70,6 +75,8 @@ pick() {
   [[ -n $file ]] || return 1
   if [[ $file == *.scad ]]; then
     kind=scad
+  elif [[ $file != gcode/* ]]; then
+    kind=cad
   else
     kind=gcode
     # Scripts name their output after themselves.
@@ -145,17 +152,17 @@ launch() {
 # List $file's generated projects into $projects.
 find_projects() {
   shopt -s nullglob
-  projects=("gen/${file%.scad}-"*.3mf)
+  projects=("gen/${file%.*}-"*.3mf)
   shopt -u nullglob
 }
 
 # Describe into $fresh whether what $file generates is older than its sources,
 # and say so in $state: missing, stale or fresh.
 check_fresh() {
-  if [[ $kind == scad ]]; then
-    check_fresh_scad
-  else
+  if [[ $kind == gcode ]]; then
     check_fresh_gcode
+  else
+    check_fresh_model
   fi
   case "$state" in
     missing) fresh=$'\033[33mnot generated\033[0m' ;;
@@ -181,9 +188,9 @@ check_fresh_gcode() {
   state=fresh
 }
 
-# A .scad file's sources are the .scad and .svg files beside it, which it may
+# A model's sources are the .scad, .py and .svg files beside it, which it may
 # include or import.
-check_fresh_scad() {
+check_fresh_model() {
   local oldest project src dir
   find_projects
   if ((${#projects[@]} == 0)); then
@@ -198,7 +205,7 @@ check_fresh_scad() {
   done
   dir="$(dirname "$file")"
   shopt -s nullglob
-  for src in "$dir"/*.scad "$dir"/*.svg; do
+  for src in "$dir"/*.scad "$dir"/*.py "$dir"/*.svg; do
     if [[ $src -nt $oldest ]]; then
       shopt -u nullglob
       state=stale
@@ -226,6 +233,11 @@ draw() {
     draw_generate
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
     below=5
+  elif [[ $kind == cad ]]; then
+    draw_generate
+    printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
+    printf '  \033[1mv\033[0m    view a part in FreeCAD\n'
+    below=6
   else
     draw_generate
     printf '  \033[1mv\033[0m    view the G-code\n'
@@ -321,7 +333,7 @@ while true; do
         keep=1
       fi
       ;;
-    gcode:g)
+    cad:g | gcode:g)
       printf '\nGenerating...\n'
       # Leave the log on screen only if there is a failure in it to read.
       if ! uv --project python run "$file" 2>&1; then
@@ -364,7 +376,7 @@ while true; do
       detach xdg-open "http://$PRINTER"
       status="Opened http://$PRINTER in a browser."
       ;;
-    scad:o)
+    scad:o | cad:o)
       find_projects
       if ((${#projects[@]} == 0)); then
         status="Nothing generated for $file yet; press g."
@@ -378,6 +390,24 @@ while true; do
       # Orca writes a result.json into its working directory.
       (cd "${TMPDIR:-/tmp}" && launch orca orca-slicer "$OLDPWD/$project")
       status="Opened $project in OrcaSlicer."
+      ;;
+    cad:v)
+      parts="$(uv --project python run "$file" --parts)" || {
+        status="Couldn't list the parts of $file."
+        keep=1
+        continue
+      }
+      printf '\n'
+      part="$(fzf --height '~40%' --reverse --select-1 <<<"$parts")" || continue
+      printf '\nExporting...\n'
+      if ! uv --project python run "$file" --view "$part" 2>&1; then
+        status="Export failed."
+        keep=1
+        continue
+      fi
+      view="tmp/view/$(basename "$file" .py)-$part.step"
+      launch freecad freecad "$view"
+      status="Opened $view in FreeCAD."
       ;;
     *:c)
       close_all
