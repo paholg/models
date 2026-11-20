@@ -1,6 +1,7 @@
 """Projects drawn with build123d: a project file ends with `project()`."""
 
 import contextlib
+import copy
 import io
 import multiprocessing
 import os
@@ -204,10 +205,16 @@ def write_step(drawn: list[Piece], out: Path) -> None:
     # Each group's shapes and groups, (name, group), in the order they come.
     top: list = []
     groups = {"": top}
+    used: list[Shape] = []
     for piece in drawn:
-        piece.shape.label = piece.name
+        shape = piece.shape
+        # One shape placed twice is one to STEP, under the last name it's given.
+        if any(shape.wrapped.IsPartner(u.wrapped) for u in used):
+            shape = copy.deepcopy(shape)
+        used.append(shape)
+        shape.label = piece.name
         if piece.color:
-            piece.shape.color = Color(piece.color)
+            shape.color = Color(piece.color)
         path, group = "", top
         for name in filter(None, piece.parent.split("/")):
             path += f"/{name}"
@@ -215,7 +222,7 @@ def write_step(drawn: list[Piece], out: Path) -> None:
                 groups[path] = []
                 group.append((name, groups[path]))
             group = groups[path]
-        group.append(piece.shape)
+        group.append(shape)
 
     def built(group: list) -> list[Shape]:
         return [
