@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from build123d import Color, Compound, Shape, export_step, export_stl
-from OCP.Font import Font_FontMgr  # ty: ignore[import-not-found]  # OCP has no stub for it
+from build123d.text import Font_FontMgr
 
 from . import build, scad
 
