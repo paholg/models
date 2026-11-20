@@ -2126,12 +2126,14 @@ def deck_tray(stl: str, cut: float) -> Part:
 # Pieces
 
 
-def body_piece(shape: Shape, name: str, color: str) -> Piece:
-    return Piece(shape, name, color, filaments[color])
+def body_piece(shape: Shape, name: str, color: str, parent: str = "") -> Piece:
+    return Piece(shape, name, color, filaments[color], parent=parent)
 
 
-def icons_piece(shape: Shape, tray: str) -> Piece:
-    return Piece(shape, f"{tray} icons", icon_color, filaments[icon_color])
+def icons_piece(shape: Shape, tray: str, parent: str = "") -> Piece:
+    return Piece(
+        shape, f"{tray} icons", icon_color, filaments[icon_color], parent=parent
+    )
 
 
 Pieces = list[Piece]
@@ -2149,33 +2151,39 @@ def half_b_pieces() -> Pieces:
 
 def big_pieces() -> Pieces:
     body, icons = big_tray()
-    return [body_piece(body, "big", game), icons_piece(icons, "big")]
+    return [
+        body_piece(body, "big tray", game, "big"),
+        icons_piece(icons, "big", "big"),
+    ]
 
 
 def special_forge_pieces() -> Pieces:
     body, floors, handles, jaws = special_forge()
     top = special_h - forge_icon_d
+    group = "forge board"
     return [
-        body_piece(body, "forge board", game),
-        body_piece(floors, "pocket floors", pocket_floor),
-        body_piece(up(handles, top, forge_icon_d), "tongs' handles", icon_color),
-        body_piece(up(jaws, top, forge_icon_d), "tongs' jaws and rock", forge_orange),
+        body_piece(body, "forge board panel", game, group),
+        body_piece(floors, "forge pocket floors", pocket_floor, group),
+        body_piece(up(handles, top, forge_icon_d), "tongs' handles", icon_color, group),
+        body_piece(
+            up(jaws, top, forge_icon_d), "tongs' jaws and rock", forge_orange, group
+        ),
     ]
 
 
 def special_others_pieces() -> Pieces:
     body, floors = special_others()
     return [
-        body_piece(body, "others board", game),
-        body_piece(floors, "pocket floors", pocket_floor),
+        body_piece(body, "others board panel", game, "others board"),
+        body_piece(floors, "others pocket floors", pocket_floor, "others board"),
     ]
 
 
 def special_test_pieces() -> Pieces:
     body, floors = special_test()
     return [
-        body_piece(body, "test board", game),
-        body_piece(floors, "pocket floors", pocket_floor),
+        body_piece(body, "test board panel", game, "test board"),
+        body_piece(floors, "test pocket floors", pocket_floor, "test board"),
     ]
 
 
@@ -2216,8 +2224,11 @@ def board_stack(apart: float = 0) -> Pieces:
     frame can be thick round the small ones, under the player boards'
     edges."""
     layers = [(overview, "round overview", "wheat")]
-    layers += [((action_board[0], w), "action board", "tan") for w in action_widths]
-    layers += [(player_board, "player board", "burlywood")] * 4
+    layers += [
+        ((action_board[0], w), f"action board {i}", "tan")
+        for i, w in enumerate(action_widths, 1)
+    ]
+    layers += [(player_board, f"player board {i}", "burlywood") for i in range(1, 5)]
     assert len(layers) == board_layers, f"board stack has {len(layers)} layers"
     out = []
     for i, ((x, y), name, color) in enumerate(layers):
@@ -2274,19 +2285,25 @@ def assembly(apart: float = 0) -> Pieces:
     c = box_clear / 2
     pieces: Pieces = []
 
-    def put(at: Location, items: Pieces, suffix: str = "") -> None:
+    def put(at: Location, items: Pieces, group: str, suffix: str = "") -> None:
+        """Moved by `at`, named with `suffix`, in `group`, and their own groups
+        in that."""
         for p in items:
-            pieces.append(Piece(at * p.shape, p.name + suffix, p.color, p.filament))
+            parent = f"{group}/{p.parent}" if p.parent else group
+            pieces.append(
+                Piece(at * p.shape, p.name + suffix, p.color, p.filament, parent=parent)
+            )
 
     # 1: the boards, in their frame, and the rulebooks on them.
     frame = frame_half()
-    put(Pos(c, c, 0), [body_piece(frame, "frame half", setup)])
+    put(Pos(c, c, 0), [body_piece(frame, "frame half", setup)], "boards")
     put(
         Pos(c + inner[0], c, 0),
         [body_piece(mirror(frame, Plane.YZ), "frame half", setup)],
+        "boards",
         " 2",
     )
-    put(Location(), board_stack(apart / 6))
+    put(Location(), board_stack(apart / 6), "boards")
     zb = board_stack_h + board_layers * apart / 6 + apart / 2
     x0, y0 = (box[0] - rulebooks[0]) / 2, (box[1] - rulebooks[1]) / 2
     pieces.append(
@@ -2294,54 +2311,68 @@ def assembly(apart: float = 0) -> Pieces:
             cuboid(x0, y0, zb, x0 + rulebooks[0], y0 + rulebooks[1], zb + rulebooks[2]),
             "rulebooks",
             "ivory",
+            parent="boards",
         )
     )
     # 2: the half trays, one behind the other.
     z = zb + rulebooks[2] + apart
     for i in (0, 1):
         at = Pos(c, c + i * half[1], z)
-        put(at, half_a_pieces(), f" {i + 1}")
-        put(at * Pos(half_a.x, 0), half_b_pieces(), f" {i + 1}")
+        tray = f"half trays/half tray {i + 1}"
+        put(at, half_a_pieces(), tray, f" {i + 1}")
+        put(at * Pos(half_a.x, 0), half_b_pieces(), tray, f" {i + 1}")
     # 3: the special boards, turned half round: the forge board at the right,
     # its icon at the back.
     z += half_h + apart
     turned = Pos(c + inner[0], c + inner[1], z) * Rot(0, 0, 180)
-    put(turned, special_forge_pieces())
-    put(turned * Pos(special_forge_size[0], 0), special_others_pieces())
+    put(turned, special_forge_pieces(), "special boards")
+    put(
+        turned * Pos(special_forge_size[0], 0),
+        special_others_pieces(),
+        "special boards",
+    )
     # 4 to 6: the columns' bottom, middle and top trays.
     z += special_h + apart
     base = Pos(c, c, z)
-    put(base, single(strips_tray, "strips", setup)())
-    put(base * Pos(decks_x, 0), single(boat_tray, "boats", game)())
-    put(base * Pos(decks_x, boat_size[1]), single(misc_tray, "misc", setup)())
+    low = "columns/bottom"
+    put(base, single(strips_tray, "strips", setup)(), low)
+    put(base * Pos(decks_x, 0), single(boat_tray, "boats", game)(), low)
+    put(base * Pos(decks_x, boat_size[1]), single(misc_tray, "misc", setup)(), low)
     back = base * Pos(0, front_y)
-    put(back, single(setup_buildings_tray, "setup buildings", setup)())
-    put(back * Pos(0, setup_bld[1]), single(riser, "riser", setup)())
+    put(back, single(setup_buildings_tray, "setup buildings", setup)(), low)
+    put(back * Pos(0, setup_bld[1]), single(riser, "riser", setup)(), low)
     for k, color in enumerate(viking_colors):
         put(
             back
             * Pos(setup_bld[0] + (k % 2) * viking_bin[0], (k // 2) * viking_bin[1]),
             viking(color)(),
+            low,
         )
-    mid = Pos(0, 0, apart)
+    mid, middle = Pos(0, 0, apart), "columns/middle"
     x = 0.0
     for i in range(len(decks)):
         # Turned, each deck running along x, its front at the high end.
-        put(mid * base * Pos(x + deck_len[i], 0, base_h) * Rot(0, 0, 90), deck(i)())
+        put(
+            mid * base * Pos(x + deck_len[i], 0, base_h) * Rot(0, 0, 90),
+            deck(i)(),
+            middle,
+        )
         x += deck_len[i]
-    put(mid * back * Pos(0, 0, base_h), big_pieces())
+    put(mid * back * Pos(0, 0, base_h), big_pieces(), middle)
     put(
         mid * back * Pos(big_size[0], 0, viking_h),
         single(islands_tray, "islands", setup)(),
+        middle,
     )
-    top = Pos(0, 0, 2 * apart)
-    put(top * base * Pos(decks_x, 0, boat_h), single(vp_tray, "vp", game)())
+    top, high = Pos(0, 0, 2 * apart), "columns/top"
+    put(top * base * Pos(decks_x, 0, boat_h), single(vp_tray, "vp", game)(), high)
     put(
         top * base * Pos(decks_x + vp_size[0], 0, boat_h),
         single(spacer, "spacer", setup)(),
+        high,
     )
     upper = top * back * Pos(0, 0, base_h + tier_h)
-    put(upper, single(wood_tray, "wood", game)())
+    put(upper, single(wood_tray, "wood", game)(), high)
     # Turned, its low side at the end of the box.
     bld = upper * Pos(inner[0], 0) * Rot(0, 0, 90)
     put(
@@ -2350,6 +2381,7 @@ def assembly(apart: float = 0) -> Pieces:
             body_piece(buildings_tray(), "buildings", game),
             body_piece(buildings_cap(), "cap", game),
         ],
+        high,
     )
     return pieces
 
