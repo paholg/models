@@ -1,104 +1,60 @@
-This repo is for 3d models drawn with build123d for printing with a Snapmaker
-U1.
+3D models in build123d for a Snapmaker U1 (Extended firmware, 10.0.0.15),
+sliced in OrcaSlicer.
 
-I use OrcaSlicer, not Snapmaker Orca, and the Extended firmware.
+## Layout
 
-The printer is available at 10.0.0.15.
+* `<scope>/<thing>/<print>.py`: projects, one per print.
+* `python/build/`: what turns a project into Orca projects.
+* `python/designs/`: designs shared between projects.
+* `gcode/`: scripts that write G-code to `tmp/`.
+* `f` (`nix/f.sh`): TUI to generate, preview and upload. Never starts prints.
+* `TODO.md`: next steps per project.
+* Scratch output goes in `tmp/`.
 
-## OrcaSlicer
+## Projects
 
-`orca-slicer` comes from this repo's flake: an AppImage in a sandbox wrapper,
-so don't go looking for its files through the binary.
+A project is a Python file that draws with build123d and ends by calling
+`project()` from `python/build/cad.py`, whose docstring has the details. It
+passes `project()` the objects to print and views to only look at, each a
+function that draws it and a description. An object is one or more pieces,
+each with its own name, color and slicer settings, which become its parts in
+Orca.
 
-* `$ORCA_SOURCE` is its source, at the same version. Look settings up in
-  `$ORCA_SOURCE/src/libslic3r/PrintConfig.cpp`; a setting's key is its name
-  there and in the preset JSON files.
-* Presets: the bundled ones are in `$ORCA_SOURCE/resources/profiles/Snapmaker`,
-  which Orca copies to `~/.config/OrcaSlicer/system/Snapmaker`. Mine are in
-  `~/.config/OrcaSlicer/user`.
-* A model becomes Orca projects, with settings for the whole print or for
-  single parts: see build123d below. What does it is in `python/build`:
-  `build.py` writes the projects, `orca.py` reads and writes Orca's files,
-  `layout.py` packs plates, and `cad.py` (with `worker.py`) is build123d's
-  side. `build.py`'s docstring has what comes out.
-* `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
-  settings in the G-code rather than guess. Orca's own CLI ignores a
-  project's settings, which only the GUI applies; `python/slice.py` lays them
-  on by hand.
-* `solid_infill_direction` is the direction of the first layer's lines on the
-  bed, in degrees counter-clockwise from +x: 0 runs along x, 90 along y.
+Pieces are drawn where they sit when assembled, and each object's function
+moves and rotates its pieces into position for printing. A project with
+several objects has an `assembly` view showing them together, and passes
+`plates` to lay them out for printing.
+
+Generating, with `just generate FILE.py`, writes the project's Orca projects
+to `gen/`, and a STEP file of each object and view for FreeCAD. **Run it after
+each set of changes to a project.** It draws in worker processes, each of
+which runs the file again up to `project()`, so keep the file's top-level code
+fast, and don't rely on a cache one object fills being there for another.
+
+`just view FILE.py OBJECT` opens an object or view in FreeCAD, and
+`just diff [REF]` shows in FreeCAD what the changes since REF (HEAD by
+default) do to each piece.
 
 ## build123d
 
-A project is a Python file that draws with build123d, where a solid is a value
-to name, color and put together, and ends with `project()` from
-`python/build/cad.py`, whose docstring has the details. `just generate` and
-`f` take it.
-
-* `project()` takes `objects`, the ones to print, and `views`, ones only to look
-  at, each an `Object`: a function, giving one shape or a list of `Piece`s,
-  and a description to show beside its name. Each piece is a part of the
-  object in Orca, with its own name, color, filament and settings. Draw the
-  assembly as it's used; the objects' functions turn their pieces to print.
-* Generating draws the objects in other processes, each of which runs the
-  file again up to `project()` (see `cad.workers()`): keep the file's own code
-  quick, and don't count on a cache one object's drawing fills being there
-  for another's.
-* Slicer settings: `project(orca={...})` for the whole print, an `Object`'s
-  `settings` for its own prints (a layer height, say, which Orca keeps for a
-  whole object), a `Piece`'s `settings` for that piece. Keys are the
-  settings' names in Orca. An `Object`'s `pauses=[z]` pauses the print to put
-  something in; a plate pauses wherever one of its objects does.
-* A project of several objects should always have an `assembly` view of them
-  put together, and should specify `plates` when calling `project()`.
-* Generating also writes `gen/<dir>/<stem>-<name>.step` for each object and
-  view, which `f`'s `v` opens in FreeCAD: the pieces by name, to hide, cut
-  through and measure. `just view FILE.py OBJECT` writes just one, to
-  `tmp/view/`, and opens it. OBJECT can be a view.
-* `just diff [REF] [FILE.py...]` shows in FreeCAD what the working tree's
-  changes since REF, HEAD by default, do to each piece of the projects they
-  reach, or of those named: see `python/diff.py`.
-* A design more than one project draws, the card box say, is a module in
-  `python/designs/`, imported as `designs.<name>`.
-* Draw in 2D and extrude, rather than cut solids from solids. Something of many
-  cells, a honeycomb say, is one `Face(outline, holes)` extruded once: cutting
-  each cell, `chamfer()` on each cell's edges and `loft()` between faces with
-  many holes all take minutes or never finish.
-* build123d comes from PyPI by way of uv, and is the reason Python stops
-  short of 3.15 in `python/pyproject.toml`; the flake's `uv` knows where the
-  libraries it loads are.
-* `extrude()` goes the way the face's normal points, which a polygon's winding
-  decides: a clockwise one goes down. Pass a direction, `(0, 0, 1)`, when it
+* Draw in 2D and extrude, rather than cutting solids from solids.
+* Draw something with many cells, like a honeycomb, as one
+  `Face(outline, holes)` extruded once: cutting, chamfering or lofting each
+  cell separately takes minutes or never finishes.
+* A clockwise polygon extrudes down: pass a direction, `(0, 0, 1)`, when it
   matters.
 
-## Directory structure
+## OrcaSlicer
 
-* First is general scope (home for home products, games for mostly boardgame
-  inserts, etc.)
-* Next folder is more specific.
-* Then each build123d .py file for a full print.
-* `gcode/` is the exception: scripts that write G-code directly, using
-  `python/lib`, each to `tmp/<script name>.gcode`.
-* `f` (`nix/f.sh`) is a TUI over all of these: it generates, previews and uploads
-  to the printer. It never starts a print; I do that by hand.
-
-## Instructions
-
-Please generate any assets into `./tmp/`.
-
-While these models are for 3d prints, I'm general fine with mixed media, gluing,
-using bolts, etc. I'm usually more interested in the final product than in
-getting a single print does everything. When in doubt, ask me.
+* It's a sandboxed AppImage: look in `$ORCA_SOURCE`, not the binary.
+  Settings are in `src/libslic3r/PrintConfig.cpp`, bundled presets in
+  `resources/profiles/Snapmaker`; user presets in `~/.config/OrcaSlicer/user`.
+* `just slice gen/….3mf` slices to `tmp/slice/` to check settings in G-code.
+* `solid_infill_direction` is the angle of the first layer's lines on the
+  bed, counter-clockwise from +x: 0 runs along x, 90 along y.
 
 ## Design
 
-Most edges should have chamfers or fillets. When designing parts for glue, use
-crush ribs and joints; try to make installation easy and secure.
-
-Don't design for particular slicer settings (layer height, etc) unless a part
-truly requires it, in which case it should be set in `project()`'s `orca` or a
-piece's `settings`, with a comment giving the reason.
-
-## TODO
-
-In TODO.md is a very brief list of the next steps for each project.
+* Glue, bolts and mixed media are fine; when in doubt, ask.
+* Chamfer or fillet most edges. Glued parts get crush ribs and joints.
+* Only set slicer settings a part truly needs, with a comment saying why.
