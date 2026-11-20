@@ -2,5 +2,8 @@
 [environment]
 python = "python/.venv"
 
-[src]
-include = ["python", "gcode"]
+[analysis]
+# lib3mf, which build123d's Mesher wraps, is 14,000 lines of unannotated
+# ctypes bindings: inferring them takes ty 10 s wherever a Mesher is made.
+# Nothing here uses them directly, and Mesher's own methods are annotated.
+replace-imports-with-any = ["lib3mf.**"]

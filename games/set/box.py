@@ -25,6 +25,7 @@ from build123d import (
     Rectangle,
     RectangleRounded,
     Rot,
+    Shape,
     Sketch,
     SlotCenterToCenter,
     Text,
@@ -33,7 +34,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, project
+from build.cad import Object, project, sketch
 from designs.card_box import SETTINGS, Art, CardBox
 
 # Contents
@@ -92,19 +93,19 @@ card = (card_w, card_w * 89 / 57)
 
 def diamond() -> Sketch:
     x, y = card_w * diamond_size[0] / 2, card_w * diamond_size[1] / 2
-    return Sketch() + Polygon((-x, 0), (0, -y), (x, 0), (0, y), align=None)
+    return sketch(Sketch() + Polygon((-x, 0), (0, -y), (x, 0), (0, y), align=None))
 
 
 def oval() -> Sketch:
     x, y = card_w * oval_size[0], card_w * oval_size[1]
-    return Sketch() + SlotCenterToCenter(x - y, y)
+    return sketch(Sketch() + SlotCenterToCenter(x - y, y))
 
 
 def squiggle(open: bool = False) -> Sketch:
     """Traced from the same picture; open, its outline alone. Outlined before
     it's scaled, in the trace's own units, as OCCT can't offset the curves
     scale() leaves: its scale across and along differ by 0.3%."""
-    shape = Sketch() + import_svg(Path(__file__).with_name("squiggle.svg"))
+    shape = sketch(Sketch() + import_svg(Path(__file__).with_name("squiggle.svg")))
     size = shape.bounding_box().size
     sx = card_w * squiggle_size[0] / size.X
     sy = card_w * squiggle_size[1] / size.Y
@@ -112,14 +113,14 @@ def squiggle(open: bool = False) -> Sketch:
         shape = outline(shape, symbol_line * 2 / (sx + sy))
     # Scaled before it's moved: scale() goes wrong on a shape that has been.
     shape = scale(shape, (sx, sy, 1))
-    return Pos(-shape.bounding_box().center()) * shape
+    return sketch(Pos(-shape.bounding_box().center()) * shape)
 
 
 def outline(shape: Sketch, line: float = symbol_line) -> Sketch:
     """An open symbol: its outline alone, `line` wide. Its corners rounded
     inside, where the squiggle's traced curves meet, which OCCT can't
     mitre."""
-    return shape - offset(shape, -line, kind=Kind.ARC)
+    return sketch(shape - offset(shape, -line, kind=Kind.ARC))
 
 
 def shaded(shape: Sketch) -> Sketch:
@@ -128,24 +129,26 @@ def shaded(shape: Sketch) -> Sketch:
     stripes = [
         Pos(k * shade[1], 0) * Rectangle(shade[0], card[0]) for k in range(-n, n + 1)
     ]
-    return outline(shape) + (shape & (Sketch() + stripes))
+    return sketch(outline(shape) + (shape & (Sketch() + stripes)))
 
 
 def symbols(n: int, shape: Sketch) -> Sketch:
     """n of a symbol, as they go on a card."""
     pitch = symbol_pitch * card_w
-    return Sketch() + [Pos(0, (i - (n - 1) / 2) * pitch) * shape for i in range(n)]
+    return sketch(
+        Sketch() + [Pos(0, (i - (n - 1) / 2) * pitch) * shape for i in range(n)]
+    )
 
 
-def on_card(i: int, shape: Sketch) -> Sketch:
+def on_card(i: int, shape: Shape) -> Sketch:
     """Moved to card i's place, in a leaning row under the seam."""
     row = Pos(0, cards_at * plain.seam[0]) * Rot(0, 0, cards_lean)
-    return row * Pos((i - 1) * (card[0] + card_gap), 0) * shape
+    return sketch(row * Pos((i - 1) * (card[0] + card_gap), 0) * shape)
 
 
 # The front, a layer at a time: the cards themselves, then what's on them. The
 # open squiggle is the box showing through its card.
-cards = (
+cards = sketch(
     Sketch()
     + [on_card(i, RectangleRounded(*card, card_r)) for i in range(3)]
     - on_card(2, squiggle(open=True))
@@ -169,12 +172,14 @@ tile_stripes = 8
 
 def square(grow: float = 0) -> Sketch:
     """A tile, grown by `grow`."""
-    return Sketch() + Rectangle(tile_size[0] + 2 * grow, tile_size[1] + 2 * grow)
+    return sketch(
+        Sketch() + Rectangle(tile_size[0] + 2 * grow, tile_size[1] + 2 * grow)
+    )
 
 
-def tile_at(i: int, shape: Sketch) -> Sketch:
+def tile_at(i: int, shape: Shape) -> Sketch:
     """At letter i's place, the row centered."""
-    return Pos((i - 1) * tile_pitch - tile_far[0] / 2, -tile_far[1] / 2) * shape
+    return sketch(Pos((i - 1) * tile_pitch - tile_far[0] / 2, -tile_far[1] / 2) * shape)
 
 
 def text(s: str, size: float, style: FontStyle) -> Sketch:
@@ -194,26 +199,32 @@ def letter(i: int) -> Sketch:
 def bars() -> Sketch:
     """The striped tile's."""
     pitch = tile_size[1] / tile_stripes
-    return Sketch() + [
-        Pos(0, -tile_size[1] / 2 + (k + 0.25) * pitch)
-        * Rectangle(tile_size[0], pitch / 2)
-        for k in range(tile_stripes)
-    ]
+    return sketch(
+        Sketch()
+        + [
+            Pos(0, -tile_size[1] / 2 + (k + 0.25) * pitch)
+            * Rectangle(tile_size[0], pitch / 2)
+            for k in range(tile_stripes)
+        ]
+    )
 
 
 # The purple: the striped tiles' frames and bars, the middle tiles, and the
 # front tiles' edges and letters, which the white covers but for its edge and
 # letter.
-logo_purple = Sketch() + [
-    tile_at(i, part)
-    for i in range(3)
-    for part in [
-        Pos(*tile_far) * (square() - square(-tile_edge) + bars()),
-        Pos(*tile_mid) * square(),
-        square(tile_edge),
-        letter(i),
+logo_purple = sketch(
+    Sketch()
+    + [
+        tile_at(i, part)
+        for i in range(3)
+        for part in [
+            Pos(*tile_far) * (square() - square(-tile_edge) + bars()),
+            Pos(*tile_mid) * square(),
+            square(tile_edge),
+            letter(i),
+        ]
     ]
-]
+)
 # The white: the front tiles, less their letters, and between the striped
 # tiles' bars, where they show past the tiles in front of them: their own, and
 # the next letter's.
@@ -222,7 +233,7 @@ fronts = Sketch() + [
     for i in range(3)
     for part in [Pos(*tile_mid) * square(), square(tile_edge), letter(i)]
 ]
-logo_white = (
+logo_white = sketch(
     Sketch()
     + [tile_at(i, square() - letter(i)) for i in range(3)]
     + (

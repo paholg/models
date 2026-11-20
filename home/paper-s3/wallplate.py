@@ -37,7 +37,7 @@ from build123d import (
     offset,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 
 # Layout
 
@@ -219,7 +219,7 @@ def rod(d: float, z0: float, height: float) -> Part:
     return Pos(0, 0, z0) * Cylinder(d / 2, height, align=UPRIGHT)
 
 
-def rrect(w: float, h: float, r: float = opening_r) -> Face:
+def rrect(w: float, h: float, r: float = opening_r) -> Sketch:
     """A rounded rectangle about the origin."""
     return RectangleRounded(w, h, r)
 
@@ -230,15 +230,15 @@ def slab(w: float, h: float, t: float) -> Part:
     s = up(rrect(w, h, frame_r), 0, t)
     faces = s.faces().sort_by(Axis.Z)
     s = chamfer(faces.last.edges(), edge_chamfer)
-    return chamfer(s.faces().sort_by(Axis.Z).first.edges(), small_chamfer)
+    return part(chamfer(s.faces().sort_by(Axis.Z).first.edges(), small_chamfer))
 
 
 def opening(face: Face | Sketch, z0: float, z1: float) -> Part:
     """A hole of that shape from z0 up to z1, its mouth there chamfered."""
     k = small_chamfer
-    wide = Sketch() + offset(face, k, kind=Kind.ARC)
+    wide = sketch(offset(face, k, kind=Kind.ARC))
     mouth = Pos(0, 0, z1) * extrude(wide, k, (0, 0, -1), taper=45)
-    return up(face, z0, z1 - z0) + mouth
+    return part(up(face, z0, z1 - z0) + mouth)
 
 
 def countersink(top: float) -> Part:
@@ -249,18 +249,19 @@ def countersink(top: float) -> Part:
     head = Pos(0, 0, top - sink) * Cone(
         screw_d / 2, screw_head_d / 2, sink, align=UPRIGHT
     )
-    return shank + head
+    return part(shank + head)
 
 
 def screw_holes(kind: str) -> Part:
-    return Part() + [
-        Pos(0, s * screw_spacings[kind] / 2) * countersink(plate_t) for s in (-1, 1)
-    ]
+    return part(
+        Part()
+        + [Pos(0, s * screw_spacings[kind] / 2) * countersink(plate_t) for s in (-1, 1)]
+    )
 
 
 def gang_cuts(kind: str) -> Part:
     w, h = openings[kind]
-    return opening(rrect(w, h), -1, plate_t) + screw_holes(kind)
+    return part(opening(rrect(w, h), -1, plate_t) + screw_holes(kind))
 
 
 # The plate
@@ -314,7 +315,7 @@ def frame_cuts() -> Part:
     # Heat-set inserts in the shelf behind the cap.
     insert_hole = opening(Circle(insert_d / 2), z_back - insert_l - 0.5, z_back)
     cuts += [Pos(s * cap_screw_x, cap_cy) * insert_hole for s in (-1, 1)]
-    return Part() + cuts
+    return part(Part() + cuts)
 
 
 def plate() -> Part:
@@ -326,9 +327,9 @@ def plate() -> Part:
     # The outlet under the PaperS3 is a rocker-style device, and the frame's
     # walls and ledges stand clear of its face.
     clear = up(rrect(*rocker_opening), -1, outlet_face_z + clear_depth + 1)
-    cuts.append(Pos(gang_x(paper)) * (screw_holes("R") + clear))
+    cuts.append(Pos(gang_x(paper)) * part(screw_holes("R") + clear))
     cuts.append(on_frame * frame_cuts())
-    return body - cuts
+    return part(body - cuts)
 
 
 # The cap
@@ -358,9 +359,10 @@ def cap() -> Part:
 def cap_screws() -> Part:
     """M3 x 10 socket head screws."""
     one = rod(3, -10, 10) + rod(5.5, 0, 3)
-    return Part() + [
-        Pos(s * cap_screw_x, cap_cy, z_top - m3_head_h) * one for s in (-1, 1)
-    ]
+    return part(
+        Part()
+        + [Pos(s * cap_screw_x, cap_cy, z_top - m3_head_h) * one for s in (-1, 1)]
+    )
 
 
 def papers3() -> Part:

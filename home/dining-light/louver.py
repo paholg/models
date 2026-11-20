@@ -26,7 +26,7 @@ from build123d import (
     offset,
 )
 
-from build.cad import Object, project
+from build.cad import Object, part, project
 
 # Light
 
@@ -160,7 +160,7 @@ def tabs() -> list[Part]:
         Pos(-span / 2 + k * span / max(1, tabs_per_side - 1), -interior_w / 2) * tab()
         for k in range(tabs_per_side)
     ]
-    return near + [mirror(t, Plane.XZ) for t in near]
+    return near + [part(mirror(t, Plane.XZ)) for t in near]
 
 
 def louver() -> Part:
@@ -170,7 +170,7 @@ def louver() -> Part:
     print(
         f"  cutoff across corners: {degrees(atan(cell * 2 / sqrt(3) / depth)):.4f} deg"
     )
-    return honeycomb() + tabs()
+    return part(honeycomb() + tabs())
 
 
 project(

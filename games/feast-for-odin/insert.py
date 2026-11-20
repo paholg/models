@@ -38,7 +38,7 @@ its layers pulled apart, and the buildings' tray with its buildings in.
 """
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache
 from math import atan, ceil, cos, hypot, pi, sin, sqrt, tan
@@ -49,6 +49,7 @@ from build123d import (
     Axis,
     Box,
     Circle,
+    Compound,
     Edge,
     Face,
     Keep,
@@ -82,7 +83,7 @@ from build123d import (
 )
 from shapely import MultiPoint
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 
 HERE = Path(__file__).parent
 
@@ -184,24 +185,24 @@ def polygon(points: Iterable[Vector | tuple[float, float]]) -> Sketch:
     """A polygon facing up, whichever way round its points go: one facing down
     doesn't merge with the others in a union, and offsets fail on it."""
     face = Polygon(*[Vector(p) for p in points], align=None).face()
-    return Sketch() + (face if face.normal_at().Z > 0 else -face)
+    return sketch(Sketch() + (face if face.normal_at().Z > 0 else -face))
 
 
-def up(face: Face | Sketch, z0: float, height: float) -> Part:
+def up(face: Shape, z0: float, height: float) -> Part:
     """A face, drawn up from z0."""
-    return Pos(0, 0, z0) * extrude(face, height, (0, 0, 1))
+    return Pos(0, 0, z0) * extrude(sketch(face), height, (0, 0, 1))
 
 
 def slab(
-    outline: Face | Sketch,
+    outline: Shape,
     h: float,
     foot: float = chamfer_out,
     top: float = chamfer_out,
 ) -> Part:
     """An outline, h tall, its edges chamfered round its foot and its top."""
-    body = extrude(outline, h)
+    body = extrude(sketch(outline), h)
     body = chamfer(body.faces().sort_by(Axis.Z).first.edges(), foot)
-    return chamfer(body.faces().sort_by(Axis.Z).last.edges(), top)
+    return part(chamfer(body.faces().sort_by(Axis.Z).last.edges(), top))
 
 
 def block(x: float, y: float, h: float, top: float = chamfer_out) -> Part:
@@ -210,13 +211,13 @@ def block(x: float, y: float, h: float, top: float = chamfer_out) -> Part:
     return slab(octagon(x, y), h, chamfer_out, top)
 
 
-def grown(face: Face | Sketch, d: float, kind: Kind = Kind.ARC) -> Sketch:
+def grown(face: Shape, d: float, kind: Kind = Kind.ARC) -> Sketch:
     """Grown by d, or shrunk for a d below 0: with Kind.ARC its convex corners
     rounded, growing, or its concave ones, shrinking."""
-    return Sketch() + offset(face, d, kind=kind)
+    return sketch(offset(sketch(face), d, kind=kind))
 
 
-def flare(face: Face | Sketch, c: float, normal: Vector) -> Part:
+def flare(face: Shape, c: float, normal: Vector) -> Part:
     """A 45° chamfer's cut round the edge of a hole whose outline, `face`, is
     on a face of the part: the outline grown by c, drawn in along `normal`, the
     way into the part, closing to the outline itself c in. It starts a little
@@ -229,20 +230,20 @@ def carve(body: Part, cuts: Iterable[Part]) -> Part:
     """The body less each of the cuts in turn. Cut all at once, tools whose
     faces touch each other's can leave OCCT an invalid solid."""
     for c in cuts:
-        body -= c
+        body = part(body - c)
     return body
 
 
 def round_corners(
-    face: Face | Sketch, corners: Iterable[tuple[float, float]], r: float
-):
+    face: Shape, corners: Iterable[tuple[float, float]], r: float
+) -> Sketch:
     """A face with its corners at these points rounded by r."""
     near = [
         v
         for v in face.vertices()
         if any(hypot(v.X - x, v.Y - y) < 1e-6 for x, y in corners)
     ]
-    return fillet(near, r)
+    return sketch(fillet(near, r))
 
 
 def wall_plane(x: float, y: float, normal: tuple[float, float]) -> Plane:
@@ -253,7 +254,7 @@ def wall_plane(x: float, y: float, normal: tuple[float, float]) -> Plane:
     return Plane((x, y, 0), x_dir=Vector(0, 0, 1).cross(n), z_dir=n)
 
 
-def swap_xy(shape: Shape) -> Shape:
+def swap_xy(shape: Compound) -> Compound:
     """Mirrored in the plane x = y: x and y trade places."""
     return mirror(shape, Plane((0, 0, 0), z_dir=(1, -1, 0)))
 
@@ -285,7 +286,7 @@ def well(
                 for e in tool.edges().filter_by(Axis.X)
                 if abs(e.center().Y - at) < 1e-6 and abs(e.center().Z - floor) < 1e-6
             ]
-    return fillet(edges, r)
+    return part(fillet(edges, r))
 
 
 def bowl(x: float, y: float, floor: float, top: float, s: float, r: float) -> Part:
@@ -303,7 +304,7 @@ def bowl(x: float, y: float, floor: float, top: float, s: float, r: float) -> Pa
         Pos(0, 0, top) * RectangleRounded(x, y, r, align=align),
     ]
     walls = Solid.make_loft([f.faces()[0].outer_wire() for f in rims], ruled=True)
-    return low + walls + up(rims[1], top, 1)
+    return part(low + walls + up(rims[1], top, 1))
 
 
 def rim(x: float, y: float, top: float, c: float = rim_c, r: float = fillet_r) -> Part:
@@ -336,7 +337,7 @@ def pinch(w: float, bottom: float, top: float, r: float = pinch_top_r) -> Sketch
         - Pos(sx * (w / 2 + r), top - r) * Circle(r)
         for sx in (-1, 1)
     ]
-    return Sketch() + opening + rounds
+    return sketch(Sketch() + opening + rounds)
 
 
 @dataclass
@@ -371,7 +372,7 @@ class Slot:
         for d, way, floor in self.inside:
             plane = self.plane(d, way)
             eased = flare(plane * self.opening, rim_c, plane.z_dir)
-            out.append(eased & cuboid(-1000, -1000, floor, 1000, 1000, 1000))
+            out.append(part(eased & cuboid(-1000, -1000, floor, 1000, 1000, 1000)))
         return out
 
 
@@ -443,7 +444,7 @@ class Icon:
                     for s in (1, -1)
                 ]
                 shapes.append(Pos(x, y) * (ring[0] - ring[1]))
-        return Sketch() + shapes
+        return sketch(Sketch() + shapes)
 
     def z(self, h: float) -> float:
         """Its middle's height, on a tray h tall."""
@@ -560,7 +561,7 @@ class Tray:
                 hollow = bowl(w, d, floor_t, self.h, self.scoop, bowl_r)
             elif self.sides:
                 s = self.scoop_for(w, b.tile[0])
-                hollow = swap_xy(well(d, w, floor_t, self.h, s, s))
+                hollow = part(swap_xy(well(d, w, floor_t, self.h, s, s)))
             else:
                 s = self.scoop_for(d, b.tile[1])
                 back = s if self.back and not b.front_only else 0
@@ -699,7 +700,7 @@ def half_rows(a: int, b: int) -> list[Row]:
     ]
 
 
-def tray_x(cols: list[float]) -> float:
+def tray_x(cols: Sequence[float]) -> float:
     return sum(cols) + (len(cols) + 1) * wall
 
 
@@ -1184,7 +1185,7 @@ for name, size in {
 
 @cache
 def half_a_tray() -> tuple[Part, Part]:
-    return half_a.body(), Part() + half_a.icons()
+    return half_a.body(), part(Part() + half_a.icons())
 
 
 @cache
@@ -1204,7 +1205,7 @@ def half_b_tray() -> tuple[Part, Part]:
         + [at * c for c in cash.cuts() + cash.icons(True)]
         + [at * cut for cut, _ in behind],
     )
-    icons = (
+    icons = part(
         Part()
         + tiles.icons()
         + [at * i for i in cash.icons()]
@@ -1226,13 +1227,13 @@ def cut_icon_in_wall(tray: Tray, row: int) -> tuple[Part, Part]:
     hollow = Pos(x, y) * well(w, d, floor_t, tray.h, s, s)
     face = Plane.XZ * Pos(x + w / 2, b.icon.z(tray.h)) * b.icon.sketch()
     prism = Pos(0, y + d + icon_d + 1, 0) * extrude(face, s + 2 + icon_d)
-    cut = prism & (Pos(0, icon_d, 0) * hollow)
-    return cut, cut - hollow
+    cut = part(prism & (Pos(0, icon_d, 0) * hollow))
+    return cut, part(cut - hollow)
 
 
 @cache
 def big_tray() -> tuple[Part, Part]:
-    return big.body(), Part() + big.icons()
+    return big.body(), part(Part() + big.icons())
 
 
 @cache
@@ -1396,7 +1397,7 @@ def penalty_well() -> list[Part]:
         [(pen_r, floor)],
         fillet_r,
     )  # fmt: skip
-    cuts = [Pos(cx, cy) * revolve(Plane.XZ * section, Axis.Z)]
+    cuts = [Pos(cx, cy) * revolve((Plane.XZ * section).faces(), Axis.Z)]
     # The corner, walls and all: from the well's floor up, and below that,
     # all but a tongue under the stack, its corners by the walls rounded from
     # where the floor's fillet ends. One solid, as its faces are one another's.
@@ -1404,7 +1405,7 @@ def penalty_well() -> list[Part]:
     square = rect(-5, cy, a, y + 5)
     plan = square - Pos(cx, cy) * Circle(pen_r - gap)
     plan = grown(grown(plan, -r, Kind.INTERSECTION), r)
-    cuts.append(up(square, floor, h + 1 - floor) + up(plan, -1, floor + 1))
+    cuts.append(part(up(square, floor, h + 1 - floor) + up(plan, -1, floor + 1)))
     # The walls' ends rounded over at the top, each as one side of a pinch slot
     # twice as wide, which also has them chamfered.
     rise = vp_slot_r
@@ -1414,8 +1415,8 @@ def penalty_well() -> list[Part]:
         rect(a - 1, h - rise, a + rise, h + 1) - Pos(a + rise, h - rise) * Circle(rise),
     ]
     cuts += [
-        extrude(Plane.YZ.offset(-1) * ends[0], wall + fillet_r + 1),
-        extrude(Plane.XZ.offset(-y - 1) * ends[1], wall + fillet_r + 1),
+        extrude(sketch(Plane.YZ.offset(-1) * ends[0]), wall + fillet_r + 1),
+        extrude(sketch(Plane.XZ.offset(-y - 1) * ends[1]), wall + fillet_r + 1),
     ]
     opening = pinch(2 * a, -10, h, vp_slot_r)
     for along in ((1, 0), (0, -1)):
@@ -1543,7 +1544,7 @@ def post_leg(h: float, t: float, back: float) -> Part:
     r = min(post_l / 2, h - floor_t - 1)
     side = round_corners(rect(-back, 0, post_l, h), [(post_l, h)], r)
     leg = extrude(Plane.XZ * side, t)
-    return fillet(leg.edges(), post_r)
+    return part(fillet(leg.edges(), post_r))
 
 
 def open_tray(
@@ -1576,19 +1577,19 @@ def open_tray(
                 cut = mirror(cut, Plane.XZ.offset(-far / 2))
             plan -= swap_xy(cut) if along else cut
     r = min(post_r, floor / 2 - 0.1)
-    body = extrude(plan, floor)
-    body = fillet(body.edges(), r)
+    body = extrude(sketch(plan), floor)
+    body = part(fillet(body.edges(), r))
     leg = post_leg(h, y0, x0)
     post = leg + swap_xy(post_leg(h, x0, y0))
     for sx in (0, 1):
         for sy in (0, 1):
             p = post
             if sx:
-                p = mirror(p, Plane.YZ)
+                p = part(mirror(p, Plane.YZ))
             if sy:
-                p = mirror(p, Plane.XZ)
+                p = part(mirror(p, Plane.XZ))
             body += Pos(x0 + sx * wx, y0 + sy * wy) * p
-    return body
+    return part(body)
 
 
 @cache
@@ -1660,9 +1661,9 @@ def honeycomb(size: tuple[float, float], h: float, turned: bool = False) -> Part
             b = j * row
             cells.append(Pos(*((b, a) if turned else (a, b))) * hexagon)
     holes = inside & (Sketch() + cells)
-    body = extrude(outline - holes, h)
+    body = extrude(sketch(outline - holes), h)
     rims = [f.outer_wire().edges() for f in body.faces().filter_by(Axis.Z)]
-    return chamfer([e for edges in rims for e in edges], chamfer_out)
+    return part(chamfer([e for edges in rims for e in edges], chamfer_out))
 
 
 @cache
@@ -1743,7 +1744,9 @@ def bld_section() -> Sketch:
         rect(bld_back - wall, 0, bld_back, top),
         rect(bld_back - wall, 0, bld_depth, floor_t + bld_lip),
     ]
-    return bld_outline() & rounded(Sketch() + parts, bld_round, bld_fillet)
+    return sketch(
+        bld_outline() & rounded(sketch(Sketch() + parts), bld_round, bld_fillet)
+    )
 
 
 def bld_hollow(i: int) -> list[Vector]:
@@ -1778,10 +1781,10 @@ def bld_plane(x: float) -> Plane:
 
 
 def along_x(
-    face: Face | Sketch, x: float, length: float, way: int = 1, taper: float = 0
+    face: Shape, x: float, length: float, way: int = 1, taper: float = 0
 ) -> Part:
     """A face of the section drawn from x along the tray, `way` ±1."""
-    return extrude(bld_plane(x) * face, length, (way, 0, 0), taper=taper)
+    return extrude(sketch(bld_plane(x) * face), length, (way, 0, 0), taper=taper)
 
 
 def bld_end_wall(x: float, facing: int) -> Part:
@@ -1796,7 +1799,7 @@ def bld_end_wall(x: float, facing: int) -> Part:
     inward = -facing
     mid = x + inward * chamfer_out
     inside = x + inward * bld_end_t
-    return (
+    return part(
         along_x(outline, mid, chamfer_out, facing, taper=45)
         + along_x(outline, mid, bld_end_t - chamfer_out - rim_c, inward)
         + along_x(outline, inside - inward * rim_c, rim_c, inward, taper=45)
@@ -1821,7 +1824,7 @@ def buildings_tray() -> Part:
         base = (bld_plane(x0) * hollow).faces()[0].outer_wire()
         pyramid = Solid.make_loft([base, apex])
         body += along_x(fill, x0, r + bld_socket_floor) - pyramid
-    return body
+    return part(body)
 
 
 def bld_plug_foot(i: int) -> Sketch:
@@ -1860,7 +1863,7 @@ def buildings_cap() -> Part:
             for f in (0.2, 0.8):
                 m = h[0] + (plug_from + f * (to - plug_from)) * e
                 body += crush_rib(m, v, inside)
-    return body
+    return part(body)
 
 
 def crush_rib(m: Vector, v: Vector, x: float) -> Part:
@@ -1879,7 +1882,7 @@ def crush_rib(m: Vector, v: Vector, x: float) -> Part:
     rise = 1 / (b - a).length
     normal = Vector(-1, -rise * v.X, -rise * v.Y)
     at = Vector(x - (bld_plug_h - 2), a.X, a.Y)
-    return split(rib, Plane(at, z_dir=normal), keep=Keep.BOTTOM)
+    return part(split(rib.solids(), Plane(at, z_dir=normal), keep=Keep.BOTTOM))
 
 
 # The special boards
@@ -1937,8 +1940,9 @@ class Tile:
             "back": rect(-1, y - tilt_a, x + 1, y + 1),
         }
         sides = self.sides()
-        return Pos(self.x, self.y) * (
-            Sketch() + [s for k, s in strips.items() if sides[k]]
+        return sketch(
+            Pos(self.x, self.y)
+            * (Sketch() + [s for k, s in strips.items() if sides[k]])
         )
 
     def drops(self, z: float) -> Part:
@@ -1959,7 +1963,9 @@ class Tile:
             for k in planes
             if sides[k]
         ]
-        return up(self.pocket(), z, tilt_d + 1) & (Pos(self.x, self.y, z) * strips)
+        return part(
+            up(self.pocket(), z, tilt_d + 1) & (Pos(self.x, self.y, z) * strips)
+        )
 
 
 @cache
@@ -2005,7 +2011,7 @@ def special_board(
     z_drop = h - pocket_d - tilt_d
     z_skin = z_drop - floor_skin
     z_rest = h - pocket_d - floor_skin
-    floors = up(drops, z_skin, tilt_d + floor_skin) + up(rest, z_rest, floor_skin)
+    floors = part(up(drops, z_skin, tilt_d + floor_skin) + up(rest, z_rest, floor_skin))
     floors = carve(floors, [t.drops(z_drop) for t in tiles])
     body = carve(slab(outline, h), [up(drops, z_skin, h), up(rest, z_rest, h)])
     # The pockets' rims: the top face's edges but its outside ones.
@@ -2013,14 +2019,14 @@ def special_board(
     body = chamfer([e for w in top.inner_wires() for e in w.edges()], rim_c)
     if inlays is not None:
         body -= up(inlays, h - forge_icon_d, 1)
-    return body, floors
+    return part(body), floors
 
 
 def board_outline(size: tuple[float, float], r: float) -> Sketch:
     """Its corners rounded by r, which can be half its width."""
     x, y = size
     corners = [Pos(cx, cy) * Circle(r) for cx in (r, x - r) for cy in (r, y - r)]
-    return Sketch() + make_hull([e for c in corners for e in c.edges()])
+    return sketch(Sketch() + make_hull([e for c in corners for e in c.edges()]))
 
 
 def centered(name: str, size: tuple[float, float]) -> tuple[float, float]:
@@ -2039,7 +2045,9 @@ def forge_icon() -> dict[str, Sketch]:
     s = forge_icon_w / box_.size.X
     place = Pos(*forge_icon_at) * Rot(0, 0, 180) * Pos(-box_.center() * s)
     return {
-        label: place * scale(Sketch() + [f for f in faces if f.label == label], s)
+        label: sketch(
+            place * scale(Sketch() + [f for f in faces if f.label == label], s)
+        )
         for label in ("black", "orange")
     }
 
@@ -2050,7 +2058,7 @@ def special_forge() -> tuple[Part, Part, Sketch, Sketch]:
     body, floors = special_board(
         board_outline(special_forge_size, special_corner_r),
         board_tiles("forge", centered("forge", special_forge_size)),
-        icon["black"] + icon["orange"],
+        sketch(icon["black"] + icon["orange"]),
     )
     return body, floors, icon["black"], icon["orange"]
 
@@ -2083,6 +2091,7 @@ def special_test() -> tuple[Part, Part]:
 def deck_stl(stl: str) -> Solid:
     """As downloaded, its corner at the origin."""
     shape = Mesher().read(str(HERE / "card-trays" / stl))[0]
+    assert isinstance(shape, Solid), f"{stl} isn't watertight"
     return Pos(-shape.bounding_box().min) * shape
 
 
@@ -2100,8 +2109,8 @@ def deck_tray(stl: str, cut: float) -> Part:
     x, y = deck_size[stl]
     z = whole.bounding_box().max.Z
     at = deck_cut_at * y
-    front = whole & cuboid(-1, -1, -1, x + 1, at, z + 1)
-    back = Pos(0, -cut, 0) * (whole & cuboid(-1, at + cut, -1, x + 1, y + 1, z + 1))
+    front = cuboid(-1, -1, -1, x + 1, at, z + 1) & whole
+    back = Pos(0, -cut, 0) * (cuboid(-1, at + cut, -1, x + 1, y + 1, z + 1) & whole)
     tray = front + back
     length = y - cut
     h = deck_floor + deck_lip
@@ -2112,7 +2121,9 @@ def deck_tray(stl: str, cut: float) -> Part:
         lip + rect(-1, -1, wall / 2, h - rim_c),
         Pos(length - wall, 0) * (lip + rect(wall / 2, -1, wall + 1, h - rim_c)),
     ]
-    lips = Part() + [extrude(Plane.YZ.offset(-1) * f, x + 2) for f in sections]
+    lips = part(
+        Part() + [extrude(sketch(Plane.YZ.offset(-1) * f), x + 2) for f in sections]
+    )
     # The trim: the tray's outline seen along each axis.
     points = [(v.X, v.Y, v.Z) for v in tray.vertices()]
     depth = 2 * max(x, y, z) + 2
@@ -2120,7 +2131,7 @@ def deck_tray(stl: str, cut: float) -> Part:
         outline = MultiPoint([(p[a], p[b]) for p in points]).convex_hull
         seen = polygon(outline.exterior.coords[:-1])
         lips &= extrude(plane.offset(-depth / 2) * seen, depth, plane.z_dir)
-    return tray + lips
+    return part(tray + lips)
 
 
 # Pieces
@@ -2274,8 +2285,10 @@ def frame_half() -> Part:
             flare(hole, chamfer_out, Vector(0, 0, 1)),
             Pos(0, 0, h) * flare(hole, chamfer_out, down),
             # The shelf's rim, inside the boards' well.
-            Pos(0, 0, frame_shelf_h) * flare(hole, chamfer_out, down)
-            & up(boards, 0, h),
+            part(
+                Pos(0, 0, frame_shelf_h) * flare(hole, chamfer_out, down)
+                & up(boards, 0, h)
+            ),
         ]
     return carve(block(x, y, h), cuts)
 

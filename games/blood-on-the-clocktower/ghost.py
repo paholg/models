@@ -26,6 +26,7 @@ on each count from the loosest. The view "assembly" is the ghost on its pencil,
 holding its vote.
 """
 
+from collections.abc import Sequence
 from functools import cache
 from math import atan2, cos, degrees, exp, pi, radians, sin, sqrt
 
@@ -64,7 +65,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 
 # Ghost
 
@@ -251,7 +252,7 @@ def ring(z: float, inset: float = 0) -> Wire:
     """The skin round at height z, drawn in by `inset`. Every ring is a spline
     by the same parameters, so that the loft through them is one smooth sheet."""
     n = 96
-    points = [
+    points: list[Vector | Sequence[float]] = [
         (q * cos(radians(a)), q * sin(radians(a)), z)
         for a in (360 * j / n for j in range(n))
         for q in [radius(z, a) - inset]
@@ -268,13 +269,13 @@ def skin() -> Part:
     dome_zs = [shoulder + (h - shoulder) * sin(radians(a)) for a in range(0, 88, 6)]
     foot = Solid.make_loft([ring(0, foot_chamfer), ring(foot_chamfer)], ruled=True)
     body = Solid.make_loft([ring(z) for z in body_zs + dome_zs] + [Vertex(0, 0, h)])
-    return Part() + [foot, body]
+    return part(Part() + [foot, body])
 
 
 def inner(depth: float) -> Part:
     """The skin, this far in: shrunk about the shoulder's middle."""
     f = 1 - depth / r
-    return Pos(0, 0, shoulder * (1 - f)) * scale(skin(), f)
+    return part(Pos(0, 0, shoulder * (1 - f)) * scale(skin(), f))
 
 
 def groove() -> Part:
@@ -290,9 +291,9 @@ def groove() -> Part:
         [Pos(0, 0, z) * ring(0, rim + z) for z in (-1, tall)], ruled=True
     )
     cone = Polygon((0, -1), (groove_in - 1, -1), (groove_in + tall, tall), (0, tall))
-    cut = outer - revolve(Plane.XZ * cone, Axis.Z)
+    cut = outer - revolve((Plane.XZ * cone).faces(), Axis.Z)
     ridge = [e for e in cut.edges() if e.center().Z > 0.5]
-    return fillet(ridge, groove_round)
+    return part(fillet(ridge, groove_round))
 
 
 # Eyes: holes into the face, from the axis out
@@ -305,7 +306,7 @@ def into_face(x: float, z: float, w: float, tall: float) -> Part:
 
 
 def eye_holes() -> Part:
-    return Part() + [into_face(s * eye_x, eye_z, eye_w, eye_h) for s in (-1, 1)]
+    return part(Part() + [into_face(s * eye_x, eye_z, eye_w, eye_h) for s in (-1, 1)])
 
 
 def mouth_hole() -> Part:
@@ -446,7 +447,7 @@ def slot() -> Part:
     ends = [wire(rings[0], start), wire(rings[-1], end)]
     lofted = Solid.make_loft([ends[0], *map(wire, rings), ends[1]], ruled=True)
     # Back to the slot's end, from the loft's own end, to meet it exactly.
-    return Part() + [lofted, extrude(Face(ends[0]), start, -out)]
+    return part(Part() + [lofted, extrude(Face(ends[0]), start, -out)])
 
 
 def lining_tube() -> Part:
@@ -461,7 +462,9 @@ def lining_tube() -> Part:
         * extrude(Rot(0, 0, 90) * outline, slot_depth)
     )
     middle = body_r(mouth_z) - mouth_depth - mouth_back / 2
-    return tube & Cylinder(middle, h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    return part(
+        tube & Cylinder(middle, h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    )
 
 
 def magnet_pocket() -> Part:
@@ -478,7 +481,7 @@ def magnet_pocket() -> Part:
     below = Box(
         2 * d, 2 * d, ghost_pause, align=(Align.CENTER, Align.CENTER, Align.MIN)
     )
-    return (cylinder + up) & below
+    return part(part(cylinder + up) & below)
 
 
 def magnet_top() -> float:
@@ -506,7 +509,7 @@ def socket_parts(press: float, springs: bool = True) -> list[Sketch]:
         "the springs are too short to clear the pencil's corners"
     )
     # Its sides square to 90, 210 and 330 degrees, g from the middle.
-    triangle = Circle(rc) & Rot(0, 0, -90) * RegularPolygon(2 * g, 3)
+    triangle = sketch(Circle(rc) & Rot(0, 0, -90) * RegularPolygon(2 * g, 3))
     behind = g + (spring_t if springs else 0)
     rooms = [
         Rot(0, 0, 90 + 120 * i)
@@ -524,14 +527,16 @@ def socket_parts(press: float, springs: bool = True) -> list[Sketch]:
 def socket(press: float) -> Part:
     """The pencil's socket, open at z = 0, under a roof that closes in at 45°,
     to print without support."""
-    walls = Pos(0, 0, -1) * extrude(Sketch() + socket_parts(press), socket_depth + 1)
+    walls = Pos(0, 0, -1) * extrude(
+        sketch(Sketch() + socket_parts(press)), socket_depth + 1
+    )
     # The outline above the springs isn't quite convex, which a taper can't
     # take: so its hull, tapered, within it.
-    outline = Sketch() + socket_parts(press, False)
+    outline = sketch(Sketch() + socket_parts(press, False))
     hull = make_hull(outline.edges())
     rise = inradius(hull) - 0.01
     roof = extrude(hull, rise, taper=45) & extrude(outline, rise)
-    return walls + Pos(0, 0, socket_depth) * roof
+    return part(walls + Pos(0, 0, socket_depth) * roof)
 
 
 def inradius(convex: Sketch) -> float:
@@ -581,10 +586,10 @@ def ghost() -> list[Piece]:
     # be cut by it too.
     magnets = magnet_pocket()
     tube = lining_tube()
-    white = round_rim(whole - deep) - (
+    white = round_rim(part(whole - deep)) - (
         tube + eye_cut + socket(press) + magnets + groove()
     )
-    black = ((deep + tube) & inner(mouth_depth)) - (slot() + magnets)
+    black = (part(deep + tube) & inner(mouth_depth)) - (slot() + magnets)
     return [
         Piece(white, "sheet", "white", settings=sheet_settings, parent="ghost"),
         Piece(whole & eye_cut, "eyes", "black", parent="ghost"),
@@ -602,7 +607,7 @@ def round_rim(sunk: Part) -> Part:
     with nothing but the mouth sunk into it, its rim whole."""
     face = max(sunk.faces().filter_by(GeomType.BSPLINE), key=lambda f: f.area)
     sides = sunk.faces().filter_by(GeomType.EXTRUSION)
-    return fillet([e for f in sides for e in shared(f, face)], mouth_round)
+    return part(fillet([e for f in sides for e in shared(f, face)], mouth_round))
 
 
 def vote_face() -> Sketch:
@@ -613,7 +618,7 @@ def vote_face() -> Sketch:
 def vote_text() -> Part:
     """On both sides, in the middle. The face's is flipped, to read from below."""
     face = mirror(extrude(vote_face(), inlay), Plane.XZ)
-    return face + Pos(0, 0, vote_t - inlay) * extrude(vote_face(), inlay)
+    return part(face + Pos(0, 0, vote_t - inlay) * extrude(vote_face(), inlay))
 
 
 def vote_body() -> Part:
@@ -623,7 +628,7 @@ def vote_body() -> Part:
     sealed = Pos(0, 0, hollow_z) * Box(
         *hollow, align=(Align.CENTER, Align.CENTER, Align.MIN)
     )
-    return body - vote_text() - sealed
+    return part(body - vote_text() - sealed)
 
 
 def vote() -> list[Piece]:
@@ -646,7 +651,7 @@ def fit() -> list[Piece]:
     for i, p in enumerate(fit_press):
         collar = extrude(Circle(od / 2), socket_depth)
         collar = chamfer(collar.edges(), 0.5)
-        collar -= extrude(Sketch() + socket_parts(p), socket_depth)
+        collar -= extrude(sketch(Sketch() + socket_parts(p)), socket_depth)
         dots = [
             Rot(0, 0, j * 25 - 90)
             * Pos(od / 2 - 1.5, 0, socket_depth - 0.4)

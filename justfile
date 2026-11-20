@@ -1,7 +1,8 @@
-# Lint, check the formatting of, and type-check the Python in python/ and gcode/.
+# Lint, check the formatting of, and type-check the repo's Python: the projects,
+# python/ and gcode/.
 check:
-    ruff check python gcode
-    ruff format --check python gcode
+    ruff check
+    ruff format --check
     # By way of uv, to make the environment ty.toml points at.
     uv --project python run ty check
     tombi lint --error-on-warnings

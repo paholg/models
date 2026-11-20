@@ -12,7 +12,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from build123d import Color, Compound, Shape, export_step
+from build123d import Color, Compound, Part, Shape, Sketch, export_step
 
 # OCP has no stubs for these; build123d imports them where ty can see them.
 from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
@@ -42,6 +42,17 @@ if fonts := os.environ.get("CAD_FONTCONFIG_FILE"):
 # large curve, the ghost's skin say, stray by a millimeter at the same angle.
 TOLERANCE = 0.02
 ANGULAR_TOLERANCE = 0.3
+
+
+def sketch(shape: Shape) -> Sketch:
+    """A 2D shape as a Sketch, to extrude or pass on as one: build123d's
+    operators make one of sketches, but type it as a Compound or a Wire."""
+    return shape if isinstance(shape, Sketch) else Sketch(shape.faces())
+
+
+def part(shape: Shape) -> Part:
+    """A solid shape as a Part, likewise."""
+    return shape if isinstance(shape, Part) else Part(shape.solids())
 
 
 @dataclass

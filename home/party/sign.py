@@ -21,7 +21,7 @@ from build123d import (
     Align,
     Axis,
     Circle,
-    Face,
+    Compound,
     FontStyle,
     Kind,
     Location,
@@ -32,6 +32,7 @@ from build123d import (
     Rectangle,
     RectangleRounded,
     Rot,
+    Shape,
     Sketch,
     SlotCenterToCenter,
     Text,
@@ -44,7 +45,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 
 # Panel
 
@@ -254,18 +255,18 @@ assert jaw_h < margin - url_size * 0.4, "the front jaw would cover the address"
 assert qr_w + 2 * quiet_w <= w, "the code's quiet zone is wider than the panel"
 
 
-def up(face: Face | Sketch, z0: float, height: float) -> Part:
+def up(face: Shape, z0: float, height: float) -> Part:
     """A face, drawn up from z0."""
-    return Pos(0, 0, z0) * extrude(face, height, (0, 0, 1))
+    return Pos(0, 0, z0) * extrude(sketch(face), height, (0, 0, 1))
 
 
-def grown(face: Face | Sketch, d: float, kind: Kind = Kind.INTERSECTION) -> Sketch:
+def grown(face: Shape, d: float, kind: Kind = Kind.INTERSECTION) -> Sketch:
     """Grown by d, or shrunk, for less than nothing: corners kept sharp, or
     with Kind.ARC the convex ones rounded."""
-    return Sketch() + offset(face, d, kind=kind)
+    return sketch(offset(sketch(face), d, kind=kind))
 
 
-def rounded(face: Face | Sketch, r: float) -> Sketch:
+def rounded(face: Shape, r: float) -> Sketch:
     """Its convex corners rounded to r, its concave ones kept sharp."""
     return grown(grown(face, -r), r, Kind.ARC)
 
@@ -305,7 +306,7 @@ def foot_2d() -> Sketch:
     shape += [Pos(*b) * Circle(bump_r) for b in bumps]
     # Around each magnet, should the bars be narrower than it wants.
     shape += [Pos(*at) * Circle(boss_r) for at, _ in magnets]
-    return shape
+    return sketch(shape)
 
 
 def magnet_hole(depth: float) -> Part:
@@ -318,8 +319,8 @@ def magnet_hole(depth: float) -> Part:
         for i in range(magnet_ribs)
     ]
     ribbed = Sketch() + Circle(hole_d / 2) - ribs
-    return up(Circle(hole_d / 2), 0, rib_short) + up(
-        ribbed, rib_short, depth - rib_short
+    return part(
+        up(Circle(hole_d / 2), 0, rib_short) + up(ribbed, rib_short, depth - rib_short)
     )
 
 
@@ -327,8 +328,8 @@ def magnet_holes(z: float, depth: float, mouth_up: bool) -> Part:
     """A hole for each magnet in a foot's side, its mouth at z."""
     hole = magnet_hole(depth)
     if mouth_up:
-        hole = mirror(hole, Plane.XY)
-    return Part() + [Pos(x, y, z) * Rot(0, 0, a) * hole for (x, y), a in magnets]
+        hole = part(mirror(hole, Plane.XY))
+    return part(Part() + [Pos(x, y, z) * Rot(0, 0, a) * hole for (x, y), a in magnets])
 
 
 def foot() -> Part:
@@ -341,10 +342,10 @@ def foot() -> Part:
     bottom = Pos(0, 0, k) * extrude(side, k, (0, 0, -1), taper=45)
     top = Pos(0, 0, foot_t - k) * extrude(side, k, (0, 0, 1), taper=45)
     body = bottom + up(side, k, foot_t - 2 * k) + top
-    return body - magnet_holes(foot_t, hole_h, True)
+    return part(body - magnet_holes(foot_t, hole_h, True))
 
 
-def stow(s: int, shape: Sketch | Part) -> Sketch | Part:
+def stow(s: int, shape: Sketch | Part) -> Compound:
     """A foot's place in the panel's back: side s, heel up, its base to the
     middle."""
     turned = Rot(0, 0, 90) * shape
@@ -361,7 +362,7 @@ def plate() -> Part:
     the origin."""
     p = Pos(0, h / 2) * extrude(RectangleRounded(w, h, corner_r), t)
     faces = p.faces().sort_by(Axis.Z)
-    return chamfer(faces.first.edges() + faces.last.edges(), edge_chamfer)
+    return part(chamfer(faces.first.edges() + faces.last.edges(), edge_chamfer))
 
 
 def pockets_2d() -> Sketch:
@@ -376,13 +377,13 @@ def pockets_2d() -> Sketch:
     scoop = Pos(0, stow_y + foot_front + foot_back) * (
         Pos(0, finger_up) * Circle(finger_r) + wall_end
     )
-    return Sketch() + [stow(s, pocket) for s in (-1, 1)] + scoop
+    return sketch(Sketch() + [stow(s, pocket) for s in (-1, 1)] + scoop)
 
 
 def keyhole_slot(d: float) -> Sketch:
     """The keyhole's slot, d wide, from where the screw ends up, at the origin,
     down to where it goes in."""
-    return Sketch() + Pos(0, -hang_len / 2) * SlotCenterToCenter(hang_len, d, 90)
+    return sketch(Pos(0, -hang_len / 2) * SlotCenterToCenter(hang_len, d, 90))
 
 
 def keyhole() -> Part:
@@ -397,7 +398,7 @@ def keyhole() -> Part:
     room = up(
         keyhole_slot(hang_head_d), hang_lip + hang_taper, hang_head_h - hang_taper
     )
-    return lip + narrowing + room + up(entry, hang_lip, hang_head_h)
+    return part(lip + narrowing + room + up(entry, hang_lip, hang_head_h))
 
 
 def panel() -> Part:
@@ -411,7 +412,7 @@ def panel() -> Part:
     body = chamfer(
         [e for wire in back.inner_wires() for e in wire.edges()], bed_chamfer
     )
-    return body - inlay()
+    return part(body - inlay())
 
 
 # The face
@@ -440,7 +441,7 @@ def code() -> Sketch:
             size = ((end - col + 1) * module_w + hair, module_w + hair)
             runs.append(Pos(*at) * Rectangle(*size, align=(Align.MIN, Align.MIN)))
             col = end + 1
-    return Sketch() + runs
+    return sketch(Sketch() + runs)
 
 
 def note(s: float) -> Sketch:
@@ -450,7 +451,7 @@ def note(s: float) -> Sketch:
     shape = Sketch() + import_svg(Path(__file__).with_name("note.svg"))
     # Scaled before it's moved: scale() goes wrong on a shape that has been.
     shape = scale(shape, s / shape.bounding_box().size.Y)
-    return Pos(-shape.bounding_box().center()) * shape
+    return sketch(Pos(-shape.bounding_box().center()) * shape)
 
 
 def text(s: str, size: float) -> Sketch:
@@ -489,7 +490,7 @@ def sign(at: Location, feet: Part) -> list[Piece]:
 
 
 def stowed_feet() -> Part:
-    return Part() + [stow(s, foot()) for s in (-1, 1)]
+    return part(Part() + [stow(s, foot()) for s in (-1, 1)])
 
 
 def stowed() -> list[Piece]:
@@ -503,7 +504,7 @@ def assembly() -> list[Piece]:
     leaning = Pos(0, y, z) * Rot(90 - lean, 0, 0)
     # A foot's side, drawn in x and y, stands up in y and z.
     standing = Rot(0, 0, 90) * Rot(90, 0, 0) * Pos(0, 0, -foot_t / 2)
-    feet = Part() + [Pos(s * feet_x, 0, 0) * standing * foot() for s in (-1, 1)]
+    feet = part(Part() + [Pos(s * feet_x, 0, 0) * standing * foot() for s in (-1, 1)])
     return sign(leaning, feet)
 
 

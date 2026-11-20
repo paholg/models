@@ -17,7 +17,7 @@ from pathlib import Path
 
 from build123d import Pos, Sketch, import_svg, scale
 
-from build.cad import Object, project
+from build.cad import Object, project, sketch
 from designs.card_box import SETTINGS, Art, CardBox
 
 # Contents
@@ -67,7 +67,7 @@ def svg(name: str, w: float = 0, h: float = 0) -> Sketch:
     sy = h / size.Y if h else sx
     # Scaled before it's moved: scale() goes wrong on a shape that has been.
     shape = scale(shape, (sx, sy, 1))
-    return Pos(-shape.bounding_box().center()) * shape
+    return sketch(Pos(-shape.bounding_box().center()) * shape)
 
 
 plain = CardBox(sleeve=sleeve, stack=deck + tracker, color=box_color)

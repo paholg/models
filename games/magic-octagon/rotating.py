@@ -59,7 +59,7 @@ from build123d import (
     extrude,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 from designs.coin import (
     ARROW_COLORS,
     FILAMENTS,
@@ -247,7 +247,7 @@ def bore(r: float, depth: float) -> Part:
 
 
 def groove_2d(r0: float, r1: float) -> Sketch:
-    return Sketch() + Circle(r1) - Circle(r0)
+    return sketch(Sketch() + Circle(r1) - Circle(r0))
 
 
 def box_2d(x0: float, x1: float, w: float) -> Sketch:
@@ -270,7 +270,9 @@ def taper_2d(r0: float, r1: float, fit: float = 0) -> Sketch:
     def w(r: float) -> float:
         return (wedge_w(r) + fit) / 2
 
-    return Sketch() + Polygon((r0, w(r0)), (r1, w(r1)), (r1, -w(r1)), (r0, -w(r0)))
+    return sketch(
+        Sketch() + Polygon((r0, w(r0)), (r1, w(r1)), (r1, -w(r1)), (r0, -w(r0)))
+    )
 
 
 # The halves
@@ -296,7 +298,7 @@ def half_a(lock: str) -> Part:
     else:
         at = Rot(0, 0, apin_a) * Pos(apin_r, 0)
         cuts.append(at * bore(sleeve_d / 2 + 0.05, pocket_depth))
-    return coin.blank() - cuts
+    return part(coin.blank() - cuts)
 
 
 def socket() -> Part:
@@ -313,7 +315,7 @@ def socket() -> Part:
             for k in range(ribs)
         ]
     )
-    return (
+    return part(
         up(ribbed, half_t - socket_depth, rib_h)
         + bore(r, socket_depth - rib_h)
         + bore(r + trap, recess_b + trap_depth)
@@ -345,8 +347,8 @@ def half_b(lock: str) -> Part:
             cone_d(-seat_depth_b) + cone_fit, cone_d(0) + cone_fit, seat_depth_b
         )
         hold = bore(ahold_d / 2 + 0.05, seat_depth_b + ahold_t + 0.05)
-        cuts += [at_detent(i) * (seat + hold) for i in range(steps)]
-    return coin.blank() - cuts
+        cuts += [at_detent(i) * part(seat + hold) for i in range(steps)]
+    return part(coin.blank() - cuts)
 
 
 # The hardware, each as printed
@@ -357,7 +359,7 @@ def wedge() -> Part:
     the pin's end faces the magnet."""
     body = up(taper_2d(lock_r, lock_r + wedge_l), 0, wedge_h)
     slot = box_2d(lock_r - 1, lock_r + pin_l + 0.1, pin_d)
-    return body - up(slot, wedge_h - pin_d - 0.05, pin_d + 1)
+    return part(body - up(slot, wedge_h - pin_d - 0.05, pin_d + 1))
 
 
 def sleeve() -> Part:
@@ -365,13 +367,15 @@ def sleeve() -> Part:
     bore = cone(
         cone_d(pocket_depth) + cone_fit, cone_d(ring_sink) + cone_fit, sleeve_h, 1
     )
-    return extrude(Circle(sleeve_d / 2), sleeve_h) - bore
+    return part(extrude(Circle(sleeve_d / 2), sleeve_h) - bore)
 
 
 def plunger() -> Part:
     """Wide end down. Its magnet goes to the top of its pocket."""
     body = extrude(Circle(cone_d(seated) / 2), plunger_h, (0, 0, 1), taper=taper)
-    return body - up(Sketch() + Circle(apin_d / 2 + 0.05), -1, plunger_h - roof + 1)
+    return part(
+        body - up(Sketch() + Circle(apin_d / 2 + 0.05), -1, plunger_h - roof + 1)
+    )
 
 
 def ring(lock: str) -> Part:
@@ -381,19 +385,21 @@ def ring(lock: str) -> Part:
         shape -= Rot(0, 0, pin_a) * box_2d(
             hold_in, hold_in + ring_d, hold_d + 2 * lock_c
         )
-    return extrude(shape, ring_t)
+    return extrude(sketch(shape), ring_t)
 
 
 def hub() -> Part:
     """Flange down."""
     stem = extrude(Circle(stem_d / 2), flange_t + stem_l)
     stem = chamfer(stem.faces().sort_by(Axis.Z).last.edges(), stem_chamfer)
-    return extrude(Circle(flange_d / 2), flange_t) + stem
+    return part(extrude(Circle(flange_d / 2), flange_t) + stem)
 
 
 def washer() -> Part:
     """Squeezed to spring_h."""
-    return extrude(Sketch() + Circle(washer_od / 2) - Circle(washer_id / 2), spring_h)
+    return extrude(
+        sketch(Sketch() + Circle(washer_od / 2) - Circle(washer_id / 2)), spring_h
+    )
 
 
 def cylinder(d: float, h: float) -> Part:
@@ -424,8 +430,10 @@ def hardware(lock: str) -> list[Piece]:
         parts |= {
             "sleeve": on * Pos(0, 0, half_t - pocket_depth) * sleeve(),
             "plunger": on * Pos(0, 0, half_t - seated) * plunger(),
-            "magnets": on * magnet
-            + [Rot(0, 0, apin_a + i * 360 / steps) * hold for i in range(steps)],
+            "magnets": part(
+                on * magnet
+                + [Rot(0, 0, apin_a + i * 360 / steps) * hold for i in range(steps)]
+            ),
         }
     return [Piece(s, n, hardware_colors[n], parent="lock") for n, s in parts.items()]
 
@@ -462,7 +470,7 @@ def section(lock: str) -> list[Piece]:
     return [
         replace(p, shape=cut)
         for p in assembly(lock)
-        if (cut := p.shape & keep).volume > 0
+        if (cut := p.shape & keep) is not None and part(cut).volume > 0
     ]
 
 

@@ -46,7 +46,6 @@ from dataclasses import dataclass
 from build123d import (
     Axis,
     Circle,
-    Face,
     FontStyle,
     Kind,
     Location,
@@ -57,6 +56,7 @@ from build123d import (
     Rectangle,
     RectangleRounded,
     Rot,
+    Shape,
     Sketch,
     Text,
     chamfer,
@@ -68,7 +68,7 @@ from build123d import (
     offset,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project, sketch
 
 # Card
 
@@ -325,15 +325,15 @@ test_pins = [(0, -test_dy / 2), (0, test_dy / 2)]
 # Shapes
 
 
-def up(face: Face | Sketch, z0: float, height: float) -> Part:
+def up(face: Shape, z0: float, height: float) -> Part:
     """A face, drawn up from z0."""
-    return Pos(0, 0, z0) * extrude(face, height, (0, 0, 1))
+    return Pos(0, 0, z0) * extrude(sketch(face), height, (0, 0, 1))
 
 
-def grown(face: Face | Sketch, d: float, kind: Kind = Kind.INTERSECTION) -> Sketch:
+def grown(face: Shape, d: float, kind: Kind = Kind.INTERSECTION) -> Sketch:
     """Grown by d, or shrunk for a d below 0: its corners kept sharp, or with
     Kind.ARC the convex ones rounded."""
-    return Sketch() + offset(face, d, kind=kind)
+    return sketch(offset(sketch(face), d, kind=kind))
 
 
 def bevelled(x: float, y: float, k: float) -> Polygon:
@@ -360,10 +360,10 @@ def key_2d(g: float = 0) -> Sketch:
     return grown(bevelled(key_l, stem, stem_chamfer), g)
 
 
-def rings(shapes: Sketch, gaps: list[float], w: float) -> Sketch:
+def rings(shapes: Shape, gaps: list[float], w: float) -> Sketch:
     """A groove w wide around the shapes, at each of `gaps` out from them. One
     goes round them all, so it drops out where they're too close for it."""
-    return Sketch() + [grown(shapes, g + w) - grown(shapes, g) for g in gaps]
+    return sketch(Sketch() + [grown(shapes, g + w) - grown(shapes, g) for g in gaps])
 
 
 # The detent arms and their scallops
@@ -373,7 +373,7 @@ def hump_2d(e: float, g: float = 0) -> Sketch:
     """The hump's outside, on the +y side of a plate edge at y = 0, for
     engagement e, grown by g."""
     circle = Pos(0, side_c + e - hump_r) * Circle(hump_r + g)
-    return Sketch() + (circle & Pos(0, hump_r / 2) * Rectangle(2 * hump_r, hump_r))
+    return sketch(circle & Pos(0, hump_r / 2) * Rectangle(2 * hump_r, hump_r))
 
 
 def arm_2d(e: float) -> Sketch:
@@ -386,7 +386,7 @@ def arm_2d(e: float) -> Sketch:
     outer = fillet(corners, hump_fillet)
     band = outer - grown(outer, -arm_t, Kind.ARC)
     zone = Pos(0, -arm_t / 2) * Rectangle(plate_l - 2 * arm_root + 0.02, arm_t + 2)
-    return Sketch() + (band & zone)
+    return sketch(band & zone)
 
 
 def arm_zone(side: int) -> Sketch:
@@ -394,14 +394,14 @@ def arm_zone(side: int) -> Sketch:
     zone = Pos(0, (y_core + hw + 2) / 2) * Rectangle(
         plate_l - 2 * arm_root, hw + 2 - y_core
     )
-    return zone if side > 0 else mirror(zone, Plane.XZ)
+    return zone if side > 0 else sketch(mirror(zone, Plane.XZ))
 
 
 def on_side(side: int, shape: Sketch) -> Sketch:
     """Something drawn on the +y side of a plate edge at y = 0, moved to the
     plate's side ±1."""
     moved = Pos(0, hw) * shape
-    return moved if side > 0 else mirror(moved, Plane.XZ)
+    return moved if side > 0 else sketch(mirror(moved, Plane.XZ))
 
 
 # The slider
@@ -412,7 +412,7 @@ def plate_2d() -> Sketch:
     shape = Sketch() + bevelled(plate_l, plate_w, plate_chamfer)
     if arms:
         shape -= [arm_zone(s) for s in (-1, 1)]
-    return shape
+    return sketch(shape)
 
 
 def slider(e: float = engage, lift: float = mag_lift, marks: int = 0) -> Part:
@@ -441,7 +441,7 @@ def slider(e: float = engage, lift: float = mag_lift, marks: int = 0) -> Part:
         for j in range(marks)
     ]
     key = up(key_2d(), plate_t, z_play + face_t - key_short)
-    return body + key + up(stem_2d(), plate_t, stem_len)
+    return part(body + key + up(stem_2d(), plate_t, stem_len))
 
 
 # The top
@@ -451,7 +451,7 @@ def slab(x: float, y: float, r: float) -> Part:
     """The top's outside, its face rounded over, and lightly its rim."""
     body = extrude(RectangleRounded(x, y, r), top_h)
     body = fillet(body.faces().sort_by(Axis.Z).last.edges(), face_round)
-    return fillet(body.faces().sort_by(Axis.Z).first.edges(), rim_round)
+    return part(fillet(body.faces().sort_by(Axis.Z).first.edges(), rim_round))
 
 
 def channel_2d(t: Track) -> Sketch:
@@ -463,7 +463,7 @@ def channel_2d(t: Track) -> Sketch:
     if arms:
         scallop = [on_side(s, hump_2d(t.engage, notch_c)) for s in (-1, 1)]
         shape += [Pos(t.at(i), t.y) * f for i in range(t.n) for f in scallop]
-    return shape
+    return sketch(shape)
 
 
 def slot_2d(t: Track) -> Sketch:
@@ -482,11 +482,14 @@ def label(s: str) -> Sketch:
 
 def labels_2d() -> Sketch:
     """Each place's score, on the +y side of its track."""
-    return Sketch() + [
-        Pos(t.at(i), t.y + band + num_gap) * label(str(i * t.step))
-        for t in card_tracks
-        for i in range(t.n)
-    ]
+    return sketch(
+        Sketch()
+        + [
+            Pos(t.at(i), t.y + band + num_gap) * label(str(i * t.step))
+            for t in card_tracks
+            for i in range(t.n)
+        ]
+    )
 
 
 def numbers() -> Part:
@@ -510,11 +513,11 @@ def top_body(x: float, y: float, r: float, ts: list[Track], at: list) -> Part:
             slot_2d(t), slot_chamfer, (0, 0, 1), taper=-45
         )
         cuts.append(mouth)
-    return body - cuts
+    return part(body - cuts)
 
 
 def top() -> Part:
-    return top_body(card_x, card_y, card_r, card_tracks, pins) - numbers()
+    return part(top_body(card_x, card_y, card_r, card_tracks, pins) - numbers())
 
 
 # The back
@@ -540,7 +543,7 @@ def back_plate(x: float, y: float, r: float, ts: list[Track], at: list) -> Part:
         body -= Part() + [Pos(t.at(i), t.y) * pocket for t in ts for i in range(t.n)]
     pin = up(Circle(pin_d / 2), back_t, pin_h)
     pin = chamfer(pin.faces().sort_by(Axis.Z).last.edges(), pin_chamfer)
-    return body + [Pos(*p) * pin for p in at]
+    return part(body + [Pos(*p) * pin for p in at])
 
 
 def back() -> Part:
@@ -583,7 +586,7 @@ def socket() -> Part:
     mouth = Pos(0, 0, socket_chamfer) * extrude(
         stem_2d(socket_c), socket_chamfer, (0, 0, -1), taper=-45
     )
-    return walls + wells + mouth
+    return part(walls + wells + mouth)
 
 
 def rupee() -> Part:
@@ -596,7 +599,7 @@ def rupee() -> Part:
         ],
         ruled=True,
     )
-    return wall + bevel - socket()
+    return part(wall + bevel - socket())
 
 
 # Settings
@@ -678,9 +681,9 @@ def assembly(apart: float = 0) -> list[Piece]:
 face_down = Pos(0, 0, top_h) * Rot(180, 0, 0)
 
 
-def grid(part: Part, n: int, dx: float, dy: float) -> Part:
+def grid(one: Part, n: int, dx: float, dy: float) -> Part:
     """n of a part, two to a row, dx and dy apart."""
-    return Part() + [Pos(k % 2 * dx, k // 2 * dy) * part for k in range(n)]
+    return part(Part() + [Pos(k % 2 * dx, k // 2 * dy) * one for k in range(n)])
 
 
 def top_print() -> list[Piece]:

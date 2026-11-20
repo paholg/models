@@ -45,7 +45,7 @@ from build123d import (
     extrude,
 )
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, part, project
 
 # Views
 
@@ -163,7 +163,7 @@ def grown(pts: list[Pt], d: float) -> list[Pt]:
     return out
 
 
-def taper(a: list[Pt], za: float, b: list[Pt], zb: float) -> Part:
+def taper(a: list[Pt], za: float, b: list[Pt], zb: float) -> Solid:
     """From polygon a at za to polygon b at zb, corner to corner."""
     return Solid.make_loft(
         [Wire.make_polygon([(x, y, z) for x, y in p]) for p, z in ((a, za), (b, zb))],
@@ -215,7 +215,7 @@ def groove(z0: float, z1: float, mouth_up: bool, c: float = c) -> Part:
     pts = groove_pts(c)
     wide = grown(pts, li)
     m, d = (z1, 1) if mouth_up else (z0, -1)
-    return (
+    return part(
         prism(pts, z0, z1)
         + taper(pts, m - d * li, wide, m)
         + prism(wide, min(m, m + d), max(m, m + d))
@@ -228,19 +228,19 @@ def tongue(z0: float, z1: float, lead_up: bool, c: float = c) -> Part:
     pts = tongue_pts(c)
     tip = grown(pts, -li / 2)
     if lead_up:
-        return prism(pts, z0, z1 - li) + taper(pts, z1 - li, tip, z1)
-    return taper(tip, z0, pts, z0 + li) + prism(pts, z0 + li, z1)
+        return part(prism(pts, z0, z1 - li) + taper(pts, z1 - li, tip, z1))
+    return part(taper(tip, z0, pts, z0 + li) + prism(pts, z0 + li, z1))
 
 
 def envelope() -> Part:
     """The closed box's outside, chamfered on every edge."""
     b = block((-o, o), (-o, o), (-cap_t, z_top))
-    return b.chamfer(chamfer, None, b.edges())
+    return part(b.chamfer(chamfer, None, b.edges()))
 
 
 def edge_cut(
     a: tuple[float, float, float], b: tuple[float, float, float], r: float
-) -> Part:
+) -> Solid:
     """Cuts a 45° chamfer of size r into the edges along a -> b, which runs
     along an axis, with pyramid ends so that cuts meeting at a corner join
     cleanly."""
@@ -277,7 +277,7 @@ def reveals() -> Part:
         # Left: under the left wall.
         ((-o, -o, 0), (-o, o, 0)),
     ]
-    return Part() + [edge_cut(a, b, reveal) for a, b in edges]
+    return part(Part() + [edge_cut(a, b, reveal) for a, b in edges])
 
 
 def stacker() -> Part:
@@ -339,7 +339,7 @@ def lip_strip() -> Part:
             at = (x_key + sx * lip_key / 2 + sx * bite, sy * (h + lip_key / 2 + bite))
             body += shift * Pos(*at, z_s) * rib
     body -= reveals()
-    return body & envelope()
+    return part(body & envelope())
 
 
 def tower() -> Part:
@@ -364,10 +364,13 @@ def strip_print() -> Part:
 
 def notches(i: int, length: float) -> Part:
     """A row of d = 2 notches, i + 1 of them, to tell the coupons apart."""
-    return Part() + [
-        Pos(0, 0, 5 + 3.5 * n) * Rot(-90, 0, 0) * Cylinder(1, length)
-        for n in range(i + 1)
-    ]
+    return part(
+        Part()
+        + [
+            Pos(0, 0, 5 + 3.5 * n) * Rot(-90, 0, 0) * Cylinder(1, length)
+            for n in range(i + 1)
+        ]
+    )
 
 
 def joint_test() -> list[Piece]:
