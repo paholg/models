@@ -2388,10 +2388,13 @@ def buildings_view() -> Pieces:
 
 # The open trays' floors are thick, and only thin posts go on above them: where
 # a floor's solid top layers end, they push a ridge out into the posts. Less so
-# with the outside wall drawn first.
+# with the outside wall drawn first. No shape avoids it: the posts stand on a
+# floor's top however thick the floor is, and thick posts would crowd the
+# stacks.
 open_tray_settings = {"wall_sequence": "outer wall/inner wall"}
 # Across a slot cut down to the bed Orca travels without retracting, after
-# infill and inner walls, and leaves a thread each time.
+# infill and inner walls, and leaves a thread each time. The pinch slots go
+# down that far to reach the bottom of a stack.
 orca = {"reduce_infill_retraction": 0}
 
 

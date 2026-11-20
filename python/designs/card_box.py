@@ -101,11 +101,11 @@ from build.cad import Piece
 # layers from the bed up (the 0.6 mm inlays, the 0.68 mm glue break, the
 # 0.84 mm magnet skins, the 1 mm mitres, the 2.04 mm walls, the 3.4 mm front
 # and back, and each less `ease`), so its face falls midway between Orca's
-# slicing planes, at the layers' middles; the printer's own 0.25 mm first
-# layer would leave the inlays' floor 0.01 mm from one. Arachne walls print
-# the magnets' covers, one line wide, which classic walls leave out without a
-# word. And each piece's lines (`solid_infill_direction`) turn with it, as
-# plate packing may turn a panel a quarter.
+# slicing planes, at the layers' middles. Arachne walls print the magnets'
+# covers, `cover` thick, as one line, which classic walls leave out without a
+# word; a thicker cover would hold the magnets further apart. And each piece's
+# lines (`solid_infill_direction`) turn with it, as plate packing may turn a
+# panel a quarter.
 SETTINGS = {
     "process": "0.08 High Quality",
     "layer_height": 0.08,

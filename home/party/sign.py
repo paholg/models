@@ -216,7 +216,7 @@ boss_r = hole_d / 2 + magnet_wall
 # foot's middle, not out of it.
 magnet_in = max(boss_r, bar / 2)
 # How far short of a magnet hole's mouth its ribs stop, for the magnet to
-# start in: about a layer.
+# start in.
 rib_short = 0.2
 # The keyhole's room, from the head's width to the shank's.
 hang_taper = (hang_head_d - hang_shank_d) / 2

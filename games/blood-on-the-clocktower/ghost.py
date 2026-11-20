@@ -143,9 +143,10 @@ vote_chamfer = 0.4
 # What's sealed in the vote: a bar magnet for now, and later two steel strike
 # plates, 25.4 x 12.7 x 2 in all.
 insert = (18.4, 9, 2.5)
-# Around the insert's edges, and over it. The pocket is in the vote's middle,
-# and with this its floor and its top fall between layers 0.1 high, whether
-# the first is 0.2 or 0.25: on one, the slicer could take either side.
+# Around the insert's edges, and over it. The gap over it is more than one of
+# the vote's layers (see `vote_settings`), so wherever the slicing planes fall
+# its hollow comes out at least a layer deeper than the insert, and the print
+# pauses with the insert under its top, even a layer early.
 insert_c = 0.2
 insert_gap = 0.15
 label = "VOTE"
@@ -166,7 +167,9 @@ mag_c = 0.1
 mag_inset = 1
 # Between the slot and the ghost's magnet.
 mag_skin = 0.6
-# Open above the magnets' pocket, under what bridges it.
+# Open above the magnets, under what bridges them. Their pocket is open straight
+# up to the pause, so whatever the layers, the first to cover it is this far
+# above them or more.
 mag_over = 0.2
 
 r = d / 2
@@ -400,8 +403,8 @@ sheet_settings = {
     "fuzzy_skin_octaves": 2,
     "fuzzy_skin_persistence": 0.4,
 }
-# The vote's layers are thin, for its chamfered edges and for its insert's
-# hollow to fall between layers (see `insert_c`).
+# The vote's layers are thin, for its chamfered edges and for the room over its
+# insert to be more than a layer (see `insert_c`).
 vote_settings = {
     "layer_height": 0.1,
     "top_surface_pattern": "hilbertcurve",

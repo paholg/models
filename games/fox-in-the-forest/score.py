@@ -131,6 +131,9 @@ plate_t = 1.5
 plate_l = 14
 plate_w = 11
 plate_chamfer = 0.8
+# The plate's edge on the bed, chamfered against elephant's foot, for magnets.
+# With arms, the slits leave no room for it: see `arm_settings`.
+plate_foot = 0.3
 stem = 3.2
 stem_chamfer = 0.4
 # A long key on the stem, in the slot, keeps the slider from twisting. It
@@ -143,7 +146,8 @@ slot_chamfer = 0.4
 # moves, the half of the arm behind the hump pulls it along in tension; an
 # arm with a free end buckles when it's pushed hump first. The arm itself
 # bends out into a round hump in the middle, one line wide throughout, which
-# lets it flex by bending rather than stretching.
+# lets it flex by bending rather than stretching: arm_t is one line only as
+# `arm_settings` prints it.
 arm_t = 0.45
 arm_h = 1
 slit_w = 0.6
@@ -163,11 +167,13 @@ mag_d = 5
 mag_t = 1
 # Pocket clearance on the diameter.
 mag_c = 0.2
-# The channel floor over the back's magnets, printed after the pause. With
-# this, the back's pockets' top and floor fall midway between where 0.1 mm
-# layers are sliced, whether the first is 0.2 or 0.25: on one, the slicer could
-# take either side, and the pocket could lose a layer of its slack.
-mag_roof = 0.275
+# The channel floor over the back's magnets, printed after the pause. The back
+# is set to 0.1 mm layers over a 0.2 mm first one (see `fine`), so every layer
+# ends on a multiple of 0.1 and is sliced at its middle, 0.05 off one. With
+# back_t one too, this puts the pockets' top and floor on layer ends, midway
+# between slicing planes: on a plane, the slicer could take either side, and
+# the pocket could lose a layer of its slack.
+mag_roof = 0.3
 # Height of the back's pockets over the magnets, so the nozzle clears them.
 mag_slack = 0.1
 # How far the slider's magnet sits above the plate's underside. With the
@@ -412,9 +418,10 @@ def plate_2d() -> Sketch:
 def slider(e: float = engage, lift: float = mag_lift, marks: int = 0) -> Part:
     """Plate down, on z = 0, along x. `marks` dimples go in the plate's top
     beside the key, clear of the arms and the magnet, to tell test sliders
-    apart. (The plate's too thin to step in against elephant's foot: the
-    slicer's compensation does that.)"""
+    apart."""
     body = extrude(plate_2d(), plate_t)
+    if not arms:
+        body = chamfer(body.faces().sort_by(Axis.Z).first.edges(), plate_foot)
     if arms:
         body += extrude(Sketch() + [on_side(s, arm_2d(e)) for s in (-1, 1)], arm_h)
     else:
@@ -594,9 +601,13 @@ def rupee() -> Part:
 
 # Settings
 
-# The back's magnet pockets and their roof are laid out for 0.1 mm layers (see
-# mag_roof): 0.2 mm ones could close the slack over a magnet.
+# The back's magnet pockets and their roof are laid out for 0.1 mm layers over
+# a 0.2 mm first one (see mag_roof). The slack over a magnet has to be a layer,
+# for the pause, and the roof under half a millimeter, for the click: thicker
+# layers would round both too coarsely. The first layer's height is the whole print's, in Orca, so it's set
+# for the project.
 fine = {} if arms else {"layer_height": 0.1}
+first_layer = {} if arms else {"initial_layer_print_height": 0.2}
 # Lines along the tracks, so along x: on the top's face, which prints on the
 # bed, and on the back's channel floor, its top. Angles follow the model, so
 # that turning it on the plate turns the lines too.
@@ -611,13 +622,21 @@ back_settings = {
     "top_layer_direction": 0,
     "align_infill_direction_to_model": True,
 }
-# A brim, for so little on the bed.
-rupee_settings = {
-    "top_surface_pattern": "concentric",
-    "brim_type": "outer_only",
-    "brim_width": 3,
-}
+rupee_settings = {"top_surface_pattern": "concentric"}
 pauses = [] if arms else [pause]
+# Each arm one line, arm_t wide: classic walls leave out a wall too thin for a
+# loop, and the arm can't be thicker and still flex. And the slicer takes in
+# the plate's first layer, which elephant's foot would otherwise spread into
+# the slits, too narrow for a chamfer.
+arm_settings = (
+    {
+        "wall_generator": "arachne",
+        "outer_wall_line_width": arm_t,
+        "elefant_foot_compensation": 0.15,
+    }
+    if arms
+    else {}
+)
 
 body_color = "darkgreen"
 number_color = "yellow"
@@ -730,14 +749,14 @@ project(
             settings=back_settings | fine,
             pauses=pauses,
         ),
-        "sliders": Object(sliders_print, "All four, plate down"),
+        "sliders": Object(sliders_print, "All four, plate down", settings=arm_settings),
         "rupees": Object(
             rupees_print, "All four, socket down", settings=rupee_settings
         ),
         "test": Object(
             test,
             "Three short tracks, a detent strength each",
-            settings=fine,
+            settings=fine | arm_settings,
             pauses=pauses,
         ),
     },
@@ -747,4 +766,5 @@ project(
     },
     # Together: the plate pauses for the back's magnets.
     plates=["top back sliders rupees"],
+    orca=first_layer,
 )
