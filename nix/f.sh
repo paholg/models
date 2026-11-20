@@ -318,7 +318,11 @@ while true; do
       printf '\nGenerating...\n'
       # Leave the log on screen, to read.
       keep=1
-      if ! uv --project python run "$file" 2>&1; then
+      # A build123d project by way of build.generate, as `just generate`
+      # runs it; a G-code script as itself.
+      run=("$file")
+      if [[ $kind == cad ]]; then run=(python -m build.generate "$file"); fi
+      if ! uv --project python run "${run[@]}" 2>&1; then
         status="Generation failed."
       fi
       ;;

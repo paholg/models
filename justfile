@@ -29,9 +29,10 @@ preview file:
 
 # Write each object of a build123d project to gen/<dir>/<stem>-<object>.3mf, where <dir> is the
 # file's directory in this repo: an Orca project that applies and shows the settings the file asks
-# for, and one of its plates (see python/build/build.py and python/build/cad.py).
+# for, and one of its plates (see python/build/build.py and python/build/cad.py). By way of
+# python/build/generate.py, which starts the workers' server before the file loads build123d.
 generate file:
-    uv --project python run "{{file}}"
+    uv --project python run python -m build.generate "{{file}}"
 
 # Write an object of a build123d project to tmp/view/<stem>-<object>.step and open it in FreeCAD.
 view file object:
