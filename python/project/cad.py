@@ -4,11 +4,11 @@ A model is a Python file where its .scad would be. It draws its parts with
 build123d, and ends by saying what they are:
 
     from build123d import *
-    from project.cad import Piece, main
+    from project.cad import Piece, model
 
     def lid() -> Part: ...
 
-    main(__file__, parts={"lid": lid, "base": base}, orca={"layer_height": 0.1})
+    model(__file__, parts={"lid": lid, "base": base}, orca={"layer_height": 0.1})
 
 A part is a function, called only when the part is wanted. It gives one shape,
 or for a print of several pieces a list of them, each a part in Orca with its
@@ -120,7 +120,7 @@ def view(file: Path, part: str, draw: Part) -> Path:
     return out
 
 
-def main(
+def model(
     file: str,
     parts: Mapping[str, Part],
     orca: Mapping[str, object] | None = None,

@@ -31,7 +31,7 @@ so don't go looking for its files through the binary.
 
 A model can be a Python file instead of a .scad one: it draws with build123d,
 where a solid is a value to name, color and put together, and ends with
-`main()` from `python/project/cad.py`, whose docstring has the details. `just
+`model()` from `python/project/cad.py`, whose docstring has the details. `just
 generate` and `f` take either kind. New models are being tried this way; the
 .scad ones work as before.
 
@@ -44,6 +44,8 @@ generate` and `f` take either kind. New models are being tried this way; the
 * build123d comes from PyPI by way of uv, and is the reason Python stops
   short of 3.15 in `python/pyproject.toml`; the flake's `uv` knows where the
   libraries it loads are.
+* Multi-part objects should always have an `assembly` view with the object as
+  assembled, and should specify `plates` when calling `model()`. 
 
 ## Directory structure
 

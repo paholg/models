@@ -19,14 +19,13 @@ stands on the stacker's cap at z = 0.
 Print the stacker on its right side and the lid on its left, each at 45° to
 fit the bed diagonally. Both grooves are then in a wall on the bed and face
 up, and both tongues are the top edge of a standing wall: nothing in the joint
-overhangs. The lip strip, which would be a bridge at the top of the lid, lies
-beside it, outside face down.
+overhangs. The lip strip, which would be a bridge at the top of the lid, is
+printed on its own, outside face down.
 
 "joint" is a test to print first: lengths of groove and of tongue at the
 clearances in joint_clears, printed as their walls are in the box.
 
-The views "assembly" and "stack" show the box closed and the stacker on the
-tower; `lid_raise` lifts the lid in the first.
+The view "assembly" shows the box closed; `lid_raise` lifts the lid.
 """
 
 from math import cos, radians, sqrt, tan
@@ -46,7 +45,7 @@ from build123d import (
     extrude,
 )
 
-from project.cad import Piece, main
+from project.cad import Piece, model
 
 # Views
 
@@ -354,20 +353,13 @@ def stacker_print() -> Part:
     return Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, 90, 0) * stacker()
 
 
-def lid_print() -> list[Piece]:
-    turn = Rot(0, 0, 45)
-    return [
-        Piece(turn * Pos(0, 0, o) * Rot(0, -90, 0) * lid(), "lid"),
-        # Along the lid, clear of its brim.
-        Piece(
-            turn
-            * Pos(-z_a / 2, 55 - z_s, o)
-            * Rot(0, 0, 90)
-            * Rot(0, 90, 0)
-            * lip_strip(),
-            "lip strip",
-        ),
-    ]
+def lid_print() -> Part:
+    return Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, -90, 0) * lid()
+
+
+def strip_print() -> Part:
+    """Outside face down: on the lid, it would be a bridge."""
+    return Rot(0, 90, 0) * lip_strip()
 
 
 def notches(i: int, length: float) -> Part:
@@ -417,19 +409,14 @@ def assembly() -> list[Piece]:
     ]
 
 
-def stack() -> list[Piece]:
-    """Cap up, resting on the tower."""
-    return [
-        Piece(Pos(0, 0, tower_h) * Rot(0, 180, 0) * stacker(), "stacker", "white"),
-        Piece(tower(), "tower", "burlywood"),
-    ]
-
-
-main(
+model(
     __file__,
-    parts={"stacker": stacker_print, "lid": lid_print, "joint": joint_test},
-    views={"assembly": assembly, "stack": stack},
-    # The stacker and lid stand 83 mm on a long, narrow face: a brim keeps
-    # their ends down.
-    orca={"brim_type": "outer_only", "brim_width": 5},
+    parts={
+        "stacker": stacker_print,
+        "lid": lid_print,
+        "strip": strip_print,
+        "joint": joint_test,
+    },
+    views={"assembly": assembly},
+    plates=["stacker lid strip"],
 )
