@@ -19,8 +19,9 @@ so don't go looking for its files through the binary.
 * A model becomes Orca projects, with settings for the whole print or for
   single parts: see build123d below. What does it is in `python/build`:
   `build.py` writes the projects, `orca.py` reads and writes Orca's files,
-  `layout.py` packs plates, and `cad.py` and `scad.py` are build123d's and
-  OpenSCAD's sides. `python/generate.py`'s docstring has what comes out.
+  `layout.py` packs plates, and `cad.py` (with `worker.py`) and `scad.py` are
+  build123d's and OpenSCAD's sides. `python/generate.py`'s docstring has what
+  comes out.
 * `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
   settings in the G-code rather than guess. Orca's own CLI ignores a
   project's settings, which only the GUI applies; `python/slice.py` lays them
@@ -40,6 +41,10 @@ to name, color and put together, and ends with `project()` from
   and a description to show beside its name. Each piece is a part of the
   object in Orca, with its own name, color, filament and settings. Draw the
   assembly as it's used; the objects' functions turn their pieces to print.
+* Generating draws the objects in other processes, each of which runs the
+  file again up to `project()` (see `cad.workers()`): keep the file's own code
+  quick, and don't count on a cache one object's drawing fills being there
+  for another's.
 * Slicer settings: `project(orca={...})` for the whole print, an `Object`'s
   `settings` for its own prints (a layer height, say, which Orca keeps for a
   whole object), a `Piece`'s `settings` for that piece. Keys are the

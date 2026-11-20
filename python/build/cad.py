@@ -1,9 +1,13 @@
 """Projects drawn with build123d: a project file ends with `project()`."""
 
+import contextlib
 import io
+import multiprocessing
 import os
 import sys
+import warnings
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -106,6 +110,48 @@ def render(
     )
 
 
+# In a worker, what its project() was given, to draw from; none elsewhere. The
+# server that workers fork from sets it (see worker.py).
+given: dict | None = None
+
+
+def draw(name: str, work: Path) -> tuple[scad.Render, str]:
+    """In a worker, draw an object into `work`. Returns it and what it printed,
+    which an error it raises carries instead, as `said`."""
+    from . import worker  # the server's, so only in a worker
+
+    assert given is not None
+    said = io.StringIO()
+    try:
+        with warnings.catch_warnings(), contextlib.redirect_stdout(said):
+            # The warnings the server quieted, heard again, and the file's
+            # deprecations too, as they are where it runs as __main__.
+            warnings.filters = list(worker.heard)
+            warnings.filterwarnings(
+                "default", category=DeprecationWarning, module="__mp_main__"
+            )
+            drawn = render(name, given["objects"][name], given["orca"], work)
+    except BaseException as e:
+        vars(e)["said"] = said.getvalue()  # for project() to show
+        raise
+    return drawn, said.getvalue()
+
+
+def workers(n: int) -> ProcessPoolExecutor:
+    """Processes to draw objects in: build123d draws under the GIL, so threads
+    draw one at a time.
+
+    Each is a fork of a server that has only loaded build123d (see worker.py),
+    not of the project's own process: a fork of that can hang, where OCCT runs
+    threads it started that the fork leaves behind. So each runs the project
+    file again, as multiprocessing does, and its `project()` only keeps what
+    it's given, for draw().
+    """
+    context = multiprocessing.get_context("forkserver")
+    context.set_forkserver_preload([f"{__package__}.worker"])
+    return ProcessPoolExecutor(n, mp_context=context)
+
+
 def view(file: Path, name: str, obj: Object) -> Path:
     """Write an object as a STEP file: its pieces by name, in their colors."""
     shapes = []
@@ -134,9 +180,16 @@ def project(
     puts the rest on each object, where Orca lets an object have it, and pauses
     each plate wherever one of its objects pauses, stopping the rest there too.
 
+    With more than one object, they're drawn in workers, each of which runs the
+    file again (see workers()).
+
     `--view NAME` writes tmp/view/<stem>-<name>.step instead, for FreeCAD.
     `--objects` lists views, then objects: kind, name and description, tabbed.
     """
+    if given is not None:
+        # In a worker, which then draws what it's asked to (see workers()).
+        given.update(objects=objects, orca=orca or {})
+        return
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
@@ -144,13 +197,33 @@ def project(
     shown = {**(views or {}), **objects}
     match sys.argv[1:]:
         case []:
-            build.run(
-                path,
-                list(objects),
-                build.groups_of(plates or []),
-                "build123d",
-                lambda name, work: render(name, objects[name], orca or {}, work),
-            )
+            # The objects each in a worker, but for one alone, which isn't
+            # worth starting one for.
+            with (
+                workers(min(len(objects), os.cpu_count() or 1))
+                if len(objects) > 1
+                else contextlib.nullcontext()
+            ) as pool:
+
+                def drawn(name: str, work: Path) -> scad.Render:
+                    if pool is None:
+                        return render(name, objects[name], orca or {}, work)
+                    try:
+                        done, said = pool.submit(draw, name, work).result()
+                    except BaseException as e:
+                        # What it printed before it failed, to see why.
+                        print(vars(e).get("said", ""), end="")
+                        raise
+                    print(said, end="")
+                    return done
+
+                build.run(
+                    path,
+                    list(objects),
+                    build.groups_of(plates or []),
+                    "build123d",
+                    drawn,
+                )
         case ["--objects"]:
             for name, obj in shown.items():
                 kind = "object" if name in objects else "view"

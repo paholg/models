@@ -1,6 +1,7 @@
 """From a model's parts to its Orca projects, whatever drew them: OpenSCAD
 (generate.py) or build123d (cad.py). generate.py's docstring has what comes out."""
 
+import functools
 import io
 import math
 import os
@@ -57,6 +58,24 @@ class Told:
             return work(*args)
         finally:
             del self.local.said
+
+
+def at_once[T](
+    told: Told, pool: ThreadPoolExecutor, works: list[Callable[[], T]]
+) -> list[T]:
+    """Run each of `works` in the pool, all at once, and show what each prints
+    as if each ran after the one before."""
+    runs = [(said := io.StringIO(), pool.submit(told.to, said, w)) for w in works]
+    done = []
+    for said, run in runs:
+        try:
+            done.append(run.result())
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
+        finally:
+            told.out.write(said.getvalue())
+    return done
 
 
 def combine(
@@ -150,40 +169,7 @@ def run(
             print(f"{part}: orca-slicer, assembling {len(render.solids)} parts")
             return render, orca.assemble(render.solids, render.box, work)
 
-    # The parts at once: they wait on OpenSCAD and Orca, a core apiece.
-    names = list(dict.fromkeys(exports + [p for g in groups for p in g]))
-    with Told() as told, ThreadPoolExecutor(os.cpu_count()) as pool:
-        runs = [
-            (said := io.StringIO(), pool.submit(told.to, said, build, part))
-            for part in names
-        ]
-        for part, (said, run) in zip(names, runs):
-            try:
-                renders[part], built[part] = run.result()
-            except BaseException:
-                pool.shutdown(cancel_futures=True)
-                raise
-            finally:
-                told.out.write(said.getvalue())
-            filaments.update(renders[part].filaments)
-            wanted[part] = renders[part].settings
-    colors = {
-        p: list(dict.fromkeys(s.color for s in r.solids)) for p, r in renders.items()
-    }
-    sizes = {
-        p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
-        for p, a in built.items()
-    }
-    packed = [plate for g in groups for plate in layout.pack(g, sizes)]
-    # A color is on one tool head in every project, the plates' too.
-    heads = layout.heads(
-        list(colors.values())
-        + [
-            list(dict.fromkeys(c for p, *_ in plate for c in colors[p]))
-            for plate in packed
-        ]
-    )
-    for part in exports:
+    def export(part: str) -> None:
         target = out_dir / f"{file.stem}-{part}.3mf"
         render, assembly, order = renders[part], built[part], colors[part]
         note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
@@ -198,7 +184,8 @@ def run(
             + (f", {objects} objects" if objects > 1 else "")
             + "".join(f", pause at {z:g} mm" for z in render.pauses)
         )
-    if groups:
+
+    def plates() -> None:
         # One project has one set of settings: those its parts agree on. The
         # rest go on each part's own objects, where Orca lets an object have one.
         parts = [wanted[p] for g in groups for p in g]
@@ -229,4 +216,40 @@ def run(
             filaments,
             own,
             {p: r.pauses for p, r in renders.items()},
+        )
+
+    names = list(dict.fromkeys(exports + [p for g in groups for p in g]))
+    with Told() as told, ThreadPoolExecutor(os.cpu_count()) as pool:
+        # The parts at once: they wait on OpenSCAD, build123d's workers and
+        # Orca, a core apiece.
+        for part, (render, assembly) in zip(
+            names, at_once(told, pool, [functools.partial(build, p) for p in names])
+        ):
+            renders[part], built[part] = render, assembly
+            filaments.update(render.filaments)
+            wanted[part] = render.settings
+        colors = {
+            p: list(dict.fromkeys(s.color for s in r.solids))
+            for p, r in renders.items()
+        }
+        sizes = {
+            p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
+            for p, a in built.items()
+        }
+        packed = [plate for g in groups for plate in layout.pack(g, sizes)]
+        # A color is on one tool head in every project, the plates' too.
+        heads = layout.heads(
+            list(colors.values())
+            + [
+                list(dict.fromkeys(c for p, *_ in plate for c in colors[p]))
+                for plate in packed
+            ]
+        )
+        # The projects at once too: they spend their time compressing, which
+        # threads do side by side.
+        at_once(
+            told,
+            pool,
+            [functools.partial(export, p) for p in exports]
+            + ([plates] if groups else []),
         )

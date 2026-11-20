@@ -54,7 +54,7 @@ class Volume:
     name: str
     color: str
     settings: dict[str, str]  # its own
-    mesh: ET.Element  # its <object> among the meshes
+    mesh: str  # its <object>'s id among the meshes
     component: ET.Element  # where it goes in its object
     part: ET.Element  # Orca's notes on it, in the model settings
 
@@ -75,7 +75,7 @@ class Assembly:
     objects: list[Object]
     box: tuple[tuple[float, ...], tuple[float, ...]]  # its corners, as in the .scad
     transform: str  # where Orca put it
-    meshes: ET.Element  # the model of its volumes' meshes
+    meshes: bytes  # the model of its volumes' meshes, as Orca wrote it
     archive: bytes  # Orca's project, for the files any project carries as they are
 
 
@@ -136,9 +136,12 @@ def add_metadata(parent: ET.Element, values: dict[str, str], at: int = -1) -> No
         parent.append(m) if at < 0 else parent.insert(at + i, m)
 
 
-def to_xml(root: ET.Element, indent: bool = True) -> bytes:
-    if indent:
-        ET.indent(root, " ")
+# An <object>'s id, in Orca's mesh model.
+OBJECT_ID = re.compile(rb'(<object id=")(\d+)(")')
+
+
+def to_xml(root: ET.Element) -> bytes:
+    ET.indent(root, " ")
     return ET.tostring(root, encoding="UTF-8", xml_declaration=True)
 
 
@@ -162,10 +165,8 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
         sys.exit(f"orca-slicer failed:\n{done.stdout}{done.stderr}")
     archive = project.read_bytes()
     with zipfile.ZipFile(project) as z:
-        model, meshes, config = (
-            ET.fromstring(z.read(name)) for name in (MODEL, MESHES, CONFIG)
-        )
-    mesh = {o.get("id"): o for o in meshes.iter(core("object"))}
+        model, config = (ET.fromstring(z.read(name)) for name in (MODEL, CONFIG))
+        meshes = z.read(MESHES)
     component = {c.get("objectid"): c for c in model.iter(core("component"))}
 
     whole = object_keys() if any(s.settings for s in solids) else frozenset()
@@ -181,7 +182,7 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
         )
         i = attr(part, "id")
         obj.volumes.append(
-            Volume(number, solid.name, solid.color, own, mesh[i], component[i], part)
+            Volume(number, solid.name, solid.color, own, i, component[i], part)
         )
     return Assembly(
         [o for o in objects.values() if o.volumes],
@@ -302,9 +303,13 @@ def write(
             ids = {v.number: next_id - 1 + v.number for v in volumes}
             next_id += len(volumes)
             path = f"3D/Objects/object_{next_id}.model"
-            for v in volumes:
-                v.mesh.set("id", str(ids[v.number]))
-            files[path] = to_xml(a.meshes, indent=False)
+            # The meshes as they are, but for their ids: far quicker than
+            # writing them out again.
+            new = {v.mesh.encode(): str(ids[v.number]).encode() for v in volumes}
+            files[path], n = OBJECT_ID.subn(
+                lambda m, new=new: m[1] + new[m[2]] + m[3], a.meshes
+            )
+            assert n == len(new), "Orca's meshes aren't written as they were"
             for o in a.objects:
                 oid, next_id = str(next_id), next_id + 1
 
