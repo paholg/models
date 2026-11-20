@@ -589,6 +589,15 @@ class CardBox:
     def _named(self, name: str) -> str:
         return f"{self.name} {name}" if self.name else name
 
+    def _parent(self, panel: str) -> str:
+        """The group a panel goes in, in FreeCAD: the lid or the body, and in
+        that, the panel's own, with its art and magnets, if it has any."""
+        group = self._named("lid" if is_lid(panel) else "body")
+        face = self._face(panel)
+        if face in ("front", "back") or (face == "top" and self.top):
+            group += f"/{self._named(panel)}"
+        return group
+
     def _color(self, panel: str) -> str:
         return (self.lid_color or self.color) if is_lid(panel) else self.color
 
@@ -599,13 +608,15 @@ class CardBox:
     def _art_pieces(
         self, faces: Sequence[str], at: Callable[[str], Location]
     ) -> list[Piece]:
-        """The art of these faces, each layer a piece, moved by at(face)."""
+        """The art of these faces, each layer a piece under its panel, moved by
+        at(face)."""
         return [
             Piece(
                 at(face) * solid,
                 self._named(a.name),
                 a.color,
                 settings=self._art_settings(face, a),
+                parent=self._parent(face),
             )
             for face in faces
             for a, solid in zip(self._layers(face), self._inlays[face])
@@ -622,18 +633,27 @@ class CardBox:
         pieces = [
             Piece(
                 moved(self._face(p), is_lid(p)) * part,
-                self._named(p),
+                self._named(f"{p} panel"),
                 self._color(p),
+                parent=self._parent(p),
             )
             for p, part in self._panels.items()
         ]
-        magnets = Part() + [
-            moved(wall, lid) * f * self._magnet()
-            for wall in ("front", "back")
-            for lid in (False, True)
-            for f in self._magnet_frames(wall, lid)
-        ]
-        pieces.append(Piece(magnets, self._named("magnets"), "silver"))
+        for wall in ("front", "back"):
+            for lid in (False, True):
+                magnets = Part() + [
+                    moved(wall, lid) * f * self._magnet()
+                    for f in self._magnet_frames(wall, lid)
+                ]
+                panel = f"lid {wall}" if lid else wall
+                pieces.append(
+                    Piece(
+                        magnets,
+                        self._named(f"{panel} magnets"),
+                        "silver",
+                        parent=self._parent(panel),
+                    )
+                )
         return pieces + self._art_pieces(
             ("front", "back", "top"), lambda face: moved(face, face == "top")
         )
@@ -704,9 +724,10 @@ class CardBox:
             pieces.append(
                 Piece(
                     at * part,
-                    self._named(p),
+                    self._named(f"{p} panel"),
                     self._color(p),
                     settings=self._settings(p),
+                    parent=self._parent(p),
                 )
             )
         faces = ("top",) if lid else ("front", "back")

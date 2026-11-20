@@ -54,6 +54,9 @@ class Piece:
     # Its own. One that Orca keeps for a whole object, a brim say, makes the
     # piece an object of its own, beside the rest.
     settings: Mapping[str, object] = field(default_factory=dict)
+    # The group it goes under in FreeCAD, to show and hide with the rest of it,
+    # as a path of groups in groups: "lid/top", say. Orca doesn't see it.
+    parent: str = ""
 
 
 @dataclass
@@ -196,15 +199,32 @@ def workers(n: int) -> ProcessPoolExecutor:
 
 
 def write_step(drawn: list[Piece], out: Path) -> None:
-    """Write pieces as a STEP file, for FreeCAD: by name, in their colors."""
-    shapes = []
+    """Write pieces as a STEP file, for FreeCAD: by name, in their colors, each
+    in its parent's groups."""
+    # Each group's shapes and groups, (name, group), in the order they come.
+    top: list = []
+    groups = {"": top}
     for piece in drawn:
         piece.shape.label = piece.name
         if piece.color:
             piece.shape.color = Color(piece.color)
-        shapes.append(piece.shape)
+        path, group = "", top
+        for name in filter(None, piece.parent.split("/")):
+            path += f"/{name}"
+            if path not in groups:
+                groups[path] = []
+                group.append((name, groups[path]))
+            group = groups[path]
+        group.append(piece.shape)
+
+    def built(group: list) -> list[Shape]:
+        return [
+            Compound(label=e[0], children=built(e[1])) if isinstance(e, tuple) else e
+            for e in group
+        ]
+
     out.parent.mkdir(parents=True, exist_ok=True)
-    export_step(Compound(label=out.stem, children=shapes), out)
+    export_step(Compound(label=out.stem, children=built(top)), out)
 
 
 def project(
