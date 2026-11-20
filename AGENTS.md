@@ -25,6 +25,8 @@ moves and rotates its pieces into position for printing. A project with
 several objects has an `assembly` view showing them together, and passes
 `plates` to lay them out for printing.
 
+Give pieces a `parent`, to group them in FreeCAD.
+
 Generating, with `just generate FILE.py`, writes the project's Orca projects
 to `gen/`, and a STEP file of each object and view for FreeCAD. **Run it after
 each set of changes to a project.** It draws in worker processes, each of
