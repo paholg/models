@@ -25,6 +25,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -182,8 +183,12 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
         if not files:
             sys.exit("the changes reach no project")
 
+    # Here, not at the top: each worker runs this file's top again, and a
+    # `build` imported there would be this tree's, not the one it draws.
+    from build import progress
+
     print(f"drawing {len(files)} projects, at {ref} and now")
-    with workers() as pool:
+    with progress.shown(), workers() as pool:
         units = draw(pool, files)
         shown = compare(pool, units)
         if shown:
@@ -192,7 +197,9 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
             for unit in shown:
                 objects.setdefault(unit.label, {})[unit.piece] = diffs(unit)
             title = f"changes since {ref}"
-            pool.submit(diff_worker.view, objects, title, path).result()
+            progress.expect(1)
+            with progress.stage("writing diff.step"):
+                pool.submit(diff_worker.view, objects, title, path).result()
     if not shown:
         return
     print(path.relative_to(ROOT))
@@ -206,12 +213,29 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
         )
 
 
+def counted[T](
+    pool: ProcessPoolExecutor, what: str, fn: Callable[..., T], *args: object
+) -> Future[T]:
+    """Submit a task, shown on the progress bar as `what` while it runs, and
+    counted as it finishes, not when it's waited on."""
+    from build import progress
+
+    progress.expect(1)
+    progress.start(what)
+    future = pool.submit(fn, *args)
+    future.add_done_callback(lambda _: progress.finish(what))
+    return future
+
+
 def draw(pool: ProcessPoolExecutor, files: list[Path]) -> list[Unit]:
     """Draw each object of each file, at both sides that have it. Returns the
     pieces of those that drew at both, or at the one side that has the file."""
     sides = [(t, s, f) for f in files for t, s in ((OLD, "old"), (ROOT, "new"))]
     sides = [(t, s, f) for t, s, f in sides if (t / f).is_file()]
-    listing = {pool.submit(diff_worker.objects, t, f): (t, s, f) for t, s, f in sides}
+    listing = {
+        counted(pool, f"listing {f.stem}, {s}", diff_worker.objects, t, f): (t, s, f)
+        for t, s, f in sides
+    }
     drawing: dict[Future, tuple[str, Path, str]] = {}
     units: dict[Unit, None] = {}
     # What failed on either side, to leave out rather than show all added or
@@ -228,7 +252,8 @@ def draw(pool: ProcessPoolExecutor, files: list[Path]) -> list[Unit]:
             continue
         for name in names:
             out = folder(side, file, name)
-            job = pool.submit(diff_worker.draw, tree, file, name, out)
+            what = f"drawing {file.stem} {name}, {side}"
+            job = counted(pool, what, diff_worker.draw, tree, file, name, out)
             drawing[job] = (side, file, name)
     for done in as_completed(drawing):
         side, file, name = drawing[done]
@@ -264,7 +289,14 @@ def compare(pool: ProcessPoolExecutor, units: list[Unit]) -> list[Unit]:
         or brep("old", u).read_bytes() != brep("new", u).read_bytes()
     ]
     jobs = [
-        pool.submit(diff_worker.compare, brep("old", u), brep("new", u), diffs(u))
+        counted(
+            pool,
+            f"comparing {u.file.stem} {u.piece}",
+            diff_worker.compare,
+            brep("old", u),
+            brep("new", u),
+            diffs(u),
+        )
         for u in differ
     ]
     shown = []
