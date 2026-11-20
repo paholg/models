@@ -22,7 +22,7 @@ The files are unmodified from the Printables download:
 * `weapon_cards_tray_x2.stl`: print twice, for the weapon cards and the setup
   occupation cards.
 
-`../insert.scad` imports the STLs and adapts them as it draws them: each is
+`../insert.py` imports the STLs and adapts them as it draws them: each is
 cut shorter, by a slice out of the plain middle of its length (5 mm of the
 weapon tray, 10 mm of the occupation tray), and gets a low lip across the
 floor at each end. The trays it exports are therefore adaptations of these

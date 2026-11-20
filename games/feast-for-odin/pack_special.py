@@ -1,4 +1,5 @@
-"""Lay the special tiles out on their two boards and write special_layout.scad.
+"""Lay the special tiles out on their two boards and write special_layout.json,
+which insert.py reads, rather than packing the tiles each time it draws.
 
 Run: just python games/feast-for-odin/pack_special.py
 
@@ -12,8 +13,13 @@ For a given gap, greedy bottom-left packing on a 0.5 mm raster, each tile's
 footprint its cells grown by the pocket clearance plus half the gap; the gap
 is the widest for which some order of the tiles packs. The pack is then
 centered as far as it can be. Tiles may rotate, not flip.
+
+What it writes, for each board: its size as packed, which insert.py centers
+on the board it draws, the gap, and each tile's cells, as [col, row], and
+where its cell origin is on the board, in mm.
 """
 
+import json
 import random
 from pathlib import Path
 
@@ -21,16 +27,14 @@ import numpy as np
 
 UNIT = 11.0
 CLEAR = 0.4  # pocket clearance around the tile
-NOTCH_R = 10.0
 RES = 0.5  # mm per raster pixel
-GAP = 4.0  # between the two sections
-MARGIN = 2.0  # special_margin: a board is its section and this each side
+MARGIN = 2.0  # a board is its section and this each side: 2, so the two fit
 FORGE_W = 86.0  # the sections' widths
 OTHERS_W = 209.0
 BOARD_Y = 215.0  # the boards' depth
 CORNER_R = 45.0  # the boards' corners' radius
 # The forge board's icon, [x0, y0, x1, y1] on the board: forge_icon_at and
-# forge_icon_w in insert.scad.
+# forge_icon_w in insert.py.
 ICON = [29.0, 14.3, 61.0, 41.7]
 GAPS = np.arange(2.0, 30.01, 0.25)  # the gaps to try
 ORDERS = 24  # tile orders to try per gap
@@ -50,7 +54,14 @@ def parse(text):
     for block in text.strip("\n").split("\n\n"):
         lines = [line.rstrip() for line in block.split("\n")]
         h = len(lines)
-        shapes.append({(c, h - 1 - r) for r, line in enumerate(lines) for c, ch in enumerate(line) if ch == "x"})
+        shapes.append(
+            {
+                (c, h - 1 - r)
+                for r, line in enumerate(lines)
+                for c, ch in enumerate(line)
+                if ch == "x"
+            }
+        )
     return shapes
 
 
@@ -64,24 +75,15 @@ def rotate(cells):
     return normalize({(r, -c) for c, r in cells})
 
 
-def notch(cells):
-    """Finger notch on a bottom edge (no cell below), nearest the centroid's x.
-
-    Returns (x, y) of its center in mm, on the tile's edge line.
-    """
-    cx = sum(c for c, _ in cells) / len(cells)
-    edges = [(c, r) for c, r in cells if (c, r - 1) not in cells]
-    c, r = min(edges, key=lambda e: (e[1], abs(e[0] + 0.5 - cx - 0.5)))
-    return ((c + 0.5) * UNIT, r * UNIT - CLEAR)
-
-
 def raster(cells, gap):
     """Footprint raster in pixels: the cells grown by clearance plus half the
     gap. Also the offset from its origin to the tile's cell origin, in mm."""
     m = CLEAR + gap / 2
     w = (max(c for c, _ in cells) + 1) * UNIT
     h = (max(rr for _, rr in cells) + 1) * UNIT
-    img = np.zeros((int(np.ceil((h + 2 * m) / RES)), int(np.ceil((w + 2 * m) / RES))), bool)
+    img = np.zeros(
+        (int(np.ceil((h + 2 * m) / RES)), int(np.ceil((w + 2 * m) / RES))), bool
+    )
     cell = int(np.ceil((UNIT + 2 * m) / RES))
     for c, rr in cells:
         x0 = int(c * UNIT / RES)
@@ -149,13 +151,16 @@ def center(placed, grid):
     hi = np.array([max(p[2][k] + p[1].shape[1 - k] for p in placed) for k in (0, 1)])
     want = (free.min(axis=0)[::-1] + free.max(axis=0)[::-1] + 1 - lo - hi) / 2
     for f in (1, 0.75, 0.5, 0.25):
-        dx, dy = (int(round(v * f)) for v in want)
+        dx, dy = (int(np.round(v * f)) for v in want)
         ok = all(
             0 <= y + dy
             and 0 <= x + dx
             and y + dy + img.shape[0] <= grid.shape[0]
             and x + dx + img.shape[1] <= grid.shape[1]
-            and not (grid[y + dy : y + dy + img.shape[0], x + dx : x + dx + img.shape[1]] & img).any()
+            and not (
+                grid[y + dy : y + dy + img.shape[0], x + dx : x + dx + img.shape[1]]
+                & img
+            ).any()
             for _c, img, (x, y) in placed
         )
         if ok:
@@ -193,31 +198,33 @@ def spread(shapes, width, keep_out=None):
     return gap, [(c, x * RES + m, y * RES + m) for c, _img, (x, y) in placed]
 
 
+def dump(boards):
+    """The layout as JSON, a tile to a line."""
+    out = ["{", f' "corner_r": {CORNER_R},', ' "boards": {']
+    for i, (name, b) in enumerate(boards.items()):
+        out.append(f'  "{name}": {{"size": {b["size"]}, "gap": {b["gap"]}, "tiles": [')
+        out.append(",\n".join(f"   {json.dumps(t)}" for t in b["tiles"]))
+        out.append("  ]}" + ("," if i < len(boards) - 1 else ""))
+    return "\n".join([*out, " }", "}", ""])
+
+
 def main():
     forge_text, others_text = shapes_text()
-    f_gap, forge = spread(parse(forge_text), FORGE_W + 2 * MARGIN, ICON)
-    o_gap, others = spread(parse(others_text), OTHERS_W + 2 * MARGIN)
-    # insert.scad puts a section's x0 at its board's MARGIN, and centers
-    # special_size.y on the board: so y here is the board's.
-    out = [
-        "// Generated by pack_special.py; do not edit.",
-        f"special_size = [{FORGE_W + GAP + OTHERS_W}, {BOARD_Y:.2f}];",
-        f"special_forge_w = {FORGE_W};",
-        f"special_gap = {GAP};",
-        f"special_notch_r = {NOTCH_R};",
-        f"special_corner_r = {CORNER_R};",
-        "// [section, [cells as [col, row]], [x, y] of cell origin, notch [x, y]]",
-        "special_tiles = [",
-    ]
-    for sec, placed, dx in (("forge", forge, -MARGIN), ("others", others, FORGE_W + GAP - MARGIN)):
-        for cells, x, y in placed:
-            nx, ny = notch(cells)
-            cs = ", ".join(f"[{c}, {r}]" for c, r in sorted(cells))
-            out.append(f'    ["{sec}", [{cs}], [{x + dx:.2f}, {y:.2f}], [{x + dx + nx:.2f}, {y + ny:.2f}]],')
-    out.append("];")
-    path = Path(__file__).with_name("special_layout.scad")
-    path.write_text("\n".join(out) + "\n")
-    print(f"gaps: forge {f_gap}, others {o_gap}")
+    boards = {}
+    for name, width, text, keep_out in (
+        ("forge", FORGE_W, forge_text, ICON),
+        ("others", OTHERS_W, others_text, None),
+    ):
+        size = [width + 2 * MARGIN, BOARD_Y]
+        gap, placed = spread(parse(text), size[0], keep_out)
+        tiles = [
+            {"cells": sorted(map(list, cells)), "at": [round(x, 2), round(y, 2)]}
+            for cells, x, y in placed
+        ]
+        boards[name] = {"size": size, "gap": gap, "tiles": tiles}
+    path = Path(__file__).with_name("special_layout.json")
+    path.write_text(dump(boards))
+    print(f"gaps: forge {boards['forge']['gap']}, others {boards['others']['gap']}")
 
 
 if __name__ == "__main__":
