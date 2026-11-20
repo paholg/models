@@ -20,45 +20,21 @@ Usage: diff.py [REF] [PROJECT...] [--no-open]
 import argparse
 import ast
 import io
-import json
 import multiprocessing
 import os
 import shutil
 import subprocess
 import sys
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-from build123d import (
-    Align,
-    Color,
-    Compound,
-    Pos,
-    Shape,
-    Text,
-    export_brep,
-    export_step,
-    extrude,
-    import_brep,
-)
+import diff_worker
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "tmp/diff"
 OLD = OUT / "old"
 DRAWN = {"old": OUT / "drawn/old", "new": OUT / "drawn/new"}
-DRAW = Path(__file__).with_name("diff_draw.py")
-# Between the objects, and for an object's label in front of it, in mm.
-GAP = 20
-LABEL = 12
-# A solid thinner than this on average, in mm, is no change: the film a boolean
-# of two near-equal shapes can leave.
-FILM = 1e-3
-COLORS = {
-    "added": (0, 0.7, 0, 1),
-    "removed": (0.85, 0, 0, 1),
-    "common": (0.8, 0.8, 0.8, 0.25),
-}
 
 
 @dataclass(frozen=True)
@@ -132,18 +108,18 @@ def is_project(tree: Path, file: Path) -> bool:
     )
 
 
-def run(tree: Path, file: Path, *args: str) -> tuple[str, str]:
-    """diff_draw.py, on `file` as `tree` has it. Returns what it printed, and
-    the last line of what went wrong, if it did."""
-    done = subprocess.run(
-        [sys.executable, DRAW, tree, file, *args],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    lines = done.stderr.strip().splitlines() or ["failed"]
-    return done.stdout, lines[-1] if done.returncode else ""
+def workers() -> ProcessPoolExecutor:
+    """Processes to draw and compare in, each a fork of a server that has only
+    loaded build123d (see diff_worker.py): loading it takes longer than most
+    objects take to draw. One task to a fork, which leaves behind the tree's
+    modules that a draw imports."""
+    context = multiprocessing.get_context("forkserver")
+    context.set_forkserver_preload(["build123d"])
+    return ProcessPoolExecutor(os.cpu_count(), context, max_tasks_per_child=1)
+
+
+def failure(e: BaseException) -> str:
+    return f"{type(e).__name__}: {e}"
 
 
 def folder(side: str, file: Path, name: str) -> Path:
@@ -159,10 +135,9 @@ def diffs(unit: Unit) -> Path:
     return folder("new", unit.file, unit.object) / unit.piece
 
 
-def pieces(side: str, file: Path, name: str) -> list[Unit]:
-    """What diff_draw.py drew of an object, each piece named for itself."""
+def pieces(side: str, file: Path, name: str, names: list[str]) -> list[Unit]:
+    """What a worker drew of an object, each piece named for itself."""
     out = folder(side, file, name)
-    names = json.loads((out / "pieces.json").read_text())
     units = []
     for i, piece in enumerate(names):
         # Two pieces of the same name are told apart by their order.
@@ -171,81 +146,6 @@ def pieces(side: str, file: Path, name: str) -> list[Unit]:
         (out / f"{i}.brep").rename(out / f"{piece}.brep")
         units.append(Unit(file, name, piece))
     return units
-
-
-def thickness(shape: Shape) -> float:
-    """How thick a solid is on average: its volume over half its surface."""
-    area = shape.area
-    return 2 * shape.compute_volume() / area if area else 0.0
-
-
-def compare(unit: Unit) -> list[str]:
-    """Write the solids of a piece's diff beside its new shape. Returns which
-    there are of added and removed."""
-    old, new = brep("old", unit), brep("new", unit)
-    out = diffs(unit)
-    out.mkdir(parents=True, exist_ok=True)
-    if not old.exists() or not new.exists():
-        # All of the one there is has been added, or removed.
-        kind, path = ("added", new) if new.exists() else ("removed", old)
-        shutil.copy(path, out / f"{kind}.brep")
-        return [kind]
-    a, b = import_brep(old), import_brep(new)
-    found = []
-    for kind, solid in (("added", b - a), ("removed", a - b), ("common", b & a)):
-        if (
-            solid is not None
-            and solid.compute_volume()
-            and (kind == "common" or thickness(solid) >= FILM)
-        ):
-            export_brep(solid, out / f"{kind}.brep")
-            found.append(kind)
-    return [k for k in found if k != "common"]
-
-
-def viewer(units: list[Unit], ref: str) -> Path:
-    """The diffs as one STEP file: an object to a spot, in rows, labeled."""
-    import build.cad  # noqa: F401  # for its fonts
-
-    objects: dict[str, list[Unit]] = {}
-    for unit in units:
-        objects.setdefault(unit.label, []).append(unit)
-    found = []
-    for label, pieces in objects.items():
-        shapes = []
-        for unit in pieces:
-            for kind, color in COLORS.items():
-                if (diffs(unit) / f"{kind}.brep").exists():
-                    shape = import_brep(diffs(unit) / f"{kind}.brep")
-                    shapes.append((f"{unit.piece} {kind}", color, shape))
-        box = Compound([s for *_, s in shapes]).bounding_box()
-        # No narrower than its label.
-        width = max(box.size.X, 0.7 * 5 * len(label)) + GAP
-        found.append((label, shapes, box, width, box.size.Y + GAP + LABEL))
-    # In rows, back to front, about as deep in all as they are wide.
-    widest = max(
-        max(w for *_, w, _ in found), 1.2 * sum(w * d for *_, w, d in found) ** 0.5
-    )
-    children = []
-    x = y = deep = 0.0
-    for label, shapes, box, width, depth in found:
-        if x and x + width > widest:
-            x, y, deep = 0.0, y - deep, 0.0
-        deep = max(deep, depth)
-        at = Pos(x - box.min.X, y - depth - box.min.Y, -box.min.Z)
-        placed = []
-        for name, color, shape in shapes:
-            shape = at * shape
-            shape.label, shape.color = name, Color(*color)
-            placed.append(shape)
-        text = Text(label, 5, "TeX Gyre Heros", align=(Align.MIN, Align.MIN))
-        tag = Pos(x, y - depth - LABEL, 0) * extrude(text, 0.4)
-        tag.label, tag.color = "label", Color("black")
-        children.append(Compound(label=label, children=[*placed, tag]))
-        x += width
-    path = OUT / "diff.step"
-    export_step(Compound(label=f"changes since {ref}", children=children), path)
-    return path
 
 
 def diff(ref: str, named: list[Path], show: bool) -> None:
@@ -283,57 +183,18 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
             sys.exit("the changes reach no project")
 
     print(f"drawing {len(files)} projects, at {ref} and now")
-    sides = [(t, s, f) for f in files for t, s in ((OLD, "old"), (ROOT, "new"))]
-    sides = [(t, s, f) for t, s, f in sides if (t / f).is_file()]
-    units: dict[Unit, None] = {}
-    # What failed on either side, to leave out rather than show all added or
-    # all removed.
-    failed: set[tuple[Path, str]] = set()
-    with ThreadPoolExecutor(os.cpu_count()) as pool:
-        listed = pool.map(lambda j: run(j[0], j[2]), sides)
-        objects = []
-        for (tree, side, file), (out, error) in zip(sides, listed):
-            if error:
-                print(f"  {file}, {side}: {error}")
-                failed.add((file, ""))
-            objects += [(tree, side, file, name) for name in out.splitlines()]
-
-        def one(job: tuple[Path, str, Path, str]) -> str:
-            tree, side, file, name = job
-            return run(tree, file, name, str(folder(side, file, name)))[1]
-
-        for (_, side, file, name), error in zip(objects, pool.map(one, objects)):
-            if error:
-                print(f"  {file} {name}, {side}: {error}")
-                failed.add((file, name))
-            else:
-                units.update(dict.fromkeys(pieces(side, file, name)))
-
-    # The same bytes are the same shape; the rest takes a closer look.
-    drawn = [
-        u
-        for u in units
-        if (u.file, "") not in failed and (u.file, u.object) not in failed
-    ]
-    differ = [
-        u
-        for u in drawn
-        if not brep("old", u).exists()
-        or not brep("new", u).exists()
-        or brep("old", u).read_bytes() != brep("new", u).read_bytes()
-    ]
-    shown = []
-    context = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(mp_context=context) as pool:
-        for unit, has in zip(differ, pool.map(compare, differ)):
-            if has:
-                shown.append(unit)
-                piece = "" if unit.piece == unit.object else f" {unit.piece}"
-                print(f"  {unit.label}{piece}: {', '.join(has)}")
-    print(f"  {len(drawn) - len(shown)} of {len(drawn)} pieces are the same")
+    with workers() as pool:
+        units = draw(pool, files)
+        shown = compare(pool, units)
+        if shown:
+            path = OUT / "diff.step"
+            objects: dict[str, dict[str, Path]] = {}
+            for unit in shown:
+                objects.setdefault(unit.label, {})[unit.piece] = diffs(unit)
+            title = f"changes since {ref}"
+            pool.submit(diff_worker.view, objects, title, path).result()
     if not shown:
         return
-    path = viewer(shown, ref)
     print(path.relative_to(ROOT))
     if show:
         subprocess.Popen(
@@ -343,6 +204,82 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+
+
+def draw(pool: ProcessPoolExecutor, files: list[Path]) -> list[Unit]:
+    """Draw each object of each file, at both sides that have it. Returns the
+    pieces of those that drew at both, or at the one side that has the file."""
+    sides = [(t, s, f) for f in files for t, s in ((OLD, "old"), (ROOT, "new"))]
+    sides = [(t, s, f) for t, s, f in sides if (t / f).is_file()]
+    listing = {pool.submit(diff_worker.objects, t, f): (t, s, f) for t, s, f in sides}
+    drawing: dict[Future, tuple[str, Path, str]] = {}
+    units: dict[Unit, None] = {}
+    # What failed on either side, to leave out rather than show all added or
+    # all removed.
+    failed: set[tuple[Path, str]] = set()
+    # Each object drawn as soon as its file has been listed.
+    for done in as_completed(listing):
+        tree, side, file = listing[done]
+        try:
+            names = done.result()
+        except Exception as e:  # noqa: BLE001  # whatever the project raises
+            print(f"  {file}, {side}: {failure(e)}")
+            failed.add((file, ""))
+            continue
+        for name in names:
+            out = folder(side, file, name)
+            job = pool.submit(diff_worker.draw, tree, file, name, out)
+            drawing[job] = (side, file, name)
+    for done in as_completed(drawing):
+        side, file, name = drawing[done]
+        try:
+            units.update(dict.fromkeys(pieces(side, file, name, done.result())))
+        except Exception as e:  # noqa: BLE001  # whatever the project raises
+            print(f"  {file} {name}, {side}: {failure(e)}")
+            failed.add((file, name))
+    kept = [
+        u
+        for u in units
+        if (u.file, "") not in failed and (u.file, u.object) not in failed
+    ]
+    # In the order drawn, which is the files' order, each one's objects', and
+    # each object's pieces'.
+    order = {
+        (t[2], name): i
+        for i, (t, name) in enumerate(
+            (listing[f], n) for f in listing if not f.exception() for n in f.result()
+        )
+    }
+    return sorted(kept, key=lambda u: order[u.file, u.object])
+
+
+def compare(pool: ProcessPoolExecutor, units: list[Unit]) -> list[Unit]:
+    """The pieces that differ, each with its diff written."""
+    # The same bytes are the same shape; the rest takes a closer look.
+    differ = [
+        u
+        for u in units
+        if not brep("old", u).exists()
+        or not brep("new", u).exists()
+        or brep("old", u).read_bytes() != brep("new", u).read_bytes()
+    ]
+    jobs = [
+        pool.submit(diff_worker.compare, brep("old", u), brep("new", u), diffs(u))
+        for u in differ
+    ]
+    shown = []
+    for unit, job in zip(differ, jobs):
+        try:
+            has = job.result()
+        except Exception as e:  # noqa: BLE001  # whatever the project raises
+            print(f"  {unit.label} {unit.piece}: {failure(e)}")
+            continue
+        if has:
+            shown.append(unit)
+            piece = "" if unit.piece == unit.object else f" {unit.piece}"
+            print(f"  {unit.label}{piece}: {', '.join(has)}")
+    print(f"  {len(units) - len(shown)} of {len(units)} pieces are the same")
+    return shown
 
 
 def main() -> None:
