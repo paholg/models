@@ -16,10 +16,11 @@ so don't go looking for its files through the binary.
 * Presets: the bundled ones are in `$ORCA_SOURCE/resources/profiles/Snapmaker`,
   which Orca copies to `~/.config/OrcaSlicer/system/Snapmaker`. Mine are in
   `~/.config/OrcaSlicer/user`.
-* `python/generate.py` turns a .scad file into Orca projects, with settings
-  for the whole print or for single parts. Its docstring has the details. What
-  it's made of is in `python/project`: `scad.py` for OpenSCAD's side, `orca.py`
-  for reading and writing Orca's projects, `layout.py` for packing plates.
+* A model becomes Orca projects, with settings for the whole print or for
+  single parts: see build123d below. What does it is in `python/project`:
+  `build.py` writes the projects, `orca.py` reads and writes Orca's files,
+  `layout.py` packs plates, and `cad.py` and `scad.py` are build123d's and
+  OpenSCAD's sides. `python/generate.py`'s docstring has what comes out.
 * `just slice gen/….3mf` slices such a project to `tmp/slice/`, to check
   settings in the G-code rather than guess. Orca's own CLI ignores a
   project's settings, which only the GUI applies; `python/slice.py` lays them
@@ -29,14 +30,22 @@ so don't go looking for its files through the binary.
 
 ## build123d
 
-A model can be a Python file instead of a .scad one: it draws with build123d,
-where a solid is a value to name, color and put together, and ends with
-`model()` from `python/project/cad.py`, whose docstring has the details. `just
-generate` and `f` take either kind. New models are being tried this way; the
-.scad ones work as before.
+A model is a Python file that draws with build123d, where a solid is a value
+to name, color and put together, and ends with `model()` from
+`python/project/cad.py`, whose docstring has the details. `just generate` and
+`f` take it, and the older .scad models too, which work as before.
 
+* Each part is a function, giving one shape or a list of `Piece`s: a part in
+  Orca each, with its own name, color, filament and settings. Model in the
+  object's own orientation, as it's used; the part functions turn it as it
+  prints.
+* Slicer settings: `model(orca={...})` for the whole print, a `Piece`'s
+  `settings` for that piece. Keys are the settings' names in Orca.
+* Multi-part objects should always have an `assembly` view with the object as
+  assembled, and should specify `plates` when calling `model()`.
 * `just view FILE.py PART` writes `tmp/view/<stem>-<part>.step` and opens it in
-  FreeCAD: the pieces by name, to hide, cut through and measure.
+  FreeCAD: the pieces by name, to hide, cut through and measure. PART can be a
+  view.
 * Draw in 2D and extrude, rather than cut solids from solids. Something of many
   cells, a honeycomb say, is one `Face(outline, holes)` extruded once: cutting
   each cell, `chamfer()` on each cell's edges and `loft()` between faces with
@@ -44,15 +53,16 @@ generate` and `f` take either kind. New models are being tried this way; the
 * build123d comes from PyPI by way of uv, and is the reason Python stops
   short of 3.15 in `python/pyproject.toml`; the flake's `uv` knows where the
   libraries it loads are.
-* Multi-part objects should always have an `assembly` view with the object as
-  assembled, and should specify `plates` when calling `model()`. 
+* `extrude()` goes the way the face's normal points, which a polygon's winding
+  decides: a clockwise one goes down. Pass a direction, `(0, 0, 1)`, when it
+  matters.
 
 ## Directory structure
 
 * First is general scope (home for home products, games for mostly boardgame
   inserts, etc.)
 * Next folder is more specific.
-* Then each .scad file, or build123d .py file, for a full print.
+* Then each build123d .py file (or older .scad file) for a full print.
 * `gcode/` is the exception: scripts that write G-code directly, using
   `python/lib`, each to `tmp/<script name>.gcode`.
 * `f` (`nix/f.sh`) is a TUI over all of these: it generates, previews and uploads
@@ -72,7 +82,8 @@ Most edges should have chamfers or fillets. When designing parts for glue, use
 crush ribs and joints; try to make installation easy and secure.
 
 Don't design for particular slicer settings (layer height, etc) unless a part
-truly requires it, in which case it should be set with `orca()` with a reason.
+truly requires it, in which case it should be set in `model()`'s `orca` or a
+piece's `settings`, with a comment giving the reason.
 
 ## TODO
 
