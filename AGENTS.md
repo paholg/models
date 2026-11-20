@@ -54,6 +54,9 @@ to name, color and put together, and ends with `project()` from
 * `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens
   it in FreeCAD: the pieces by name, to hide, cut through and measure. OBJECT
   can be a view.
+* `just diff [REF] [FILE.py...]` shows in FreeCAD what the working tree's
+  changes since REF, HEAD by default, do to each piece of the projects they
+  reach, or of those named: see `python/diff.py`.
 * A design more than one project draws, the card box say, is a module in
   `python/designs/`, imported as `designs.<name>`.
 * Draw in 2D and extrude, rather than cut solids from solids. Something of many

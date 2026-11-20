@@ -37,6 +37,13 @@ view file object:
     uv --project python run "{{file}}" --view "{{object}}"
     setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" >/dev/null 2>&1 &
 
+# Open FreeCAD on what the working tree's changes since a commit (HEAD by default) do to each
+# piece of each project they reach, or of the projects named: green for what they add, red for
+# what they remove, clear gray for what stays (see python/diff.py).
+[positional-arguments]
+diff *args:
+    @uv --project python run python/diff.py "$@"
+
 # Slice one of those projects with Orca's CLI, to tmp/slice/<project>.gcode, for checking what a
 # print comes out as. Takes --machine, --process and --filament preset names (see python/slice.py).
 [positional-arguments]
