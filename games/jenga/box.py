@@ -45,7 +45,7 @@ from build123d import (
     extrude,
 )
 
-from project.cad import Object, Piece, model
+from build.cad import Object, Piece, project
 
 # Views
 
@@ -409,7 +409,7 @@ def assembly() -> list[Piece]:
     ]
 
 
-model(
+project(
     __file__,
     objects={
         "stacker": Object(stacker_print, "Back and right walls and an end cap"),

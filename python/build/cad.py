@@ -1,4 +1,4 @@
-"""Models drawn with build123d: a model file ends with `model()`."""
+"""Projects drawn with build123d: a project file ends with `project()`."""
 
 import io
 import sys
@@ -93,14 +93,14 @@ def view(file: Path, name: str, obj: Object) -> Path:
     return out
 
 
-def model(
+def project(
     file: str,
     objects: Mapping[str, Object],
     orca: Mapping[str, object] | None = None,
     plates: list[str] | None = None,
     views: Mapping[str, Object] | None = None,
 ) -> None:
-    """Write the model's projects to gen/: one per object, and one of `plates`,
+    """Write the project's .3mf files to gen/: one per object, and one of `plates`,
     each a group like "lid*2 base". `orca` is settings for all of them; views
     are only to look at.
 

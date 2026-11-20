@@ -1,5 +1,5 @@
 # Pick a design with fzf, then act on it with single keys. A design is a .scad
-# file or a build123d model (a .py file among them), which become Orca
+# file or a build123d project (a .py file among them), which become Orca
 # projects, or a script in gcode/, which writes G-code.
 cd "$(git rev-parse --show-toplevel)" || exit
 
@@ -39,9 +39,9 @@ pick() {
   local files rows list path row mark longest width cols margin
   files="$({
     fd --extension scad
-    # A model is told from any other script by what it imports.
+    # A project is told from any other script by what it imports.
     fd --extension py --exclude python --exclude gcode \
-      --exec-batch grep --files-with-matches '^from project\.cad import' |
+      --exec-batch grep --files-with-matches '^from build\.cad import' |
       sed 's|^\./||' || true
     fd --extension py . gcode
   } | sort)"

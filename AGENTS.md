@@ -17,7 +17,7 @@ so don't go looking for its files through the binary.
   which Orca copies to `~/.config/OrcaSlicer/system/Snapmaker`. Mine are in
   `~/.config/OrcaSlicer/user`.
 * A model becomes Orca projects, with settings for the whole print or for
-  single parts: see build123d below. What does it is in `python/project`:
+  single parts: see build123d below. What does it is in `python/build`:
   `build.py` writes the projects, `orca.py` reads and writes Orca's files,
   `layout.py` packs plates, and `cad.py` and `scad.py` are build123d's and
   OpenSCAD's sides. `python/generate.py`'s docstring has what comes out.
@@ -30,20 +30,20 @@ so don't go looking for its files through the binary.
 
 ## build123d
 
-A model is a Python file that draws with build123d, where a solid is a value
-to name, color and put together, and ends with `model()` from
-`python/project/cad.py`, whose docstring has the details. `just generate` and
+A project is a Python file that draws with build123d, where a solid is a value
+to name, color and put together, and ends with `project()` from
+`python/build/cad.py`, whose docstring has the details. `just generate` and
 `f` take it, and the older .scad models too, which work as before.
 
-* `model()` takes `objects`, the ones to print, and `views`, ones only to look
+* `project()` takes `objects`, the ones to print, and `views`, ones only to look
   at, each an `Object`: a function, giving one shape or a list of `Piece`s,
   and a description to show beside its name. Each piece is a part of the
   object in Orca, with its own name, color, filament and settings. Draw the
-  model as it's used; the objects' functions turn their pieces to print.
-* Slicer settings: `model(orca={...})` for the whole print, a `Piece`'s
+  assembly as it's used; the objects' functions turn their pieces to print.
+* Slicer settings: `project(orca={...})` for the whole print, a `Piece`'s
   `settings` for that piece. Keys are the settings' names in Orca.
-* A model of several objects should always have an `assembly` view of them
-  put together, and should specify `plates` when calling `model()`.
+* A project of several objects should always have an `assembly` view of them
+  put together, and should specify `plates` when calling `project()`.
 * `just view FILE.py OBJECT` writes `tmp/view/<stem>-<object>.step` and opens
   it in FreeCAD: the pieces by name, to hide, cut through and measure. OBJECT
   can be a view.
@@ -83,7 +83,7 @@ Most edges should have chamfers or fillets. When designing parts for glue, use
 crush ribs and joints; try to make installation easy and secure.
 
 Don't design for particular slicer settings (layer height, etc) unless a part
-truly requires it, in which case it should be set in `model()`'s `orca` or a
+truly requires it, in which case it should be set in `project()`'s `orca` or a
 piece's `settings`, with a comment giving the reason.
 
 ## TODO

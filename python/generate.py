@@ -70,8 +70,8 @@ their bounding boxes, turned a quarter where that helps; nothing keeps room
 for a prime tower. Each plate's name says which filament goes on which tool
 head. With more colors than heads, those that never print together share one.
 
-A model written in Python with build123d comes out the same way, by running
-it: project/cad.py has that side.
+A project written in Python with build123d comes out the same way, by running
+it: build/cad.py has that side.
 
 Usage: generate.py FILE.scad
 """
@@ -80,7 +80,7 @@ import io
 import sys
 from pathlib import Path
 
-from project import build, scad
+from build import build, scad
 
 
 def directives(text: str, name: str) -> list[str]:

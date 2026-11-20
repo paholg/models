@@ -29,7 +29,7 @@ preview file:
 # Export each part a .scad file lists in its `// export:` line to gen/<dir>/<stem>-<part>.3mf,
 # where <dir> is the file's directory in this repo: an Orca project with one part per color, which
 # applies and shows the settings the file asks for with `orca()` (see python/generate.py). A
-# build123d model, a .py file, does the same for the parts it names (see python/project/cad.py).
+# build123d project, a .py file, does the same for its objects (see python/build/cad.py).
 generate file:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -38,7 +38,7 @@ generate file:
         *) uv --project python run python/generate.py "{{file}}" ;;
     esac
 
-# Write an object of a build123d model to tmp/view/<stem>-<object>.step and open it in FreeCAD.
+# Write an object of a build123d project to tmp/view/<stem>-<object>.step and open it in FreeCAD.
 view file object:
     uv --project python run "{{file}}" --view "{{object}}"
     setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" >/dev/null 2>&1 &

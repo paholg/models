@@ -23,7 +23,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from project.orca import published
+from build.orca import published
 
 ROOT = Path(__file__).resolve().parents[1]
 ORCA = Path.home() / ".config/OrcaSlicer"
