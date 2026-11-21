@@ -9,8 +9,8 @@ Under the hem, the ghost stands on a rim that follows its edge and on a boss
 round the socket, with a groove between that rises to a rounded peak, higher
 under the hem's ripples, its sides at 45° to print without support.
 
-The vote has a steel plate sealed in its middle, and disc magnets above
-the slot hold it. The ghost and the vote are separate prints, and each pauses
+The vote has a steel plate sealed in its middle, and a disc magnet above
+the slot holds it. The ghost and the vote are separate prints, and each pauses
 for what goes in it, then prints over.
 
 The ghost's face is white with black eyes inlaid, and its mouth is sunk into
@@ -186,13 +186,16 @@ inlay = 0.2
 
 # Magnets
 
-# Discs in the ghost, stacked.
-mag_d = 6
-mag_h = 2
-mag_n = 2
+# Discs in the ghost, stacked: one, as wide as fits. Wider holds better than
+# taller, across the gap to the steel.
+mag_d = 12
+mag_h = 3
+mag_n = 1
 mag_c = 0.1
-# From the vote's end to the ghost's magnets.
-mag_inset = 1
+# From the slot's end to the magnets' axis. As far out as leaves 1 of wall
+# between their pocket and the mouth's recess, in front of the pocket's lower
+# edge, so a third of them is off the steel, back past the slot's end.
+mag_x = 3.5
 # Between the slot and the ghost's magnet: thin, to keep them near the
 # vote's steel, but each layer of it, sloping with the slot, is 0.8 wide: two
 # of a 0.4 nozzle's lines. Less than the slot's lining, so the magnets' pocket
@@ -472,7 +475,7 @@ def magnet_pocket() -> Part:
     """The ghost's magnets lie along the slot, above it, their pocket open
     straight up to the pause, to drop them in: the cylinder, and what's above
     its two ends and above its section through its axis, across the slot."""
-    at = slot_frame() * Pos(mag_inset + mag_d / 2, 0, slot_t + mag_skin)
+    at = slot_frame() * Pos(mag_x, 0, slot_t + mag_skin)
     ends = [at * Pos(0, 0, z) * Circle(mag_r) for z in (0, mag_depth)]
     middle = (
         at * Pos(0, 0, mag_depth / 2) * Rot(0, 90, 0) * Rectangle(mag_depth, 2 * mag_r)
@@ -487,7 +490,7 @@ def magnet_pocket() -> Part:
 
 def magnet_top() -> float:
     """The highest point of the magnets' cylinder."""
-    top = in_slot(mag_inset + mag_d / 2, 0, slot_t + mag_skin + mag_depth)
+    top = in_slot(mag_x, 0, slot_t + mag_skin + mag_depth)
     return top.Z + mag_r * sin(radians(slot_angle))
 
 
