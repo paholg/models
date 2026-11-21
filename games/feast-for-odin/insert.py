@@ -14,11 +14,11 @@ Bottom to top:
      the mountain strips, in two stacks. At its end: the boat market and the
      misc bin (4), and over them the VP and penalty tokens and the 2x5 money
      (6), beside a spacer.
-   - The back, at the big tiles' end: the setup buildings, and a riser behind
-     them (4); the big tiles, which reach over onto the vikings (5); the
-     wooden goods (6).
-   - The back, at the islands' end: the vikings (4); the islands (5); the
-     in-game buildings, which reach over onto the big tiles (6).
+   - The back, in two stacks. A square one at the end of the box: the setup
+     buildings, and a riser behind them (4); the islands (5); the in-game
+     buildings (6). Beside it, the rest of the length: the wooden goods and
+     the vikings, side by side and deep (4-5), and the big tiles over them
+     (6).
 
 Tile bins are shallow, each with a curved scoop up the front wall to slide
 tiles out on; a bin that would be packed tighter than `max_fill` says so.
@@ -28,13 +28,11 @@ Each tray is drawn as it lies in the box, from its own corner, and prints that
 way up, but for the in-game buildings' tray, which stands on an end wall, and
 its cap, which lies on its outside face. A tray is one color: `game` for what
 comes out in play, and `setup` for what only comes out to set up, along with
-the frame, the islands and the fillers, which don't; each viking bin is its
-player's color. Icons are inlaid in black, the special boards' pocket floors
+the frame, the islands, the vikings and the fillers, which don't. Icons are inlaid in black, the special boards' pocket floors
 in a color of their own, and the forge board's icon in black and orange.
 
 The special boards' layout is special_layout.json, which pack_special.py
-writes from manifest.md. The view is the insert in the box, the in-game
-buildings in their tray.
+writes from manifest.md. The view is the insert in the box.
 """
 
 import json
@@ -140,14 +138,13 @@ setup = "tan"
 pocket_floor = "darkslategray"
 forge_orange = "darkorange"
 icon_color = "black"
-viking_colors = ["red", "blue", "yellow", "black"]
 filaments = {
     game: "main",
     setup: "setup",
     pocket_floor: "pocket floor",
     forge_orange: "orange",
     icon_color: "black",
-} | {c: c for c in viking_colors}
+}
 
 # Room round a cardboard stack in its well.
 stack_clear = 1.5
@@ -161,7 +158,9 @@ floor_inset = wall
 
 
 def rect(x0: float, y0: float, x1: float, y1: float) -> Rectangle:
-    """Corner to corner."""
+    """Corner to corner, either way round."""
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
     return Pos(x0, y0) * Rectangle(x1 - x0, y1 - y0, align=(Align.MIN, Align.MIN))
 
 
@@ -366,12 +365,15 @@ class Slot:
         out = []
         if self.through:
             out.append(extrude(self.plane(-0.5, 1) * self.opening, self.depth + 1))
+        # The chamfers are drawn flat and moved onto the wall: OCCT's tapered
+        # extrude fails on some openings drawn on a wall's plane.
+        normal = Vector(0, 0, 1)
         for d, way in self.outside:
             plane = self.plane(d, way)
-            out.append(flare(plane * self.opening, chamfer_out, plane.z_dir))
+            out.append(plane.location * flare(self.opening, chamfer_out, normal))
         for d, way, floor in self.inside:
             plane = self.plane(d, way)
-            eased = flare(plane * self.opening, rim_c, plane.z_dir)
+            eased = plane.location * flare(self.opening, rim_c, normal)
             out.append(part(eased & cuboid(-1000, -1000, floor, 1000, 1000, 1000)))
         return out
 
@@ -748,9 +750,9 @@ money = Tray(
 # they lie flat, in two stacks, one behind the other, filling their bins, so
 # those are scooped at the front only: the back stack lies flat against the
 # square back wall, and the front one, the shorter, up the scoop.
-# The islands' tray is beside it, square, as they are, and as deep as the back
-# of the box; the big tiles take the rest of its length, which is where
-# big_clear comes from.
+# The islands' tray is in the square stack beside it, square, as they are, and
+# as deep as the back of the box; the big tiles take the rest of its length,
+# which is where big_clear comes from.
 island = 129
 island_n = 8
 islands_size = (back_y, back_y)
@@ -797,10 +799,9 @@ for _, b, _, _, _, d in big.bins():
     else:
         assert b.count * tile_t <= d, f"{b.name}'s stack doesn't fit"
 
-# The islands' tray is a tier tall, standing on the vikings' bins, which are
-# as low as the setup buildings beside them: what the islands don't need of
-# that is floor, and the tray, big and open and lifted out full, is the
-# stiffer for it.
+# The islands' tray is a tier tall, standing on the setup buildings and the
+# riser: what the islands don't need of that is floor, and the tray, big and
+# open and lifted out full, is the stiffer for it.
 islands_h = tier_h
 islands_floor = islands_h - island_n * card_t
 assert islands_floor >= floor_t, "the islands' tray is too low for its stack"
@@ -808,12 +809,14 @@ assert islands_size[0] >= island + stack_clear + 2 * post_t, (
     "the islands don't fit beside the big tiles"
 )
 
-# The setup buildings, 6 of them, in one stack, in an open tray.
+# The setup buildings, 6 of them, in one stack, in an open tray. They run
+# along the square stack, which only just fits them: so the tray is as long as
+# the square, with thinner posts at the ends, and the stack gets what's left.
 building = (139, 54.5)
-setup_bld = (
-    building[0] + stack_clear + 2 * post_t,
-    building[1] + card_clear_y + 2 * post_t,
-)
+setup_post_x = wall
+setup_clear_x = back_y - building[0] - 2 * setup_post_x
+assert setup_clear_x >= 1, "the setup buildings don't fit the square stack"
+setup_bld = (back_y, building[1] + card_clear_y + 2 * post_t)
 
 # Boats: a market of stacks, like mini decks. Each well fits its tile
 # lengthwise (long side front to back), with a pinch slot through the front
@@ -915,24 +918,25 @@ pen_c = (wall + pen_r, vp_size[1] - wall - pen_r)
 # Beside the VP tray, a spacer: see honeycomb().
 spacer_size = (corner_x - vp_size[0], front_y)
 
-# The wooden goods, in the top tier beside the buildings: a bin each. Ore and
-# stone are as wide as each other, a little over what stone needs for all of
-# its pieces to lie about one deep; wood has the rest, still more than the 61
-# mm bin it was roomy in.
-wood_bin = 48
+# The wooden goods and the vikings share the rectangle beside the square
+# stack, under the big tiles: as tall as the setup buildings and the islands
+# together.
+deep_h = base_h + tier_h
+# Their walls, thicker than the usual, as they're that much taller.
+deep_wall = 1.6
 
-# Vikings: a bin per player color, each a piece of its own, scooped up every
-# wall, and all its color: no icon, the color says whose it is. The four sit
-# two by two beside the setup buildings and the riser, as tall as those, so
-# the whole of the back is level there: under the islands, and under the end
-# of the big tiles.
-vikings_size = (inner[0] - setup_bld[0], back_y)
-viking_bin = (vikings_size[0] / 2, vikings_size[1] / 2)
-viking_h = base_h
-viking_scoop = 10
+# Vikings: one tray beside the square stack, a bin per player color, in a row
+# front to back, each scooped up its short ends, as the wood's are.
+vikings_size = (72, back_y)
+viking_scoop = 15
+
+# The wooden goods: a bin each, front to back, beside the vikings, at the end
+# of the box, scooped up their long sides. Ore and stone are as deep as each
+# other; wood has the rest.
+wood_bin = 40
 
 # The riser fills the gap behind the setup buildings' tray, as long as it is,
-# for the big tiles to sit on; the vikings' bins take what's beside the two.
+# for the islands to sit on.
 riser_size = (setup_bld[0], back_y - setup_bld[1])
 
 # 9 mountain strips: eight 169 mm ones and a 192 mm one. Under the card trays
@@ -985,8 +989,9 @@ bld_grip = 8
 # and low enough to leave the way in under the buildings.
 bld_lip = 4
 bld_end_t = 1.2
-# Along the buildings, in all: it has to turn into the back of the box.
-bld_len_clear = 1
+# Along the buildings, in all: the tray is as long as the square stack.
+bld_len_clear = back_y - building[0] - 2 * bld_end_t
+assert bld_len_clear >= 1, "the buildings don't fit the square stack"
 # The section's own edges are rounded over by this, and filleted by that where
 # its walls meet. (The end walls' outline has chamfer_corner for both.)
 bld_round = 0.4
@@ -1046,35 +1051,34 @@ def bld_top(i: int, u: float) -> float:
 bld_front = bld_p(bld_last) + (bld_t[bld_last] + bld_over + bld_ramp_t) * bld_n
 bld_front_end = bld_front + bld_reach * bld_d
 bld_front_h = bld_front.Y - bld_front.X * tan(bld_a)
+# How far back the buildings reach; the tray runs on past them to fill the
+# square stack, so nothing behind it can shift.
 bld_depth = bld_p(0).X + building[1] * bld_d.X
+bld_out = back_y
+assert bld_depth <= bld_out, "the buildings overhang the square stack"
 # The back wall's outside face.
 bld_back = bld_p(0).X + (building[1] - bld_grip) * bld_d.X
 bld_in_x = building[0] + bld_len_clear
 bld_size = (
     bld_in_x + 2 * bld_end_t,
-    bld_depth,
+    bld_out,
     max(bld_high(i).Y for i in range(bld_last + 1)),
 )
-assert bld_size[0] <= back_y and bld_size[2] <= tier_h, (
-    f"the buildings tray doesn't fit its tier: {bld_size}"
+assert max(bld_size[:2]) <= back_y and bld_size[2] <= tier_h, (
+    f"the buildings tray doesn't fit the square stack's top: {bld_size}"
 )
-# The wooden goods take the rest of the top tier at the back.
 wood = Tray(
     "wood",
-    inner[0] - bld_depth,
+    inner[0] - islands_size[0] - vikings_size[0],
     back_y,
-    tier_h,
+    deep_h,
     [
-        Row(
-            None,
-            [
-                Bin("ore", wood_bin, (11, 11)),
-                Bin("stone", wood_bin, (20, 13)),
-                Bin("wood", None, (21, 14)),
-            ],
-        )
+        Row(wood_bin, [Bin("ore", None, (11, 11))]),
+        Row(wood_bin, [Bin("stone", None, (13, 20))]),
+        Row(None, [Bin("wood", None, (14, 21))]),
     ],
-    back=True,
+    sides=True,
+    wall=deep_wall,
 )
 
 # The special tiles' boards: a pocket per tile, the forge tiles on their own
@@ -1165,7 +1169,7 @@ for name, size in {
     "boats": boat_size,
     "vp": vp_size,
     "wood": (wood.x, wood.y),
-    "viking bin": viking_bin,
+    "vikings": vikings_size,
     "islands": islands_size,
     "setup buildings": setup_bld,
     "buildings": bld_size[:2],
@@ -1247,16 +1251,16 @@ def misc_tray() -> Part:
 
 
 @cache
-def viking_tray(color: str) -> Part:
-    bins = Tray(
-        f"vikings {color}",
-        *viking_bin,
-        viking_h,
-        [Row(None, [Bin(color, None, (13, 21))])],
+def vikings_tray() -> Part:
+    return Tray(
+        "vikings",
+        *vikings_size,
+        deep_h,
+        [Row(None, [Bin(f"viking {i + 1}", None, (21, 13))]) for i in range(4)],
         scoop=viking_scoop,
-        bowl=True,
-    )
-    return bins.body()
+        sides=True,
+        wall=deep_wall,
+    ).body()
 
 
 @cache
@@ -1459,7 +1463,7 @@ def strips_tray() -> Part:
     long = (long_strip[0] + stack_clear, long_strip[1] + card_clear_y)
     # The wells' corners: the front one's end at the high end of x, the back
     # one's at the low end.
-    xs = [x - post_t - short[0], post_t]
+    xs = [x - setup_post_x - short[0], setup_post_x]
     ys = [wall, y - wall - short[1]]
     floors = [h - strips_n[0] * card_t, h - (strips_n[1] + 1) * card_t]
     ledge = h - card_t
@@ -1468,7 +1472,7 @@ def strips_tray() -> Part:
     # The outside slots: their span at the wall's foot, from the end the setup
     # buildings start at, and the radius their sides round over on at the top.
     # The posts'.
-    slot = (post_t + post_l, setup_bld[0] - post_t - post_l)
+    slot = (setup_post_x + post_l, setup_bld[0] - setup_post_x - post_l)
     slot_w = slot[1] - slot[0]
     slot_r = post_l / 2
     out_x = [x - (slot[0] + slot[1]) / 2, (slot[0] + slot[1]) / 2]
@@ -1540,11 +1544,11 @@ def post_leg(h: float, t: float, back: float) -> Part:
     rounded over at the top on a radius of half its reach, leaving a flat on
     top, and straight down from there, to run on into the side of the floor's
     notch. On a short post the round-over shrinks to fit. Every edge is
-    rounded."""
+    rounded, less on a thin leg."""
     r = min(post_l / 2, h - floor_t - 1)
     side = round_corners(rect(-back, 0, post_l, h), [(post_l, h)], r)
     leg = extrude(Plane.XZ * side, t)
-    return part(fillet(leg.edges(), post_r))
+    return part(fillet(leg.edges(), min(post_r, t / 2 - 0.1)))
 
 
 def open_tray(
@@ -1609,14 +1613,14 @@ def islands_tray() -> Part:
 
 @cache
 def setup_buildings_tray() -> Part:
-    well_size = (building[0] + stack_clear, building[1] + card_clear_y)
+    well_size = (building[0] + setup_clear_x, building[1] + card_clear_y)
     return open_tray(
         setup_bld,
         base_h,
         base_h - setup_n * card_t,
-        (post_t, post_t),
+        (setup_post_x, post_t),
         well_size,
-        (stack_clear, card_clear_y),
+        (setup_clear_x, card_clear_y),
     )
 
 
@@ -1693,9 +1697,10 @@ def bld_outline() -> Sketch:
     """The end walls' outline: the tray's silhouette with its buildings in.
     From the front it's the lip's top, a step down to the last stack's, then
     each stack's top to the high corner of the next, where it steps straight
-    up. At the back it runs on to the tray's edge, and straight down. Every
-    corner is rounded."""
-    points = [(0, 0), (bld_depth, 0), (bld_depth, bld_top(0, bld_depth))]
+    up. At the back it runs on level from the back stack's high corner to the
+    tray's edge, and straight down. Every corner is rounded."""
+    high = bld_top(0, bld_depth)
+    points = [(0, 0), (bld_out, 0), (bld_out, high), (bld_depth, high)]
     for i in range(1, bld_last + 1):
         hi = bld_high(i)
         points += [(hi.X, bld_top(i - 1, hi.X)), (hi.X, hi.Y)]
@@ -1719,7 +1724,7 @@ def bld_section() -> Sketch:
     """The section: floor, ramps, the stops at the stacks' low edges, the
     front wall with its lip, and the back wall with the solid behind it. It's
     all within the outline, which only takes its outside corners off."""
-    parts = [rect(0, 0, bld_depth, floor_t)]
+    parts = [rect(0, 0, bld_out, floor_t)]
     for i in range(bld_last + 1):
         p = bld_p(i)
         rise = bld_step * sin(bld_a) - bld_ramp_t / 2
@@ -1742,7 +1747,7 @@ def bld_section() -> Sketch:
     top = bld_top(0, bld_back) - bld_t[0] / cos(bld_a) - bld_ramp_t / 2
     parts += [
         rect(bld_back - wall, 0, bld_back, top),
-        rect(bld_back - wall, 0, bld_depth, floor_t + bld_lip),
+        rect(bld_back - wall, 0, bld_out, floor_t + bld_lip),
     ]
     return sketch(
         bld_outline() & rounded(sketch(Sketch() + parts), bld_round, bld_fillet)
@@ -2214,7 +2219,7 @@ base = corner * Pos(0, 0, board_stack_h + rulebooks[2] + half_h + special_h)
 back = base * Pos(0, front_y)
 upper = back * Pos(0, 0, base_h + tier_h)
 # Turned, its low side at the end of the box.
-bld_at = upper * Pos(inner[0], 0) * Rot(0, 0, 90)
+bld_at = upper * Pos(0, back_y) * Rot(0, 0, -90)
 
 
 def placed(
@@ -2229,13 +2234,6 @@ def single(
     draw: Callable[[], Shape], name: str, color: str, at: Location
 ) -> Callable[[], Pieces]:
     return placed(lambda: [body_piece(draw(), name, color)], at)
-
-
-def viking(color: str) -> Callable[[], Pieces]:
-    """Beside the setup buildings, two by two."""
-    k = viking_colors.index(color)
-    at = back * Pos(setup_bld[0] + (k % 2) * viking_bin[0], (k // 2) * viking_bin[1])
-    return single(lambda: viking_tray(color), f"{color} bin", color, at)
 
 
 def deck(i: int) -> Callable[[], Pieces]:
@@ -2327,10 +2325,10 @@ def frame_half() -> Part:
 
 
 def assembly(objects: Mapping[str, Pieces]) -> Pieces:
-    """The insert in the box, with the boards, the rulebooks, and the in-game
-    buildings in their tray, grouped by layer in FreeCAD: the objects printed
-    twice twice, the second half trays behind the first, and the second frame
-    half the first turned half round the box's middle."""
+    """The insert in the box, with the boards and the rulebooks, grouped by
+    layer in FreeCAD: the objects printed twice twice, the second half trays
+    behind the first, and the second frame half the first turned half round
+    the box's middle."""
 
     def into(
         group: str, pieces: Pieces, at: Location | None = None, suffix: str = ""
@@ -2357,7 +2355,6 @@ def assembly(objects: Mapping[str, Pieces]) -> Pieces:
     books = cuboid(x0, y0, z, x0 + rulebooks[0], y0 + rulebooks[1], z + rulebooks[2])
     halves = objects["half_a"] + objects["half_b"]
     tray = "half trays/half tray"
-    vikings = [f"vikings_{color}" for color in viking_colors]
     decks = ["deck_setup", "deck_occupations", "deck_weapons"]
     return (
         layer("boards", "frame_half")
@@ -2367,40 +2364,10 @@ def assembly(objects: Mapping[str, Pieces]) -> Pieces:
         + into(f"{tray} 2", halves, Pos(0, half[1]), " 2")
         + layer("special boards", "special_forge", "special_others")
         + layer("columns/bottom", "strips", "boats", "misc", "setup_buildings")
-        + layer("columns/bottom", "riser", *vikings)
-        + layer("columns/middle", *decks, "big", "islands")
-        + layer("columns/top", "vp", "spacer", "wood", "buildings", "buildings_cap")
-        + into("columns/top", buildings_in())
+        + layer("columns/bottom", "riser", "wood", "vikings")
+        + layer("columns/middle", *decks, "islands")
+        + layer("columns/top", "vp", "spacer", "big", "buildings", "buildings_cap")
     )
-
-
-def buildings_in() -> Pieces:
-    """The in-game buildings, in their tray."""
-    pieces = []
-    for i, n in enumerate(bld_stacks):
-        stack = []
-        for k in range(n):
-            corners = [
-                bld_p(i) + cu * bld_d + (k * card_t + cv) * bld_n
-                for cu, cv in (
-                    (0, 0.1),
-                    (building[1], 0.1),
-                    (building[1], card_t - 0.1),
-                    (0, card_t - 0.1),
-                )
-            ]
-            face = bld_plane(bld_end_t + bld_len_clear / 2) * Polygon(
-                *corners, align=None
-            )
-            stack.append(extrude(face, building[0]))
-        pieces.append(
-            Piece(
-                bld_at * (Part() + stack),
-                f"buildings {i + 1}",
-                ["peru", "sienna", "goldenrod"][i],
-            )
-        )
-    return pieces
 
 
 # Settings
@@ -2426,7 +2393,8 @@ objects = {
         "The rest of a half tray, and its money: print two",
     ),
     "big": Object(
-        placed(big_pieces, back * Pos(0, 0, base_h)), "Big tiles and animals"
+        placed(big_pieces, back * Pos(islands_size[0], 0, deep_h)),
+        "Big tiles and animals",
     ),
     "boats": Object(
         single(boat_tray, "boats", game, base * Pos(decks_x, 0)), "The boat market"
@@ -2435,16 +2403,21 @@ objects = {
         single(vp_tray, "vp", game, base * Pos(decks_x, 0, boat_h)),
         "VP and penalty tokens, and the 2x5 money",
     ),
-    "vikings_red": Object(viking("red"), "A player's vikings"),
-    "vikings_blue": Object(viking("blue"), "A player's vikings"),
-    "vikings_yellow": Object(viking("yellow"), "A player's vikings"),
-    "vikings_black": Object(viking("black"), "A player's vikings"),
+    "vikings": Object(
+        single(vikings_tray, "vikings", setup, back * Pos(islands_size[0], 0)),
+        "The vikings",
+    ),
     "islands": Object(
-        single(islands_tray, "islands", setup, back * Pos(big_size[0], 0, viking_h)),
+        single(islands_tray, "islands", setup, back * Pos(0, 0, base_h)),
         "The islands, open",
         settings=open_tray_settings,
     ),
-    "wood": Object(single(wood_tray, "wood", game, upper), "Ore, stone and wood"),
+    "wood": Object(
+        single(
+            wood_tray, "wood", game, back * Pos(islands_size[0] + vikings_size[0], 0)
+        ),
+        "Ore, stone and wood",
+    ),
     "buildings": Object(
         buildings_pieces, "The in-game buildings, standing on an end wall"
     ),
@@ -2463,7 +2436,7 @@ objects = {
     "strips": Object(single(strips_tray, "strips", setup, base), "The mountain strips"),
     "riser": Object(
         single(riser, "riser", setup, back * Pos(0, setup_bld[1])),
-        "Under the big tiles, behind the setup buildings",
+        "Under the islands, behind the setup buildings",
     ),
     "spacer": Object(
         single(spacer, "spacer", setup, base * Pos(decks_x + vp_size[0], 0, boat_h)),
@@ -2499,9 +2472,8 @@ project(
     plates=[
         "frame_half*2",
         "half_a*2 half_b*2 big",
-        "setup_buildings misc strips riser spacer deck_setup islands",
+        "setup_buildings misc strips riser spacer deck_setup islands vikings",
         "special_forge special_others",
         "buildings buildings_cap wood boats vp deck_occupations deck_weapons",
-        "vikings_red vikings_blue vikings_yellow vikings_black",
     ],
 )
