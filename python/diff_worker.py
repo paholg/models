@@ -124,6 +124,25 @@ def compare(old: Path, new: Path, out: Path) -> list[str]:
     return found
 
 
+def unhollowed(shape: "Shape") -> "Shape":
+    """`shape` with each solid's cavities filled: just its outer shell. FreeCAD
+    1.1 (OCCT 7.9) segfaults healing a solid of more than one shell as it
+    reads a STEP file, as booleans leave where a piece has a hidden pocket,
+    and a cavity can't be seen anyway."""
+    from build123d import Compound, Solid
+
+    solids = shape.solids()
+    if all(len(s.shells()) < 2 for s in solids):
+        return shape
+    # The outer shell is the one around the others: the biggest.
+    return Compound(
+        [
+            Solid(max(s.shells(), key=lambda h: h.bounding_box().diagonal))
+            for s in solids
+        ]
+    )
+
+
 def view(objects: dict[str, dict[str, Path]], title: str, path: Path) -> None:
     """Write the diffs as one STEP file: each object's pieces' (the folders
     compare() wrote to, by name) to a spot, in rows, labeled."""
@@ -146,7 +165,7 @@ def view(objects: dict[str, dict[str, Path]], title: str, path: Path) -> None:
         for piece, folder in pieces.items():
             for kind, color in COLORS.items():
                 if (folder / f"{kind}.brep").exists():
-                    shape = import_brep(folder / f"{kind}.brep")
+                    shape = unhollowed(import_brep(folder / f"{kind}.brep"))
                     shapes.append((f"{piece} {kind}", color, shape))
         box = Compound([s for *_, s in shapes]).bounding_box()
         # No narrower than its label.
