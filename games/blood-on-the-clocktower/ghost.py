@@ -5,7 +5,11 @@ The wand is a hexagonal pencil, pressed into a socket in the ghost's hem and
 pulled out again to put away: three thin walls in the socket spring against
 three of its flats. The ghost prints standing, the vote face down.
 
-The vote has a magnet or steel sealed in its middle, and disc magnets above
+Under the hem, the ghost stands on a rim that follows its edge and on a boss
+round the socket, with a groove between that rises to a rounded peak, higher
+under the hem's ripples, its sides at 45° to print without support.
+
+The vote has a steel plate sealed in its middle, and disc magnets above
 the slot hold it. The ghost and the vote are separate prints, and each pauses
 for what goes in it, then prints over.
 
@@ -39,6 +43,7 @@ from build123d import (
     Location,
     Part,
     Plane,
+    Polygon,
     Pos,
     Rectangle,
     RectangleRounded,
@@ -55,6 +60,7 @@ from build123d import (
     fillet,
     make_hull,
     mirror,
+    revolve,
     scale,
 )
 
@@ -79,7 +85,15 @@ hem_lobes = 6
 fold = 0.9
 fold_n = 7
 fold_twist = 40
+# Degrees each side of the face's middle with no folds: past the mouth's corners.
+fold_clear = 50
 foot_chamfer = 0.4
+# The groove under the hem: from this radius on the bed, outside the socket's
+# springs (about 6.1), out to a rim this wide that follows the hem, its sides
+# at 45°, and its peak rounded.
+groove_in = 8.5
+groove_rim = 2
+groove_round = 1
 
 # Eyes
 
@@ -142,14 +156,19 @@ lining = 0.6
 
 # Vote
 
-vote_w = 27.4
-vote_h = 14.7
-vote_t = 3.4
-vote_corner = 1.5
+# About 1 mm of wall round the insert's hollow, on its sides and at its
+# corners.
+vote_w = 28
+vote_h = 15.2
+vote_corner = 1
+# Over the insert, and under it with the gap over it as well, so that the
+# steel is in the vote's middle, which can go in the mouth either way up:
+# thin, to keep the steel near the ghost's magnets, but six of the vote's
+# layers, and more than the inlay.
+vote_skin = 0.6
 vote_chamfer = 0.4
-# What's sealed in the vote: a bar magnet for now, and later two steel strike
-# plates, 25.4 x 12.7 x 2 in all.
-insert = (18.4, 9, 2.5)
+# What's sealed in the vote: a steel plate, as measured.
+insert = (25.5, 12.7, 1.0)
 # Around the insert's edges, and over it. The gap over it is more than one of
 # the vote's layers (see `vote_settings`), so wherever the slicing planes fall
 # its hollow comes out at least a layer deeper than the insert, and the print
@@ -172,23 +191,26 @@ mag_n = 2
 mag_c = 0.1
 # From the vote's end to the ghost's magnets.
 mag_inset = 1
-# Between the slot and the ghost's magnet: less than the slot's lining, so
-# the magnets' pocket starts within it, not on its face.
-mag_skin = 0.5
+# Between the slot and the ghost's magnet: thin, to keep them near the
+# vote's steel, but each layer of it, sloping with the slot, is 0.8 wide: two
+# of a 0.4 nozzle's lines. Less than the slot's lining, so the magnets' pocket
+# starts within it, not on its face.
+mag_skin = 0.4
 # Open above the magnets, under what bridges them. Their pocket is open straight
 # up to the pause, so whatever the layers, the first to cover it is this far
 # above them or more.
 mag_over = 0.2
 
 r = d / 2
+# What's left hollow in the vote, how high it starts, and the vote's thickness
+# round it, the insert on the hollow's floor in the vote's middle.
+hollow = (insert[0] + 2 * insert_c, insert[1] + 2 * insert_c, insert[2] + insert_gap)
+hollow_z = vote_skin + insert_gap
+vote_t = hollow_z + hollow[2] + vote_skin
 slot_t = vote_t + 2 * slot_c
 slot_h = vote_h + 2 * slot_side_c
 mag_r = mag_d / 2 + mag_c
 mag_depth = mag_n * mag_h + 2 * mag_c
-# What's left hollow in the vote, in its middle, and the skin under it, which
-# is the same as over it.
-hollow = (insert[0] + 2 * insert_c, insert[1] + 2 * insert_c, insert[2] + insert_gap)
-hollow_z = (vote_t - hollow[2]) / 2
 
 assert inlay < hollow_z, "the vote's inlay reaches its insert"
 assert mag_skin < lining, "the magnets' pocket starts on the lining's face"
@@ -205,10 +227,11 @@ def body_r(z: float) -> float:
 def radius(z: float, a: float) -> float:
     """The skin's distance from the axis, z high and a degrees round from +x."""
     # Two sets of folds, out of step, so that no two are alike, fading out
-    # over the face and toward the crown.
+    # toward the crown, and gone from the face as wide as the mouth, so that
+    # they don't make its rim wobble.
     turn = fold_twist * (1 - z / h)
     off_face = min(abs(a - 270), 360 - abs(a - 270))
-    face = 1 - exp(-((off_face / 55) ** 2))
+    face = 1 - exp(-((max(0, off_face - fold_clear) / 30) ** 2))
     folds = (
         fold
         * (1 - z / h) ** 0.6
@@ -252,6 +275,24 @@ def inner(depth: float) -> Part:
     """The skin, this far in: shrunk about the shoulder's middle."""
     f = 1 - depth / r
     return Pos(0, 0, shoulder * (1 - f)) * scale(skin(), f)
+
+
+def groove() -> Part:
+    """The groove under the hem, reaching below the bed to cut cleanly: inside
+    the hem's outline drawn in by the rim, closing in at 45°, and outside a
+    cone round the socket, opening out at 45°. Its peak is where they meet,
+    higher where the hem ripples out."""
+    # Above its peak, which is at most about 5. Drawn in toward the axis, not
+    # offset, which would pinch where the ripples curve tightly.
+    tall = 7
+    rim = foot_chamfer + groove_rim
+    outer = Solid.make_loft(
+        [Pos(0, 0, z) * ring(0, rim + z) for z in (-1, tall)], ruled=True
+    )
+    cone = Polygon((0, -1), (groove_in - 1, -1), (groove_in + tall, tall), (0, tall))
+    cut = outer - revolve(Plane.XZ * cone, Axis.Z)
+    ridge = [e for e in cut.edges() if e.center().Z > 0.5]
+    return fillet(ridge, groove_round)
 
 
 # Eyes: holes into the face, from the axis out
@@ -540,7 +581,9 @@ def ghost() -> list[Piece]:
     # be cut by it too.
     magnets = magnet_pocket()
     tube = lining_tube()
-    white = round_rim(whole - deep) - (tube + eye_cut + socket(press) + magnets)
+    white = round_rim(whole - deep) - (
+        tube + eye_cut + socket(press) + magnets + groove()
+    )
     black = ((deep + tube) & inner(mouth_depth)) - (slot() + magnets)
     return [
         Piece(white, "sheet", "white", settings=sheet_settings, parent="ghost"),
