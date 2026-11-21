@@ -10,8 +10,7 @@ flat beside it, a left and a right.
 
 x is right and y is up, as it reads; z is out of the face, the back at z = 0.
 
-The view "assembly" is how it stands on a table; "stowed" has the feet packed
-in its back, which is also how it hangs.
+The view "assembly" is how it stands on a table.
 """
 
 from math import cos, radians, sin
@@ -519,14 +518,6 @@ def pieces() -> list[Piece]:
     ]
 
 
-def stowed() -> list[Piece]:
-    """The feet packed in the panel's back, as it hangs."""
-    return [
-        Piece(panel(), "sign", "white"),
-        Piece(inlay(), "text", "black"),
-    ] + [Piece(hole * shape, name, "white") for shape, name, hole in feet()]
-
-
 project(
     __file__,
     objects={"print": Object(pieces, "The panel face down, and its two feet")},
@@ -534,6 +525,5 @@ project(
         "assembly": View(
             lambda o: o["print"], "Standing in its feet, as on a table", ["print"]
         ),
-        "stowed": Object(stowed, "The feet packed in its back, as it hangs"),
     },
 )

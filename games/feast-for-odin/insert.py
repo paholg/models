@@ -33,8 +33,8 @@ player's color. Icons are inlaid in black, the special boards' pocket floors
 in a color of their own, and the forge board's icon in black and orange.
 
 The special boards' layout is special_layout.json, which pack_special.py
-writes from manifest.md. The views are the insert in the box, and the
-buildings' tray with its buildings in.
+writes from manifest.md. The view is the insert in the box, the in-game
+buildings in their tray.
 """
 
 import json
@@ -2327,10 +2327,10 @@ def frame_half() -> Part:
 
 
 def assembly(objects: Mapping[str, Pieces]) -> Pieces:
-    """The insert in the box, with the boards and the rulebooks, grouped by
-    layer in FreeCAD: the objects printed twice twice, the second half trays
-    behind the first, and the second frame half the first turned half round
-    the box's middle."""
+    """The insert in the box, with the boards, the rulebooks, and the in-game
+    buildings in their tray, grouped by layer in FreeCAD: the objects printed
+    twice twice, the second half trays behind the first, and the second frame
+    half the first turned half round the box's middle."""
 
     def into(
         group: str, pieces: Pieces, at: Location | None = None, suffix: str = ""
@@ -2370,6 +2370,7 @@ def assembly(objects: Mapping[str, Pieces]) -> Pieces:
         + layer("columns/bottom", "riser", *vikings)
         + layer("columns/middle", *decks, "big", "islands")
         + layer("columns/top", "vp", "spacer", "wood", "buildings", "buildings_cap")
+        + into("columns/top", buildings_in())
     )
 
 
@@ -2491,11 +2492,6 @@ project(
     views={
         "assembly": View(
             assembly, "In the box", [n for n in objects if n != "special_test"]
-        ),
-        "buildings_demo": View(
-            lambda o: o["buildings"] + o["buildings_cap"] + buildings_in(),
-            "The buildings' tray with its buildings in",
-            ["buildings", "buildings_cap"],
         ),
     },
     orca=orca,
