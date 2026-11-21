@@ -37,7 +37,8 @@ each set of changes to a project.** It draws in worker processes, each of
 which runs the file again up to `project()`, so keep the file's top-level code
 fast, and don't rely on a cache one object fills being there for another.
 
-`just view FILE.py OBJECT` opens an object or view in FreeCAD, and
+`just view FILE.py OBJECT` opens an object or view in FreeCAD, as an assembly
+of its pieces and groups, for the Assembly workbench's exploded views, and
 `just diff [REF]` shows in FreeCAD what the changes since REF (HEAD by
 default) do to each piece.
 

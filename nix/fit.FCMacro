@@ -11,13 +11,21 @@
 # FreeCAD needn't be restarted to see a change. While the file is gone, as when
 # generating deletes it to write it again, or its object is no longer in the
 # project, or generating failed, the document's tab says so.
+#
+# What the file holds goes in an assembly, named for the file, with its groups
+# as the assembly's parts: so that the Assembly workbench's exploded views can
+# pull it apart: it opens in that workbench, the assembly active, as its
+# commands want it. Those are kept through a reload, by the labels of what they
+# move, and a reload waits for an open task, such as one being edited.
 import hashlib
 import sys
 from pathlib import Path
 
+import CommandCreateView
 import FreeCAD
 import FreeCADGui as Gui
 import ImportGui
+import UtilsAssembly
 from PySide import QtCore
 
 # How often to look at the STEP file, in milliseconds.
@@ -32,6 +40,92 @@ def save(doc, saved: Path) -> None:
     doc.recompute()
     doc.saveAs(str(saved))
     Gui.getDocument(doc.Name).Modified = False
+
+
+def assemble(doc):
+    """Put what was imported in an assembly, in place of the part the STEP
+    file's own compound came in as, and return it."""
+    roots = doc.RootObjects
+    assembly = doc.addObject("Assembly::AssemblyObject", "Assembly")
+    assembly.Type = "Assembly"
+    assembly.newObject("Assembly::JointGroup", "Joints")
+    for root in roots:
+        if root.TypeId != "App::Part":
+            assembly.addObject(root)
+            continue
+        for child in root.Group:
+            assembly.addObject(child)
+        # Its label is the file's name, and free once it's gone.
+        label = root.Label
+        doc.removeObject(root.Name)
+        assembly.Label = label
+    # Active, which the workbench's commands are grayed out without.
+    Gui.getDocument(doc.Name).setEdit(assembly)
+    return assembly
+
+
+def exploded(doc) -> list:
+    """The document's exploded views, to make again of what's imported next:
+    the label of each and its moves, a move being its label, type, transform
+    and what it moves. Those are paths of labels, from the assembly down, since
+    an import names its objects by the order they come in."""
+    views = []
+    for view in doc.Objects:
+        if not isinstance(getattr(view, "Proxy", None), CommandCreateView.ExplodedView):
+            continue
+        moves = []
+        for move in view.Group:
+            moved = []
+            for sub in (move.References or (None, []))[1]:
+                # A path of names, ending in the element's, which is empty.
+                objects = [doc.getObject(name) for name in sub.split(".")[:-1]]
+                if all(objects):
+                    moved.append(tuple(o.Label for o in objects))
+            moves.append((move.Label, move.MoveType, move.MovementTransform, moved))
+        views.append((view.Label, moves))
+    return views
+
+
+def explode(assembly, views: list) -> None:
+    """Make exploded() views again, of what the assembly holds now: a move of
+    what's still there by its label, and none of what isn't."""
+    subs = {}
+
+    def index(group, names: tuple, labels: tuple) -> None:
+        for o in group.Group:
+            at = (*names, o.Name), (*labels, o.Label)
+            subs[at[1]] = ".".join(at[0]) + "."
+            if o.TypeId == "App::Part":
+                index(o, *at)
+
+    index(assembly, (), ())
+    for label, moves in views:
+        # As the workbench's own command makes them.
+        view = UtilsAssembly.getViewGroup(assembly).newObject(
+            "App::FeaturePython", "Exploded View"
+        )
+        CommandCreateView.ExplodedView(view)
+        CommandCreateView.ViewProviderExplodedView(view.ViewObject)
+        if view.Label != label:
+            view.Label = label
+        made = []
+        for name, kind, transform, moved in moves:
+            found = [subs[path] for path in moved if path in subs]
+            if not found:
+                continue
+            move = assembly.newObject("App::FeaturePython", "Move")
+            CommandCreateView.ExplodedViewStep(
+                move, CommandCreateView.ExplodedViewStepTypes.index(kind)
+            )
+            CommandCreateView.ViewProviderExplodedViewStep(move.ViewObject)
+            if move.Label != name:
+                move.Label = name
+            move.MovementTransform = transform
+            move.References = [assembly, found]
+            # Its lines, which show only while the view is edited.
+            move.Visibility = False
+            made.append(move)
+        view.Group = made
 
 
 def digest(path: Path) -> bytes:
@@ -69,6 +163,10 @@ class Watcher:
             self.timer.stop()
             WATCHERS.pop(self.doc_name, None)
             return
+        if Gui.Control.activeDialog():
+            # A task is open, an exploded view's say, on what a reload would
+            # take from under it: wait for it to close.
+            return
         now = self.stat()
         if now is None:
             self.pending = None
@@ -105,6 +203,10 @@ class Watcher:
         view = gui.activeView() if gui else None
         camera = view.getCamera() if view else None
         hidden = {o.Label for o in doc.Objects if not o.Visibility}
+        views = exploded(doc)
+        # The assembly, if it's being edited, as it stays once a task closes.
+        if gui:
+            gui.resetEdit()
         for name in [o.Name for o in doc.Objects]:
             # Removing a group may already have taken what's in it.
             if doc.getObject(name) is not None:
@@ -114,6 +216,7 @@ class Watcher:
         except Exception as e:
             FreeCAD.Console.PrintError(f"Reloading {self.step}: {e}\n")
             return
+        explode(assemble(doc), views)
         for o in doc.Objects:
             if o.Label in hidden:
                 o.Visibility = False
@@ -142,5 +245,7 @@ if step is not None:
     saved = root / "tmp/freecad" / name.with_suffix(".FCStd")
     saved.parent.mkdir(parents=True, exist_ok=True)
     doc = FreeCAD.ActiveDocument
+    assemble(doc)
+    Gui.activateWorkbench("AssemblyWorkbench")
     save(doc, saved)
     WATCHERS[doc.Name] = Watcher(doc, step, saved)
