@@ -37,17 +37,17 @@
     "orca-source": {
       "flake": false,
       "locked": {
-        "lastModified": 1794015873,
-        "narHash": "sha256-WL3tXUkj/XIltcUSSnHGbOXWWLuYZ/hEeZ6L94w72c0=",
+        "lastModified": 1795216767,
+        "narHash": "sha256-BvVqYV+9M+K+udl1X8vx7P7Eviv4SODRwFoOn3ZP7AE=",
         "owner": "OrcaSlicer",
         "repo": "OrcaSlicer",
-        "rev": "40ecc66f78ed72dc368e0c1ebe40d77f00cc8a19",
+        "rev": "ced396fedc05842467f147ec67e926e4eb577faf",
         "type": "github"
       },
       "original": {
         "owner": "OrcaSlicer",
-        "ref": "v2.5.0",
         "repo": "OrcaSlicer",
+        "rev": "ced396fedc05842467f147ec67e926e4eb577faf",
         "type": "github"
       }
     },
