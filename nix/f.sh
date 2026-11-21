@@ -142,8 +142,20 @@ launch() {
   pid=$!
   start="$(started "$pid")" || start=""
   jq --arg name "$name" --argjson pid "$pid" --arg started "$start" \
-    '.[$name] = {pid: $pid, started: $started}' <<<"$known" >"$PIDS.new"
+    '.[$name] = {pid: $pid, started: $started, args: $ARGS.positional}' \
+    --args "$@" <<<"$known" >"$PIDS.new"
   mv "$PIDS.new" "$PIDS"
+}
+
+# Succeed if the program last launched under the name $1 is still running, with
+# the arguments that follow.
+running() {
+  local name="$1" pid start
+  shift
+  read -r pid start < <(known_pids | jq --raw-output --arg name "$name" \
+    --args '.[$name] // empty | select(.args == $ARGS.positional)
+      | "\(.pid) \(.started)"' "$@") || return 1
+  [[ -n $start && "$(started "$pid")" == "$start" ]]
 }
 
 # List $file's generated projects into $projects.
@@ -403,8 +415,13 @@ while true; do
       )" || continue
       [[ -n $object ]] || continue
       view="gen/${file%.py}-$object.step"
-      launch freecad freecad "$view" nix/fit.FCMacro
-      status="Opened $view in FreeCAD."
+      # FreeCAD reloads what it has open when it changes (see nix/fit.FCMacro).
+      if running freecad freecad "$view" nix/fit.FCMacro; then
+        status="$view is already open in FreeCAD, which reloads it when it's generated."
+      else
+        launch freecad freecad "$view" nix/fit.FCMacro
+        status="Opened $view in FreeCAD, which reloads it when it's generated."
+      fi
       if [[ $state == stale ]]; then
         status+=" It's stale; press g to bring it up to date."
       fi
@@ -420,8 +437,12 @@ while true; do
       elif [[ ! -e $diffed ]]; then
         status="No piece of $file differs from HEAD."
       else
-        launch diff freecad "$diffed" nix/fit.FCMacro
-        status="Opened $diffed in FreeCAD."
+        if running diff freecad "$diffed" nix/fit.FCMacro; then
+          status="Diff updated in the open FreeCAD."
+        else
+          launch diff freecad "$diffed" nix/fit.FCMacro
+          status="Opened $diffed in FreeCAD."
+        fi
       fi
       ;;
     *:c)

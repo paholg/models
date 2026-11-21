@@ -5,11 +5,127 @@
 # It also saves the document, which FreeCAD otherwise leaves "Unnamed" and asks
 # to save on exit, under tmp/freecad/ at the STEP file's path in the repo:
 # gen/games/jenga/box-strip.step becomes tmp/freecad/gen/games/jenga/box-strip.FCStd.
+#
+# Then it watches the STEP file, and when it's written again, as by generating,
+# reimports it into the same document, keeping the camera and what's hidden, so
+# FreeCAD needn't be restarted to see a change. While the file is gone, as when
+# generating deletes it to write it again, or its object is no longer in the
+# project, or generating failed, the document's tab says so.
+import hashlib
 import sys
 from pathlib import Path
 
 import FreeCAD
 import FreeCADGui as Gui
+import ImportGui
+from PySide import QtCore
+
+# How often to look at the STEP file, in milliseconds.
+POLL = 500
+# What the tab says while the file is gone.
+GONE = " (missing)"
+
+
+def save(doc, saved: Path) -> None:
+    # The import leaves its objects touched, which would still count as a change
+    # to save.
+    doc.recompute()
+    doc.saveAs(str(saved))
+    Gui.getDocument(doc.Name).Modified = False
+
+
+def digest(path: Path) -> bytes:
+    return hashlib.sha256(path.read_bytes()).digest()
+
+
+class Watcher:
+    """Reimport `step` into `doc` once it's been written again and has stopped
+    changing, so as not to read it half written."""
+
+    def __init__(self, doc, step: Path, saved: Path):
+        self.doc_name = doc.Name
+        self.step = step
+        self.saved = saved
+        self.seen = self.stat()
+        self.digest = digest(step)
+        # What it last saw, which must hold still for one poll before a reload.
+        self.pending = None
+        self.label = doc.Label
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.poll)
+        self.timer.start(POLL)
+
+    def stat(self):
+        try:
+            s = self.step.stat()
+        except OSError:
+            return None
+        return (s.st_mtime_ns, s.st_size)
+
+    def poll(self) -> None:
+        doc = FreeCAD.listDocuments().get(self.doc_name)
+        if doc is None:
+            # Closed: stop watching.
+            self.timer.stop()
+            WATCHERS.pop(self.doc_name, None)
+            return
+        now = self.stat()
+        if now is None:
+            self.pending = None
+            self.gone(doc, True)
+            return
+        if now == self.seen:
+            self.pending = None
+            return
+        if now != self.pending:
+            self.pending = now
+            return
+        self.seen, self.pending = now, None
+        try:
+            new = digest(self.step)
+        except OSError:
+            return
+        self.gone(doc, False)
+        if new == self.digest:
+            return
+        self.digest = new
+        self.reload(doc)
+
+    def gone(self, doc, gone: bool) -> None:
+        label = self.label + GONE if gone else self.label
+        if doc.Label == label:
+            return
+        doc.Label = label
+        Gui.getDocument(doc.Name).Modified = False
+        if gone:
+            FreeCAD.Console.PrintWarning(f"{self.step} is missing; showing what it was\n")
+
+    def reload(self, doc) -> None:
+        gui = Gui.getDocument(doc.Name)
+        view = gui.activeView() if gui else None
+        camera = view.getCamera() if view else None
+        hidden = {o.Label for o in doc.Objects if not o.Visibility}
+        for name in [o.Name for o in doc.Objects]:
+            # Removing a group may already have taken what's in it.
+            if doc.getObject(name) is not None:
+                doc.removeObject(name)
+        try:
+            ImportGui.insert(str(self.step), doc.Name)
+        except Exception as e:
+            FreeCAD.Console.PrintError(f"Reloading {self.step}: {e}\n")
+            return
+        for o in doc.Objects:
+            if o.Label in hidden:
+                o.Visibility = False
+        if view and camera:
+            view.setCamera(camera)
+        save(doc, self.saved)
+        FreeCAD.Console.PrintMessage(f"Reloaded {self.step}\n")
+
+
+# Kept here, by document, so their timers aren't collected.
+WATCHERS = getattr(Gui, "_fit_watchers", {})
+Gui._fit_watchers = WATCHERS
 
 Gui.activeDocument().activeView().viewIsometric()
 Gui.SendMsgToActiveView("ViewFit")
@@ -25,8 +141,6 @@ if step is not None:
         name = Path(step.name)
     saved = root / "tmp/freecad" / name.with_suffix(".FCStd")
     saved.parent.mkdir(parents=True, exist_ok=True)
-    # The import leaves its objects touched, which would still count as a change
-    # to save.
-    FreeCAD.ActiveDocument.recompute()
-    FreeCAD.ActiveDocument.saveAs(str(saved))
-    Gui.ActiveDocument.Modified = False
+    doc = FreeCAD.ActiveDocument
+    save(doc, saved)
+    WATCHERS[doc.Name] = Watcher(doc, step, saved)
