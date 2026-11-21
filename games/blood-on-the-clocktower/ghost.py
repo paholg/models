@@ -170,12 +170,13 @@ vote_skin = 0.6
 vote_chamfer = 0.4
 # What's sealed in the vote: a steel plate, as measured.
 insert = (25.5, 12.7, 1.0)
-# Around the insert's edges, and over it. The gap over it is more than one of
-# the vote's layers (see `vote_settings`), so wherever the slicing planes fall
-# its hollow comes out at least a layer deeper than the insert, and the print
-# pauses with the insert under its top, even a layer early.
+# Around the insert's edges, and over it. The gap over it is more than two of
+# the vote's layers (see `vote_settings`): the pause can come a layer early,
+# and the hollow's faces can each slice a layer either way, but the insert is
+# still at least two layers under the walls' top when it goes in. At 0.15 it
+# sat a layer under them, and the floor's top and the steel made that up.
 insert_c = 0.2
-insert_gap = 0.15
+insert_gap = 0.25
 label = "VOTE"
 font = "Liberation Sans"
 # The capitals' height. They're about 0.72 of the font's em.
@@ -566,6 +567,12 @@ vote_settings = {
     "layer_height": 0.1,
     "top_surface_pattern": "hilbertcurve",
     "bottom_surface_pattern": "hilbertcurve",
+    # What bridges the insert's hollow is a layer's height, not the nozzle's: a
+    # thick bridge is a round thread the nozzle's width, 0.4, hanging that far
+    # below the nozzle, down onto the insert's top, which is 0.4 under the
+    # bridge's layer top.
+    "thick_bridges": False,
+    "thick_internal_bridges": False,
 }
 
 
