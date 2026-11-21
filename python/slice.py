@@ -2,7 +2,8 @@
 
 Orca's CLI knows nothing of the GUI's presets, and ignores the settings a
 published project (see build/build.py) carries, so this does both by hand: it
-flattens a machine, a process and a filament preset from Orca's own folders,
+flattens a machine, a process and a filament preset from Orca's bundled
+profiles and my own,
 lays the project's settings over them, and slices with the result.
 
 The machine defaults to the one selected in Orca, the process to its 0.20
@@ -17,6 +18,7 @@ Usage: slice.py FILE.3mf [--machine NAME] [--process NAME] [--filament NAME]
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -27,13 +29,16 @@ from build.orca import published
 
 ROOT = Path(__file__).resolve().parents[1]
 ORCA = Path.home() / ".config/OrcaSlicer"
+# Orca packs the system presets it installs into a binary <vendor>.opc, so read
+# them from the source of the same version instead.
+BUNDLED = Path(os.environ["ORCA_SOURCE"]) / "resources/profiles"
 KINDS = ("machine", "process", "filament")
 
 
 def presets() -> dict[str, dict[str, dict]]:
     """Every preset by kind and name: the bundled ones, then mine over them."""
     found: dict[str, dict[str, dict]] = {k: {} for k in KINDS}
-    for base in (ORCA / "system", ORCA / "user"):
+    for base in (BUNDLED, ORCA / "user"):
         for kind in KINDS:
             for path in sorted(base.glob(f"*/{kind}/**/*.json")):
                 try:
@@ -50,6 +55,35 @@ def flatten(group: dict[str, dict], name: str, kind: str) -> dict:
     d = group[name]
     base = flatten(group, d["inherits"], kind) if d.get("inherits") else {}
     return {**base, **d, "inherits": "", "from": "system", "type": kind}
+
+
+def extruder_variants(machine: dict) -> None:
+    """Fill in what the CLI needs to find each extruder's variant settings.
+
+    A machine whose extruders have several variants (the U1's: Standard and High
+    Flow) has settings with a value per extruder and variant, and the CLI finds
+    each extruder's through these, as the GUI does once it has filled them in:
+
+    * The map of variants to extruders, which a user preset saved by an older
+      version holds as it was then; the GUI rebuilds it from
+      `extruder_variant_list` (extend_extruder_variant in PrintConfig.cpp).
+    * `extruder_type`, one per extruder, which the U1's preset leaves at its
+      default of a single one.
+
+    Without them the CLI reads past the end of a list and aborts.
+    """
+    if "extruder_variant_list" not in machine:
+        return
+    ids, variants = [], []
+    for i, listed in enumerate(machine["extruder_variant_list"], 1):
+        names = [v for v in listed.split(",") if v]
+        ids += [str(i)] * len(names)
+        variants += names
+    machine["printer_extruder_id"] = ids
+    machine["printer_extruder_variant"] = variants
+    types = machine.get("extruder_type") or ["Direct Drive"]
+    count = len(machine["nozzle_diameter"])
+    machine["extruder_type"] = (types + [types[0]] * count)[:count]
 
 
 def pick(group: dict[str, dict], name: str, machine: str, kind: str) -> str:
@@ -84,6 +118,7 @@ def slice_project(project: Path, args: argparse.Namespace) -> list[Path]:
     selected = json.loads((ORCA / "OrcaSlicer.conf").read_text())["presets"]["machine"]
     machine_name = pick(found["machine"], args.machine or selected, "", "machine")
     machine = flatten(found["machine"], machine_name, "machine")
+    extruder_variants(machine)
     # My machines are copies; processes are named for the one they come from.
     stock = machine_name
     while found["machine"][stock].get("from") == "User":
