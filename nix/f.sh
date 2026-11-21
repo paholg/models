@@ -268,31 +268,50 @@ draw_generate() {
   printf '  \033[1mg\033[0m    generate %s (%s)\033[K\n' "$what" "$fresh"
 }
 
-# Watch $file's sources and what it generates, signalling this shell when one changes.
+# Watch $file's sources and what it generates, with a line on $events for
+# each change. Not a signal: one that lands mid-printf fails the write
+# (EINTR), which errexit turns into a crash.
 watch() {
   local dirs=("$(dirname "$file")" python/designs gen)
   if [[ $kind == gcode ]]; then
     dirs=("$(dirname "$file")" python/lib tmp)
   fi
   unwatch
-  inotifywait --monitor --quiet --recursive \
-    --event close_write,move,create,delete "${dirs[@]}" \
-    > >(while read -r _; do kill -USR1 $$ 2>/dev/null || exit; done) 2>/dev/null &
+  exec {events}< <(inotifywait --monitor --quiet --recursive \
+    --event close_write,move,create,delete "${dirs[@]}" 2>/dev/null)
   watcher=$!
 }
 
 unwatch() {
   if [[ -n $watcher ]]; then
     kill "$watcher" 2>/dev/null || true
+    exec {events}<&-
   fi
   watcher=""
 }
 
-# Bash runs this in the middle of the `read` that waits for a key.
-# Rewrite just the generate line, to leave any log on screen alone.
+# Wait for a key into $key, failing at the end of input, and redraw the
+# generate line whenever a watched file changes in the meantime.
+read_key() {
+  local got
+  while true; do
+    got=0
+    IFS= read -rsn1 -t 0.2 key || got=$?
+    if ((got == 0)); then
+      return 0
+    elif ((got <= 128)); then
+      return 1
+    fi
+    on_change
+  done
+}
+
+# Rewrite just the generate line, if anything changed, to leave any log on
+# screen alone.
 on_change() {
-  local was="$fresh"
-  if [[ -z $waiting ]]; then
+  local was="$fresh" any=""
+  while IFS= read -r -t 0.01 -u "$events" _; do any=1; done
+  if [[ -z $any ]]; then
     return
   fi
   check_fresh
@@ -311,9 +330,8 @@ changed=""
 # Whether to leave what is on screen, and print the keys below it.
 keep=""
 closed=()
-waiting=""
 watcher=""
-trap on_change USR1
+events=""
 trap unwatch EXIT
 
 pick "$*" || exit 0
@@ -321,9 +339,7 @@ watch
 
 while true; do
   draw
-  waiting=1
-  IFS= read -rsn1 key || exit 0
-  waiting=""
+  read_key || exit 0
   status=""
   case "$kind:$key" in
     cad:g | gcode:g)
