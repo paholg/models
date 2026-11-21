@@ -3,11 +3,10 @@ quarter. Two shapes: round; and round with a reeded edge, which has a bump
 every 30 degrees, so that each arrow points at one.
 
 The halves glue as coin.py's do, and only go together one way. Each shape is
-an object, and the plate is one of each; the views are the two put together,
-and pulled apart.
+an object, and the plate is one of each; the view is the two put together.
 """
 
-from build.cad import Object, project
+from build.cad import Object, View, project
 from designs.coin import Coin, row
 
 coins = {
@@ -26,12 +25,9 @@ coins = {
 project(
     __file__,
     objects={
-        shape: Object(coin.print, "Both halves face down, and their arrows")
+        shape: Object(coin.pieces, "Both halves face down, and their arrows")
         for shape, coin in coins.items()
     },
-    views={
-        "assembly": Object(lambda: row(coins), "Each shape, glued"),
-        "exploded": Object(lambda: row(coins, 12), "Each shape, its halves apart"),
-    },
+    views={"assembly": View(row, "Each shape, glued", list(coins))},
     plates=[" ".join(coins)],
 )

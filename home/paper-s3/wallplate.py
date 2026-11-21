@@ -37,7 +37,7 @@ from build123d import (
     offset,
 )
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 
 # Layout
 
@@ -393,10 +393,10 @@ def outlet_face() -> Part:
 # Put together
 
 
-def assembly() -> list[Piece]:
+def bought() -> list[Piece]:
+    """What's on the wall with it: the PaperS3, its plug, the cap's screws,
+    and the outlet beside it."""
     return [
-        Piece(plate(), "plate", "white"),
-        Piece(on_frame * cap(), "cap", "lightgray"),
         Piece(on_frame * papers3(), "PaperS3", "dimgray"),
         Piece(on_frame * plug(), "plug", "orange"),
         Piece(on_frame * cap_screws(), "screws", "silver"),
@@ -404,20 +404,21 @@ def assembly() -> list[Piece]:
     ]
 
 
-def plate_print() -> Part:
+def plate_print() -> list[Piece]:
     """Back down, as it is on the wall."""
     check_neighbor()
     print(
         f"  Plate is {plate_x1 - plate_x0:g} x {plate_h:g} mm, "
         f"the frame {z_top:g} mm out from the wall"
     )
-    return plate()
+    return [Piece(plate(), "plate")]
 
 
-def cap_print() -> Part:
+def cap_print() -> list[Piece]:
     """Face down."""
     face_down = Pos(0, 0, z_top) * Rot(180, 0, 0)
-    return face_down * Pos(-(frame_x0 + frame_x1) / 2, -cap_cy) * cap()
+    middle = Pos(-(frame_x0 + frame_x1) / 2, -cap_cy)
+    return [Piece(cap(), "cap", at=on_frame, place=face_down * middle)]
 
 
 project(
@@ -426,6 +427,12 @@ project(
         "plate": Object(plate_print, "The wall plate and the frame the PaperS3 is in"),
         "cap": Object(cap_print, "Goes on under the PaperS3, held by two M3 screws"),
     },
-    views={"assembly": Object(assembly, "On the wall, holding the PaperS3")},
+    views={
+        "assembly": View(
+            lambda o: o["plate"] + o["cap"] + bought(),
+            "On the wall, holding the PaperS3",
+            ["plate", "cap"],
+        )
+    },
     plates=["plate cap"],
 )

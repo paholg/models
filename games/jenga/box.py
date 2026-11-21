@@ -25,7 +25,7 @@ printed on its own, outside face down.
 "joint" is a test to print first: lengths of groove and of tongue at the
 clearances in joint_clears, printed as their walls are in the box.
 
-The view "assembly" shows the box closed; `lid_raise` lifts the lid.
+The view "assembly" shows the box closed, around the tower.
 """
 
 from math import cos, radians, sqrt, tan
@@ -45,12 +45,7 @@ from build123d import (
     extrude,
 )
 
-from build.cad import Object, Piece, part, project
-
-# Views
-
-# Lid height above closed, in the assembly view.
-lid_raise = 0
+from build.cad import Object, Piece, View, part, project
 
 # Tower
 
@@ -349,17 +344,21 @@ def tower() -> Part:
 # Prints
 
 
-def stacker_print() -> Part:
-    return Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, 90, 0) * stacker()
+def stacker_print() -> list[Piece]:
+    """On its right side, at 45° to fit the bed."""
+    on_side = Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, 90, 0)
+    return [Piece(stacker(), "stacker", place=on_side)]
 
 
-def lid_print() -> Part:
-    return Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, -90, 0) * lid()
+def lid_print() -> list[Piece]:
+    """On its left side, at 45° to fit the bed."""
+    on_side = Rot(0, 0, 45) * Pos(0, 0, o) * Rot(0, -90, 0)
+    return [Piece(lid(), "lid shell", place=on_side, parent="lid")]
 
 
-def strip_print() -> Part:
+def strip_print() -> list[Piece]:
     """Outside face down: on the lid, it would be a bridge."""
-    return Rot(0, 90, 0) * lip_strip()
+    return [Piece(lip_strip(), "strip", place=Rot(0, 90, 0), parent="lid")]
 
 
 def notches(i: int, length: float) -> Part:
@@ -399,19 +398,6 @@ def joint_test() -> list[Piece]:
     return pieces
 
 
-# Views
-
-
-def assembly() -> list[Piece]:
-    up = Pos(0, 0, lid_raise)
-    return [
-        Piece(stacker(), "stacker", "white"),
-        Piece(up * lid(), "lid shell", "lightgray", parent="lid"),
-        Piece(up * lip_strip(), "lip strip", "gainsboro", parent="lid"),
-        Piece(tower(), "tower", "burlywood"),
-    ]
-
-
 project(
     __file__,
     objects={
@@ -420,6 +406,17 @@ project(
         "strip": Object(strip_print, "The lid's right lip, glued in"),
         "joint": Object(joint_test, "Dovetail test pieces, one per clearance"),
     },
-    views={"assembly": Object(assembly, "The box closed, around the tower")},
+    views={
+        "assembly": View(
+            lambda o: (
+                o["stacker"]
+                + o["lid"]
+                + o["strip"]
+                + [Piece(tower(), "tower", "burlywood")]
+            ),
+            "The box closed, around the tower",
+            ["stacker", "lid", "strip"],
+        )
+    },
     plates=["stacker lid strip"],
 )

@@ -9,7 +9,7 @@ yellow.
 
 "panels" is the whole box, every panel outside down. "seam" and "magnets" are
 its tests, to try the key's and the magnets' fits before printing a box. The
-views are the box closed, open, and pulled apart.
+view is the box closed.
 """
 
 from dataclasses import replace
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from build123d import Pos, Sketch, import_svg, scale
 
-from build.cad import Object, project, sketch
+from build.cad import Object, View, project, sketch
 from designs.card_box import SETTINGS, Art, CardBox
 
 # Contents
@@ -93,13 +93,7 @@ project(
         "seam": Object(box.seam_test, "The front wall across the seam, at three fits"),
         "magnets": Object(box.magnet_test, "Magnet pockets at three crushes"),
     },
-    views={
-        "assembly": Object(box.assembly, "Closed"),
-        "open": Object(lambda: box.assembly(lift=40), "The lid lifted off"),
-        "exploded": Object(
-            lambda: box.assembly(lift=36, explode=12), "The panels pulled apart"
-        ),
-    },
+    views={"assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])},
     orca=SETTINGS,
     # The tests together, before the box.
     plates=["seam magnets", "panels"],

@@ -45,7 +45,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 
 # Panel
 
@@ -480,47 +480,60 @@ def inlay() -> Part:
 # Put together
 
 
-def sign(at: Location, feet: Part) -> list[Piece]:
-    """The panel and its inlay, put where `at` says, and the feet."""
+def feet() -> list[tuple[Part, str, Location]]:
+    """Each foot, its name, and where it lies in its pocket. The right is the
+    left turned over, so that, stood the same way, it's the left's mirror
+    image."""
+    left = foot()
+    right = part(Pos(0, 0, foot_t) * mirror(left, Plane.XY))
+    # Into place as stow() has it, which mirrors the right.
+    across = Pos(0, stow_y + foot_front)
     return [
-        Piece(at * panel(), "sign", "white"),
-        Piece(feet, "feet", "white"),
-        Piece(at * inlay(), "text", "black"),
+        (left, "left foot", Pos(-stow_wall / 2, 0) * across * Rot(0, 0, 90)),
+        (
+            right,
+            "right foot",
+            Pos(stow_wall / 2, 0, foot_t) * across * Rot(0, 0, 90) * Rot(180, 0, 0),
+        ),
     ]
 
 
-def stowed_feet() -> Part:
-    return part(Part() + [stow(s, foot()) for s in (-1, 1)])
+def pieces() -> list[Piece]:
+    """The panel and its inlay, and the feet. Put together, it stands in its
+    feet, its back's bottom edge in their slots. Printed, the panel lies face
+    down, its pockets and keyhole open to the top, and the feet as they lie in
+    it, moved out beside it."""
+    print(f"  Sign is {w} x {h:g} x {t} mm, and leans back {lean} degrees")
+    y, z = slot_xy(slot_clear / 2 + t, 0)
+    leaning = Pos(0, y, z) * Rot(90 - lean, 0, 0)
+    face_down = Pos(0, 0, t) * Rot(0, 180, 0)
+    # A foot's side, drawn in x and y, stands up in y and z.
+    standing = Rot(0, 0, 90) * Rot(90, 0, 0) * Pos(0, 0, -foot_t / 2)
+    beside = Pos(w / 2 + 50, 10 - stow_y)
+    return [
+        Piece(panel(), "sign", "white", at=leaning, place=face_down),
+        Piece(inlay(), "text", "black", at=leaning, place=face_down),
+    ] + [
+        Piece(shape, name, "white", at=Pos(s * feet_x) * standing, place=beside * hole)
+        for s, (shape, name, hole) in zip((-1, 1), feet())
+    ]
 
 
 def stowed() -> list[Piece]:
     """The feet packed in the panel's back, as it hangs."""
-    return sign(Pos(), stowed_feet())
-
-
-def assembly() -> list[Piece]:
-    """Standing in its feet, its back's bottom edge in their slots."""
-    y, z = slot_xy(slot_clear / 2 + t, 0)
-    leaning = Pos(0, y, z) * Rot(90 - lean, 0, 0)
-    # A foot's side, drawn in x and y, stands up in y and z.
-    standing = Rot(0, 0, 90) * Rot(90, 0, 0) * Pos(0, 0, -foot_t / 2)
-    feet = part(Part() + [Pos(s * feet_x, 0, 0) * standing * foot() for s in (-1, 1)])
-    return sign(leaning, feet)
-
-
-def to_print() -> list[Piece]:
-    """The panel face down, its pockets and keyhole open to the top, and the
-    feet as they lie in it, moved out beside it."""
-    print(f"  Sign is {w} x {h:g} x {t} mm, and leans back {lean} degrees")
-    face_down = Pos(0, 0, t) * Rot(0, 180, 0)
-    return sign(face_down, Pos(w / 2 + 50, 10 - stow_y) * stowed_feet())
+    return [
+        Piece(panel(), "sign", "white"),
+        Piece(inlay(), "text", "black"),
+    ] + [Piece(hole * shape, name, "white") for shape, name, hole in feet()]
 
 
 project(
     __file__,
-    objects={"print": Object(to_print, "The panel face down, and its two feet")},
+    objects={"print": Object(pieces, "The panel face down, and its two feet")},
     views={
-        "assembly": Object(assembly, "Standing in its feet, as on a table"),
+        "assembly": View(
+            lambda o: o["print"], "Standing in its feet, as on a table", ["print"]
+        ),
         "stowed": Object(stowed, "The feet packed in its back, as it hangs"),
     },
 )

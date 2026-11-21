@@ -7,7 +7,7 @@ front, and the logo in the lid's top.
 
 Five colors, so the body and the lid print apart, each an object of its own:
 the body in purple, white, green and red, the lid in lavender, purple and
-white. The views are the box closed, open, and pulled apart.
+white. The view is the box closed.
 
 The logo's letters are each set alone, so nothing is lost to OCCT reading only
 a font's `kern` table.
@@ -34,7 +34,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, project, sketch
+from build.cad import Object, View, project, sketch
 from designs.card_box import SETTINGS, Art, CardBox
 
 # Contents
@@ -260,11 +260,9 @@ project(
         "lid": Object(box.lid, "The lid's panels outside down, and the logo"),
     },
     views={
-        "assembly": Object(box.assembly, "Closed"),
-        "open": Object(lambda: box.assembly(lift=40), "The lid lifted off"),
-        "exploded": Object(
-            lambda: box.assembly(lift=36, explode=12), "The panels pulled apart"
-        ),
+        "assembly": View(
+            lambda o: box.closed(o["body"] + o["lid"]), "Closed", ["body", "lid"]
+        )
     },
     orca=SETTINGS,
     # Apart: five colors are more than the printer's four heads.

@@ -6,8 +6,8 @@ pointing at a vertex.
     coin = Coin("knurled", angles=(0, 120), bumps=12)
     project(
         __file__,
-        objects={"knurled": Object(coin.print, "Both halves, face down")},
-        views={"assembly": Object(coin.assembly, "Glued")},
+        objects={"knurled": Object(coin.pieces, "Both halves, face down")},
+        views={"assembly": View(row, "Glued", ["knurled"])},
     )
 
 It comes in three shapes: the octagon; a round coin; and a round one with a
@@ -24,7 +24,8 @@ half goes on the first turned over the x axis. games/magic-octagon/rotating.py
 builds on the blank and the arrows, with halves of its own.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 
 from build123d import (
     Axis,
@@ -148,9 +149,9 @@ def arrow_settings(angle: float) -> dict[str, object]:
     }
 
 
-def flipped(part: Shape, z: float) -> Shape:
+def flipped(z: float) -> Location:
     """Turned over the x axis, its face at z."""
-    return Pos(0, 0, z) * Rot(180, 0, 0) * part
+    return Pos(0, 0, z) * Rot(180, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -276,72 +277,50 @@ class Coin:
         face = up(self.arrow_2d(i), -1, 1 + INLAY)
         return self.blank() - face - self.at_pin(-1) * hole + self.at_pin(1) * pin
 
-    def place(self, i: int, part: Shape, apart: float = 0) -> Shape:
-        """Into place on the coin, the halves `apart` from each other."""
-        if i == 0:
-            return Pos(0, 0, -apart / 2) * part
-        return flipped(part, 2 * self.half_t + apart / 2)
-
-    def assembly(self, apart: float = 0) -> list[Piece]:
-        """Glued, or pulled `apart`."""
-        return [
-            piece
-            for i in (0, 1)
-            for piece in (
-                Piece(
-                    self.place(i, self.half(i), apart),
-                    f"half {i}",
-                    HALF_COLORS[i],
-                    parent=HALVES[i],
-                ),
-                Piece(
-                    self.place(i, self.arrow(i), apart),
-                    f"arrow {i}",
-                    ARROW_COLORS[i],
-                    parent=HALVES[i],
-                ),
-            )
-        ]
-
-    def print(self) -> list[Piece]:
-        """Both halves face down, side by side, and their arrows."""
+    def pieces(self) -> list[Piece]:
+        """Both halves and their arrows: printed face down, side by side, and
+        glued, the second half turned over onto the first."""
         pitch = D + 2 * BUMP_H + 5
+        at = (Location(), flipped(2 * self.half_t))
         return [
             piece
             for i in (0, 1)
             for piece in (
                 Piece(
-                    Pos(i * pitch) * self.half(i),
+                    self.half(i),
                     f"half {i}",
                     HALF_COLORS[i],
                     FILAMENTS[i],
                     half_settings(self.shape),
                     parent=HALVES[i],
+                    at=at[i],
+                    place=Pos(i * pitch),
                 ),
                 Piece(
-                    Pos(i * pitch) * self.arrow(i),
+                    self.arrow(i),
                     f"arrow {i}",
                     ARROW_COLORS[i],
                     FILAMENTS[1 - i],
                     arrow_settings(self.angles[i]),
                     parent=HALVES[i],
+                    at=at[i],
+                    place=Pos(i * pitch),
                 ),
             )
         ]
 
 
-def row(coins: dict[str, Coin], apart: float = 0) -> list[Piece]:
-    """Coins side by side, glued, or pulled `apart`: their pieces named for
-    them, in a group of each."""
+def row(coins: Mapping[str, list[Piece]]) -> list[Piece]:
+    """Coins side by side, each its pieces where they sit, named for it,
+    in a group of each."""
     pitch = D + 2 * BUMP_H + 5
     return [
-        Piece(
-            Pos(k * pitch) * p.shape,
-            f"{name} {p.name}",
-            p.color,
-            p.filament,
+        replace(
+            p,
+            shape=Pos(k * pitch) * p.shape,
+            name=f"{name} {p.name}",
             parent=f"{name}/{name} {p.parent}",
         )
-        for k, (name, coin) in enumerate(coins.items())
-        for p in coin.assembly(apart)
+        for k, (name, pieces) in enumerate(coins.items())
+        for p in pieces
     ]

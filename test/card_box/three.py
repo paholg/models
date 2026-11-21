@@ -6,11 +6,12 @@ Each box is an object, every panel outside down, on a plate of its own. The
 view "assembly" is the three closed, side by side.
 """
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from build123d import Circle, Pos
 
-from build.cad import Object, Piece, project
+from build.cad import Object, Piece, View, project
 from designs.card_box import SETTINGS, Art, CardBox
 
 # Each one's name and deck.
@@ -26,11 +27,11 @@ boxes = {
 }
 
 
-def assembly() -> list[Piece]:
+def assembly(objects: Mapping[str, list[Piece]]) -> list[Piece]:
     return [
         replace(p, shape=Pos(i * (box.size[0] + 20), 0, 0) * p.shape)
-        for i, box in enumerate(boxes.values())
-        for p in box.assembly()
+        for i, (name, box) in enumerate(boxes.items())
+        for p in box.closed(objects[name])
     ]
 
 
@@ -40,7 +41,7 @@ project(
         name: Object(box.panels, f"The {name} box's panels outside down")
         for name, box in boxes.items()
     },
-    views={"assembly": Object(assembly, "The three closed, side by side")},
+    views={"assembly": View(assembly, "The three closed, side by side", list(boxes))},
     orca=SETTINGS,
     plates=list(boxes),
 )

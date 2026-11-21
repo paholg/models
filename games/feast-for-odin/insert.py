@@ -33,13 +33,13 @@ player's color. Icons are inlaid in black, the special boards' pocket floors
 in a color of their own, and the forge board's icon in black and orange.
 
 The special boards' layout is special_layout.json, which pack_special.py
-writes from manifest.md. The views are the insert in the box, the same with
-its layers pulled apart, and the buildings' tray with its buildings in.
+writes from manifest.md. The views are the insert in the box, and the
+buildings' tray with its buildings in.
 """
 
 import json
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from functools import cache
 from math import atan, ceil, cos, hypot, pi, sin, sqrt, tan
 from pathlib import Path
@@ -83,7 +83,7 @@ from build123d import (
 )
 from shapely import MultiPoint
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 
 HERE = Path(__file__).parent
 
@@ -2198,38 +2198,71 @@ def special_test_pieces() -> Pieces:
     ]
 
 
-def single(draw: Callable[[], Shape], name: str, color: str) -> Callable[[], Pieces]:
-    return lambda: [body_piece(draw(), name, color)]
+# Where each object sits in the box, from the box's corner, bottom up: 1, the
+# boards, in their frame, and the rulebooks on them; 2, the half trays, one
+# behind the other; 3, the special boards; 4 to 6, the columns' bottom, middle
+# and top trays.
+corner = Pos(box_clear / 2, box_clear / 2)
+halves_at = corner * Pos(0, 0, board_stack_h + rulebooks[2])
+# Turned half round: the forge board at the right, its icon at the back.
+special_at = (
+    corner
+    * Pos(inner[0], inner[1], board_stack_h + rulebooks[2] + half_h)
+    * Rot(0, 0, 180)
+)
+base = corner * Pos(0, 0, board_stack_h + rulebooks[2] + half_h + special_h)
+back = base * Pos(0, front_y)
+upper = back * Pos(0, 0, base_h + tier_h)
+# Turned, its low side at the end of the box.
+bld_at = upper * Pos(inner[0], 0) * Rot(0, 0, 90)
+
+
+def placed(
+    draw: Callable[[], Pieces], at: Location, place: Location | None = None
+) -> Callable[[], Pieces]:
+    """What `draw` draws, sitting `at` in the box, and printed at `place`, or
+    as drawn."""
+    return lambda: [replace(p, at=at, place=place or Location()) for p in draw()]
+
+
+def single(
+    draw: Callable[[], Shape], name: str, color: str, at: Location
+) -> Callable[[], Pieces]:
+    return placed(lambda: [body_piece(draw(), name, color)], at)
 
 
 def viking(color: str) -> Callable[[], Pieces]:
-    return lambda: [body_piece(viking_tray(color), f"{color} bin", color)]
+    """Beside the setup buildings, two by two."""
+    k = viking_colors.index(color)
+    at = back * Pos(setup_bld[0] + (k % 2) * viking_bin[0], (k // 2) * viking_bin[1])
+    return single(lambda: viking_tray(color), f"{color} bin", color, at)
 
 
 def deck(i: int) -> Callable[[], Pieces]:
+    """Turned, each deck running along x, its front at the high end."""
     d = decks[i]
     color = setup if d.setup else game
-    return lambda: [body_piece(deck_tray(d.stl, d.cut), f"{d.name} tray", color)]
+    x = sum(deck_len[: i + 1])
+    at = base * Pos(x, 0, base_h) * Rot(0, 0, 90)
+    return single(lambda: deck_tray(d.stl, d.cut), f"{d.name} tray", color, at)
 
 
 # As printed: the buildings' tray standing on its end wall, the cap on its
 # outside face.
 bld_standing = Rot(0, -90, 0)
 cap_down = Pos(0, 0, bld_size[0]) * Rot(0, 90, 0)
-
-
-def buildings_pieces() -> Pieces:
-    return [body_piece(bld_standing * buildings_tray(), "buildings", game)]
-
-
-def cap_pieces() -> Pieces:
-    return [body_piece(cap_down * buildings_cap(), "cap", game)]
+buildings_pieces = placed(
+    lambda: [body_piece(buildings_tray(), "buildings", game)], bld_at, bld_standing
+)
+cap_pieces = placed(
+    lambda: [body_piece(buildings_cap(), "cap", game)], bld_at, cap_down
+)
 
 
 # Put together
 
 
-def board_stack(apart: float = 0) -> Pieces:
+def board_stack() -> Pieces:
     """The boards, bottom to top, one card_t layer each, within the box.
     Smallest at the bottom, the player boards, the biggest, on top: so the
     frame can be thick round the small ones, under the player boards'
@@ -2244,7 +2277,7 @@ def board_stack(apart: float = 0) -> Pieces:
     out = []
     for i, ((x, y), name, color) in enumerate(layers):
         x0, y0 = (box[0] - x) / 2, (box[1] - y) / 2
-        z = i * (card_t + apart)
+        z = i * card_t
         out.append(
             Piece(cuboid(x0, y0, z, x0 + x, y0 + y, z + card_t - 0.1), name, color)
         )
@@ -2293,118 +2326,56 @@ def frame_half() -> Part:
     return carve(block(x, y, h), cuts)
 
 
-def assembly(apart: float = 0) -> Pieces:
-    """The insert in the box, each layer `apart` over the one under it."""
-    c = box_clear / 2
-    pieces: Pieces = []
+def assembly(objects: Mapping[str, Pieces]) -> Pieces:
+    """The insert in the box, with the boards and the rulebooks, grouped by
+    layer in FreeCAD: the objects printed twice twice, the second half trays
+    behind the first, and the second frame half the first turned half round
+    the box's middle."""
 
-    def put(at: Location, items: Pieces, group: str, suffix: str = "") -> None:
+    def into(
+        group: str, pieces: Pieces, at: Location | None = None, suffix: str = ""
+    ) -> Pieces:
         """Moved by `at`, named with `suffix`, in `group`, and their own groups
         in that."""
-        for p in items:
-            parent = f"{group}/{p.parent}" if p.parent else group
-            pieces.append(
-                Piece(at * p.shape, p.name + suffix, p.color, p.filament, parent=parent)
+        return [
+            replace(
+                p,
+                shape=(at or Location()) * p.shape,
+                name=p.name + suffix,
+                parent=f"{group}/{p.parent}" if p.parent else group,
             )
+            for p in pieces
+        ]
 
-    # 1: the boards, in their frame, and the rulebooks on them.
-    frame = frame_half()
-    put(Pos(c, c, 0), [body_piece(frame, "frame half", setup)], "boards")
-    put(
-        Pos(c + inner[0], c, 0),
-        [body_piece(mirror(frame, Plane.YZ), "frame half", setup)],
-        "boards",
-        " 2",
-    )
-    put(Location(), board_stack(apart / 6), "boards")
-    zb = board_stack_h + board_layers * apart / 6 + apart / 2
+    def layer(group: str, *names: str) -> Pieces:
+        return [p for n in names for p in into(group, objects[n])]
+
+    middle = Vector(box[0] / 2, box[1] / 2)
+    turned = Pos(middle) * Rot(0, 0, 180) * Pos(-middle)
     x0, y0 = (box[0] - rulebooks[0]) / 2, (box[1] - rulebooks[1]) / 2
-    pieces.append(
-        Piece(
-            cuboid(x0, y0, zb, x0 + rulebooks[0], y0 + rulebooks[1], zb + rulebooks[2]),
-            "rulebooks",
-            "ivory",
-            parent="boards",
-        )
+    z = board_stack_h
+    books = cuboid(x0, y0, z, x0 + rulebooks[0], y0 + rulebooks[1], z + rulebooks[2])
+    halves = objects["half_a"] + objects["half_b"]
+    tray = "half trays/half tray"
+    vikings = [f"vikings_{color}" for color in viking_colors]
+    decks = ["deck_setup", "deck_occupations", "deck_weapons"]
+    return (
+        layer("boards", "frame_half")
+        + into("boards", objects["frame_half"], turned, " 2")
+        + into("boards", board_stack() + [Piece(books, "rulebooks", "ivory")])
+        + into(f"{tray} 1", halves, suffix=" 1")
+        + into(f"{tray} 2", halves, Pos(0, half[1]), " 2")
+        + layer("special boards", "special_forge", "special_others")
+        + layer("columns/bottom", "strips", "boats", "misc", "setup_buildings")
+        + layer("columns/bottom", "riser", *vikings)
+        + layer("columns/middle", *decks, "big", "islands")
+        + layer("columns/top", "vp", "spacer", "wood", "buildings", "buildings_cap")
     )
-    # 2: the half trays, one behind the other.
-    z = zb + rulebooks[2] + apart
-    for i in (0, 1):
-        at = Pos(c, c + i * half[1], z)
-        tray = f"half trays/half tray {i + 1}"
-        put(at, half_a_pieces(), tray, f" {i + 1}")
-        put(at * Pos(half_a.x, 0), half_b_pieces(), tray, f" {i + 1}")
-    # 3: the special boards, turned half round: the forge board at the right,
-    # its icon at the back.
-    z += half_h + apart
-    turned = Pos(c + inner[0], c + inner[1], z) * Rot(0, 0, 180)
-    put(turned, special_forge_pieces(), "special boards")
-    put(
-        turned * Pos(special_forge_size[0], 0),
-        special_others_pieces(),
-        "special boards",
-    )
-    # 4 to 6: the columns' bottom, middle and top trays.
-    z += special_h + apart
-    base = Pos(c, c, z)
-    low = "columns/bottom"
-    put(base, single(strips_tray, "strips", setup)(), low)
-    put(base * Pos(decks_x, 0), single(boat_tray, "boats", game)(), low)
-    put(base * Pos(decks_x, boat_size[1]), single(misc_tray, "misc", setup)(), low)
-    back = base * Pos(0, front_y)
-    put(back, single(setup_buildings_tray, "setup buildings", setup)(), low)
-    put(back * Pos(0, setup_bld[1]), single(riser, "riser", setup)(), low)
-    for k, color in enumerate(viking_colors):
-        put(
-            back
-            * Pos(setup_bld[0] + (k % 2) * viking_bin[0], (k // 2) * viking_bin[1]),
-            viking(color)(),
-            low,
-        )
-    mid, middle = Pos(0, 0, apart), "columns/middle"
-    x = 0.0
-    for i in range(len(decks)):
-        # Turned, each deck running along x, its front at the high end.
-        put(
-            mid * base * Pos(x + deck_len[i], 0, base_h) * Rot(0, 0, 90),
-            deck(i)(),
-            middle,
-        )
-        x += deck_len[i]
-    put(mid * back * Pos(0, 0, base_h), big_pieces(), middle)
-    put(
-        mid * back * Pos(big_size[0], 0, viking_h),
-        single(islands_tray, "islands", setup)(),
-        middle,
-    )
-    top, high = Pos(0, 0, 2 * apart), "columns/top"
-    put(top * base * Pos(decks_x, 0, boat_h), single(vp_tray, "vp", game)(), high)
-    put(
-        top * base * Pos(decks_x + vp_size[0], 0, boat_h),
-        single(spacer, "spacer", setup)(),
-        high,
-    )
-    upper = top * back * Pos(0, 0, base_h + tier_h)
-    put(upper, single(wood_tray, "wood", game)(), high)
-    # Turned, its low side at the end of the box.
-    bld = upper * Pos(inner[0], 0) * Rot(0, 0, 90)
-    put(
-        bld,
-        [
-            body_piece(buildings_tray(), "buildings", game),
-            body_piece(buildings_cap(), "cap", game),
-        ],
-        high,
-    )
-    return pieces
 
 
-def buildings_view() -> Pieces:
-    """The buildings' tray, capped, with its buildings in."""
-    pieces = [
-        body_piece(buildings_tray(), "buildings tray", game),
-        body_piece(buildings_cap(), "cap", game),
-    ]
+def buildings_in() -> Pieces:
+    """The in-game buildings, in their tray."""
+    pieces = []
     for i, n in enumerate(bld_stacks):
         stack = []
         for k in range(n):
@@ -2423,7 +2394,9 @@ def buildings_view() -> Pieces:
             stack.append(extrude(face, building[0]))
         pieces.append(
             Piece(
-                Part() + stack, f"buildings {i + 1}", ["peru", "sienna", "goldenrod"][i]
+                bld_at * (Part() + stack),
+                f"buildings {i + 1}",
+                ["peru", "sienna", "goldenrod"][i],
             )
         )
     return pieces
@@ -2443,65 +2416,86 @@ open_tray_settings = {"wall_sequence": "outer wall/inner wall"}
 orca = {"reduce_infill_retraction": 0}
 
 
+objects = {
+    "half_a": Object(
+        placed(half_a_pieces, halves_at), "Half a tray of goods tiles: print two"
+    ),
+    "half_b": Object(
+        placed(half_b_pieces, halves_at * Pos(half_a.x, 0)),
+        "The rest of a half tray, and its money: print two",
+    ),
+    "big": Object(
+        placed(big_pieces, back * Pos(0, 0, base_h)), "Big tiles and animals"
+    ),
+    "boats": Object(
+        single(boat_tray, "boats", game, base * Pos(decks_x, 0)), "The boat market"
+    ),
+    "vp": Object(
+        single(vp_tray, "vp", game, base * Pos(decks_x, 0, boat_h)),
+        "VP and penalty tokens, and the 2x5 money",
+    ),
+    "vikings_red": Object(viking("red"), "A player's vikings"),
+    "vikings_blue": Object(viking("blue"), "A player's vikings"),
+    "vikings_yellow": Object(viking("yellow"), "A player's vikings"),
+    "vikings_black": Object(viking("black"), "A player's vikings"),
+    "islands": Object(
+        single(islands_tray, "islands", setup, back * Pos(big_size[0], 0, viking_h)),
+        "The islands, open",
+        settings=open_tray_settings,
+    ),
+    "wood": Object(single(wood_tray, "wood", game, upper), "Ore, stone and wood"),
+    "buildings": Object(
+        buildings_pieces, "The in-game buildings, standing on an end wall"
+    ),
+    "buildings_cap": Object(
+        cap_pieces, "The buildings tray's other end wall, glued on"
+    ),
+    "setup_buildings": Object(
+        single(setup_buildings_tray, "setup buildings", setup, back),
+        "The setup buildings, open",
+        settings=open_tray_settings,
+    ),
+    "misc": Object(
+        single(misc_tray, "misc", setup, base * Pos(decks_x, boat_size[1])),
+        "The moose, the dice and the cube",
+    ),
+    "strips": Object(single(strips_tray, "strips", setup, base), "The mountain strips"),
+    "riser": Object(
+        single(riser, "riser", setup, back * Pos(0, setup_bld[1])),
+        "Under the big tiles, behind the setup buildings",
+    ),
+    "spacer": Object(
+        single(spacer, "spacer", setup, base * Pos(decks_x + vp_size[0], 0, boat_h)),
+        "Beside the VP tray",
+    ),
+    "frame_half": Object(
+        single(frame_half, "frame half", setup, corner), "Round the boards: print two"
+    ),
+    "deck_setup": Object(deck(0), "The setup occupation cards"),
+    "deck_occupations": Object(deck(1), "The in-game occupation cards"),
+    "deck_weapons": Object(deck(2), "The weapon cards"),
+    "special_forge": Object(
+        placed(special_forge_pieces, special_at), "The forge's special tiles"
+    ),
+    "special_others": Object(
+        placed(special_others_pieces, special_at * Pos(special_forge_size[0], 0)),
+        "The other special tiles",
+    ),
+    "special_test": Object(special_test_pieces, "A few doubtful special tiles, to try"),
+}
+
+
 project(
     __file__,
-    objects={
-        "half_a": Object(half_a_pieces, "Half a tray of goods tiles: print two"),
-        "half_b": Object(
-            half_b_pieces, "The rest of a half tray, and its money: print two"
-        ),
-        "big": Object(big_pieces, "Big tiles and animals"),
-        "boats": Object(single(boat_tray, "boats", game), "The boat market"),
-        "vp": Object(
-            single(vp_tray, "vp", game), "VP and penalty tokens, and the 2x5 money"
-        ),
-        "vikings_red": Object(viking("red"), "A player's vikings"),
-        "vikings_blue": Object(viking("blue"), "A player's vikings"),
-        "vikings_yellow": Object(viking("yellow"), "A player's vikings"),
-        "vikings_black": Object(viking("black"), "A player's vikings"),
-        "islands": Object(
-            single(islands_tray, "islands", setup),
-            "The islands, open",
-            settings=open_tray_settings,
-        ),
-        "wood": Object(single(wood_tray, "wood", game), "Ore, stone and wood"),
-        "buildings": Object(
-            buildings_pieces, "The in-game buildings, standing on an end wall"
-        ),
-        "buildings_cap": Object(
-            cap_pieces, "The buildings tray's other end wall, glued on"
-        ),
-        "setup_buildings": Object(
-            single(setup_buildings_tray, "setup buildings", setup),
-            "The setup buildings, open",
-            settings=open_tray_settings,
-        ),
-        "misc": Object(
-            single(misc_tray, "misc", setup), "The moose, the dice and the cube"
-        ),
-        "strips": Object(single(strips_tray, "strips", setup), "The mountain strips"),
-        "riser": Object(
-            single(riser, "riser", setup),
-            "Under the big tiles, behind the setup buildings",
-        ),
-        "spacer": Object(single(spacer, "spacer", setup), "Beside the VP tray"),
-        "frame_half": Object(
-            single(frame_half, "frame half", setup), "Round the boards: print two"
-        ),
-        "deck_setup": Object(deck(0), "The setup occupation cards"),
-        "deck_occupations": Object(deck(1), "The in-game occupation cards"),
-        "deck_weapons": Object(deck(2), "The weapon cards"),
-        "special_forge": Object(special_forge_pieces, "The forge's special tiles"),
-        "special_others": Object(special_others_pieces, "The other special tiles"),
-        "special_test": Object(
-            special_test_pieces, "A few doubtful special tiles, to try"
-        ),
-    },
+    objects=objects,
     views={
-        "assembly": Object(assembly, "In the box"),
-        "exploded": Object(lambda: assembly(30), "In the box, its layers pulled apart"),
-        "buildings_demo": Object(
-            buildings_view, "The buildings' tray with its buildings in"
+        "assembly": View(
+            assembly, "In the box", [n for n in objects if n != "special_test"]
+        ),
+        "buildings_demo": View(
+            lambda o: o["buildings"] + o["buildings_cap"] + buildings_in(),
+            "The buildings' tray with its buildings in",
+            ["buildings", "buildings_cap"],
         ),
     },
     orca=orca,

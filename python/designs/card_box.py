@@ -8,7 +8,9 @@ on by magnets.
     project(
         __file__,
         objects={"panels": Object(box.panels, "Every panel, outside down")},
-        views={"assembly": Object(box.assembly, "Closed")},
+        views={
+            "assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])
+        },
         orca=SETTINGS,
     )
 
@@ -68,7 +70,7 @@ and `lid` print apart, as objects of their own.
 strip of magnet pockets: each at a few fits, to try before printing a box.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from math import atan2, cos, degrees, hypot, radians, sin
@@ -241,7 +243,8 @@ class Magnets:
 
 @dataclass(frozen=True)
 class CardBox:
-    """A card box, as a value: its panels and views are its methods."""
+    """A card box, as a value: its panels are its methods, and closed()
+    arranges them."""
 
     # A card in its sleeve, outside, at its largest: width, length.
     sleeve: tuple[float, float] = (66.5, 92.5)
@@ -605,58 +608,39 @@ class CardBox:
     def _face(panel: str) -> str:
         return panel.removeprefix("lid ")
 
-    def _art_pieces(
-        self, faces: Sequence[str], at: Callable[[str], Location]
-    ) -> list[Piece]:
-        """The art of these faces, each layer a piece under its panel, moved by
-        at(face)."""
+    def _art_pieces(self, faces: Sequence[str]) -> list[Piece]:
+        """The art of these faces, each layer a piece under its panel,
+        laid with it."""
         return [
             Piece(
-                at(face) * solid,
+                solid,
                 self._named(a.name),
                 a.color,
                 settings=self._art_settings(face, a),
                 parent=self._parent(face),
+                place=self._flat(face),
             )
             for face in faces
             for a, solid in zip(self._layers(face), self._inlays[face])
         ]
 
-    def assembly(self, lift: float = 0, explode: float = 0) -> list[Piece]:
-        """The box put together, closed: the lid lifted by `lift`, and the
-        panels pulled `explode` apart along their faces, art and magnets with
-        them."""
-
-        def moved(face: str, lid: bool) -> Location:
-            return Pos(0, 0, lift if lid else 0) * Pos(outward(face) * explode)
-
-        pieces = [
-            Piece(
-                moved(self._face(p), is_lid(p)) * part,
-                self._named(f"{p} panel"),
-                self._color(p),
-                parent=self._parent(p),
-            )
-            for p, part in self._panels.items()
-        ]
+    def closed(self, panels: list[Piece]) -> list[Piece]:
+        """The box closed: its panels and their art, where they sit, and the
+        magnets in them, with their panels."""
+        magnets = []
         for wall in ("front", "back"):
             for lid in (False, True):
-                magnets = Part() + [
-                    moved(wall, lid) * f * self._magnet()
-                    for f in self._magnet_frames(wall, lid)
-                ]
                 panel = f"lid {wall}" if lid else wall
-                pieces.append(
+                magnets.append(
                     Piece(
-                        magnets,
+                        Part()
+                        + [f * self._magnet() for f in self._magnet_frames(wall, lid)],
                         self._named(f"{panel} magnets"),
                         "silver",
                         parent=self._parent(panel),
                     )
                 )
-        return pieces + self._art_pieces(
-            ("front", "back", "top"), lambda face: moved(face, face == "top")
-        )
+        return panels + magnets
 
     # Printing
 
@@ -720,18 +704,18 @@ class CardBox:
             if is_lid(p) != lid:
                 continue
             face = self._face(p)
-            at = self._flat(face, lid and face != "top")
             pieces.append(
                 Piece(
-                    at * part,
+                    part,
                     self._named(f"{p} panel"),
                     self._color(p),
                     settings=self._settings(p),
                     parent=self._parent(p),
+                    place=self._flat(face, lid and face != "top"),
                 )
             )
         faces = ("top",) if lid else ("front", "back")
-        return pieces + self._art_pieces(faces, self._flat)
+        return pieces + self._art_pieces(faces)
 
     def body(self) -> list[Piece]:
         """The body's panels on the bed, with the front's and back's art."""

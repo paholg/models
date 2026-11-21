@@ -38,7 +38,7 @@ slider's plate and the rupee's socket on z = 0, and the rupee's point toward
 Each part is an object, and the four go on one plate, which pauses for the
 back's magnets. "test" is three short tracks, at each of `test_bumps` for arms
 or `test_lifts` for magnets, the dots on each counting from the first. The
-views are the tracker put together, and pulled apart.
+view is the tracker put together.
 """
 
 from dataclasses import dataclass
@@ -68,7 +68,7 @@ from build123d import (
     offset,
 )
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 
 # Card
 
@@ -655,41 +655,24 @@ def on_track(t: Track, i: int, z: float) -> Location:
     return Pos(t.at(i), t.y, z) * Rot(0, 0, 180)
 
 
-def assembly(apart: float = 0) -> list[Piece]:
-    """At 0, as each player's sliders start. `apart` pulls the layers apart."""
-    lift = Pos(0, 0, apart)
-    sliders = Part() + [on_track(t, 0, back_t) * slider() for t in card_tracks]
-    return [
-        Piece(Pos(0, 0, -apart) * back(), "back", body_color),
-        Piece(sliders, "sliders", body_color),
-        Piece(lift * top(), "top plate", body_color, parent="top"),
-        Piece(lift * numbers(), "numbers", number_color, parent="top"),
-    ] + [
-        Piece(
-            Pos(0, 0, 2 * apart)
-            * (Part() + [on_track(t, 0, top_h + rupee_lift) * rupee() for t in player]),
-            f"rupees {p}",
-            color,
-        )
-        for p, (player, color) in enumerate(zip(tracks, rupee_colors))
-    ]
-
-
 # Prints, with the tracks along x.
 
 # Turned over, not mirrored, which would print the numbers backwards.
 face_down = Pos(0, 0, top_h) * Rot(180, 0, 0)
 
 
-def grid(one: Part, n: int, dx: float, dy: float) -> Part:
-    """n of a part, two to a row, dx and dy apart."""
-    return part(Part() + [Pos(k % 2 * dx, k // 2 * dy) * one for k in range(n)])
+def grid(k: int, dx: float, dy: float) -> Location:
+    """Where the kth of several goes, two to a row, dx and dy apart."""
+    return Pos(k % 2 * dx, k // 2 * dy)
+
+
+# Put together, the sliders and rupees are at 0, as each player's start.
 
 
 def top_print() -> list[Piece]:
     return [
-        Piece(face_down * top(), "top plate", body_color, parent="top"),
-        Piece(face_down * numbers(), "numbers", number_color, parent="top"),
+        Piece(top(), "top plate", body_color, place=face_down, parent="top"),
+        Piece(numbers(), "numbers", number_color, place=face_down, parent="top"),
     ]
 
 
@@ -698,19 +681,30 @@ def back_print() -> list[Piece]:
 
 
 def sliders_print() -> list[Piece]:
-    sliders = grid(slider(), len(card_tracks), plate_l + 5, plate_w + 5)
-    return [Piece(sliders, "sliders", body_color)]
+    return [
+        Piece(
+            slider(),
+            f"slider {k}",
+            body_color,
+            at=on_track(t, 0, back_t),
+            place=grid(k, plate_l + 5, plate_w + 5),
+        )
+        for k, t in enumerate(card_tracks)
+    ]
 
 
 def rupees_print() -> list[Piece]:
     """A player's two in a row, a row each."""
     return [
         Piece(
-            Pos(0, p * (rupee_l + rupee_h + 4)) * grid(rupee(), 2, 2 * rupee_h + 4, 0),
-            f"rupees {p}",
+            rupee(),
+            f"rupee {p} {k}",
             color,
+            at=on_track(t, 0, top_h + rupee_lift),
+            place=Pos(0, p * (rupee_l + rupee_h + 4)) * grid(k, 2 * rupee_h + 4, 0),
         )
-        for p, color in enumerate(rupee_colors)
+        for p, (player, color) in enumerate(zip(tracks, rupee_colors))
+        for k, t in enumerate(player)
     ]
 
 
@@ -764,8 +758,11 @@ project(
         ),
     },
     views={
-        "assembly": Object(assembly, "Put together"),
-        "exploded": Object(lambda: assembly(8), "Pulled apart"),
+        "assembly": View(
+            lambda o: [p for n in ("back", "sliders", "top", "rupees") for p in o[n]],
+            "Put together",
+            ["back", "sliders", "top", "rupees"],
+        )
     },
     # Together: the plate pauses for the back's magnets.
     plates=["top back sliders rupees"],
