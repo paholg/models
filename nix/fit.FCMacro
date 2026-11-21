@@ -12,12 +12,16 @@
 # generating deletes it to write it again, or its object is no longer in the
 # project, or generating failed, the document's tab says so.
 #
+# FreeCAD imports a piece of several solids as a group of them: each is made
+# one object again, so that a group is only ever one the project made.
+#
 # What the file holds goes in an assembly, named for the file, with its groups
 # as the assembly's parts: so that the Assembly workbench's exploded views can
 # pull it apart: it opens in that workbench, the assembly active, as its
 # commands want it. Those are kept through a reload, by the labels of what they
 # move, and a reload waits for an open task, such as one being edited.
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +29,7 @@ import CommandCreateView
 import FreeCAD
 import FreeCADGui as Gui
 import ImportGui
+import Part
 import UtilsAssembly
 from PySide import QtCore
 
@@ -42,9 +47,62 @@ def save(doc, saved: Path) -> None:
     Gui.getDocument(doc.Name).Modified = False
 
 
+def whole(doc) -> None:
+    """Make one object of each piece that was imported as a group of its
+    solids. Such a group holds nothing but shapes, named as it is but for the
+    digits FreeCAD ends a taken label with, and all of one look. A group the
+    project made of pieces so alike becomes one object too."""
+
+    def base(o) -> str:
+        return re.sub(r"\s*\d*$", "", o.Label)
+
+    def look(o) -> tuple:
+        return (o.ViewObject.ShapeColor, o.ViewObject.Transparency)
+
+    def split(o) -> bool:
+        if o.TypeId != "App::Part":
+            return False
+        solids = o.Group
+        return (
+            len(solids) > 1
+            and all(s.TypeId == "Part::Feature" for s in solids)
+            and {base(s) for s in solids} == {base(o)}
+            and len({look(s) for s in solids}) == 1
+        )
+
+    def mend(group) -> None:
+        held = []
+        for o in group.Group:
+            if not split(o):
+                if o.TypeId == "App::Part":
+                    mend(o)
+                held.append(o)
+                continue
+            solids = o.Group
+            # The first has the piece's own name.
+            piece = doc.addObject("Part::Feature", solids[0].Name + "_whole")
+            piece.Shape = Part.makeCompound([s.Shape for s in solids])
+            piece.Placement = o.Placement
+            piece.ViewObject.ShapeAppearance = solids[0].ViewObject.ShapeAppearance
+            piece.ViewObject.Transparency = solids[0].ViewObject.Transparency
+            label = solids[0].Label
+            for gone in [*solids, o]:
+                doc.removeObject(gone.Name)
+            piece.Label = label
+            held.append(piece)
+        # In the order they came.
+        group.Group = held
+
+    # But for the file's own compound, whatever it's called.
+    for root in doc.RootObjects:
+        if root.TypeId == "App::Part":
+            mend(root)
+
+
 def assemble(doc):
     """Put what was imported in an assembly, in place of the part the STEP
     file's own compound came in as, and return it."""
+    whole(doc)
     roots = doc.RootObjects
     assembly = doc.addObject("Assembly::AssemblyObject", "Assembly")
     assembly.Type = "Assembly"
