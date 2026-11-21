@@ -130,6 +130,12 @@ TEXTURES = {
     "smooth": Texture(fold=0, hem_h=13, hem_ripple=1.8, hem_lobes=5),
     # A ragged hem of many deep scallops, and the folds.
     "tatters": Texture(hem_h=13, hem_ripple=1.6, hem_lobes=11),
+    # A few big, deep folds, straight down, like heavy curtains.
+    "drapes": Texture(fold=2.4, fold_n=5, twist=0, second=0.25, second_twist=0),
+    # Bands wound round and round, like a sheet wrapped on.
+    "coil": Texture(fold=0.8, fold_n=3, twist=540, second=0),
+    # Many small folds, crossing every which way.
+    "rumpled": Texture(fold=0.9, fold_n=8, twist=70, second=0.5, second_twist=-1.6),
 }
 # The folds fade out round the eyes and mouth, seen from in front: none
 # within `clear_rim` of their outlines, so that the face round them is
