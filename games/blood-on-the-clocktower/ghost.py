@@ -24,15 +24,15 @@ frame its face is at z = 0, and the end that goes in the mouth is at -x.
 Each ghost has a `Style`: its eyes, its mouth and its sheet's texture, each
 named from EYES, MOUTHS and TEXTURES. Each mouth places the slot, which is
 the same size wherever it is, with the magnets beside it as ever, and takes
-in its opening. The folds fade out round the eyes and mouth. "ghost" is the plain
-one; each sample, "eyes-angry" say, is the plain one but for one thing, and
-the views "eyes", "mouths" and "textures" set each kind's samples in a row.
+in its opening. The folds fade out round the eyes and mouth. `GHOSTS` are
+the ones to print, each an object, set at random from a seed.
 
 "fit" is the socket alone, at each of `fit_press`, to try on a pencil: the dots
-on each count from the loosest. The view "assembly" is the ghost on its pencil,
-holding its vote.
+on each count from the loosest. The view "assembly" is every ghost on its
+pencil, holding its vote.
 """
 
+import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import cache
@@ -1026,56 +1026,82 @@ def fit() -> list[Piece]:
     return pieces
 
 
-def assembly() -> list[Piece]:
-    """On its pencil, its vote in its mouth, face up."""
-    held = (
-        slot_frame(slot_at(PLAIN.mouth))
-        * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c)
-        * Rot(180, 0, 0)
-    )
+# The ghosts to print: each eyes, mouth and texture as often as the rest of
+# its kind, paired at random, but no two ghosts with the same two of them.
+# Drawn again with the same seed, they're the same ghosts.
+ghost_n = 20
+ghost_seed = 1
+
+
+def styles(n: int, seed: int) -> list[Style]:
+    kinds = [list(EYES), list(MOUTHS), list(TEXTURES)]
+    assert all(n % len(k) == 0 for k in kinds), "each can't be used as often"
+    rng = random.Random(seed)
+    while True:
+        picks = []
+        for k in kinds:
+            pick = k * (n // len(k))
+            rng.shuffle(pick)
+            picks.append(pick)
+        drawn = list(zip(*picks, strict=True))
+        pairs = [(i, j, s[i], s[j]) for s in drawn for i, j in [(0, 1), (0, 2), (1, 2)]]
+        if len(set(pairs)) == len(pairs):
+            return [Style(*s) for s in drawn]
+
+
+GHOSTS = {f"ghost-{k}": s for k, s in enumerate(styles(ghost_n, ghost_seed), 1)}
+
+
+def pencil() -> Part:
+    """The pencil, its corners rounded off, in the socket."""
     hexagon = RegularPolygon(pencil_flats / 2, 6, major_radius=False)
-    pencil = Pos(0, 0, socket_depth - wand_l) * extrude(
+    return Pos(0, 0, socket_depth - wand_l) * extrude(
         sketch(hexagon & Circle(pencil_corners / 2)), wand_l
     )
-    return ghost() + placed_vote(held) + [Piece(pencil, "pencil", "gray20")]
 
 
-# Samples, each the plain ghost but for one thing, in rows of each.
-samples = {
-    f"{kind}-{name}": replace(PLAIN, **{kind: name})
-    for kind, names in [("eyes", EYES), ("mouth", MOUTHS), ("texture", TEXTURES)]
-    for name in names
-    if replace(PLAIN, **{kind: name}) != PLAIN
-}
-
-
-def row(kind: str) -> View:
-    names = [n for n in samples if n.startswith(f"{kind}-")]
-
-    def arrange(objects: Mapping[str, list[Piece]]) -> list[Piece]:
-        return [
+def assembly(objects: Mapping[str, list[Piece]]) -> list[Piece]:
+    """The ghosts in rows, each on its pencil, its vote in its mouth, face up."""
+    pitch = d + 2 * bell + 8
+    columns = 5
+    shown = []
+    for k, (name, style) in enumerate(GHOSTS.items()):
+        at = Pos(pitch * (k % columns), -pitch * (k // columns))
+        held = (
+            slot_frame(slot_at(style.mouth))
+            * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c)
+            * Rot(180, 0, 0)
+        )
+        pieces = [
+            *objects[name],
+            *(replace(p, shape=held * p.shape) for p in objects["vote"]),
+            Piece(pencil(), "pencil", "gray20"),
+        ]
+        shown += [
             replace(
                 p,
-                shape=Pos(k * (d + 2 * bell + 6)) * p.shape,
+                shape=at * p.shape,
                 name=f"{name} {p.name}",
-                parent=f"{name}/{name} {p.parent}",
+                parent=f"{name}/{name} {p.parent}" if p.parent else name,
             )
-            for k, (name, pieces) in enumerate(objects.items())
             for p in pieces
         ]
-
-    return View(arrange, f"Each {kind}, beside the plain ghost", ["ghost", *names])
+    return shown
 
 
 project(
     __file__,
     objects={
-        "ghost": Object(
-            ghost,
-            "Standing, pausing for its magnets",
-            settings=ghost_settings,
-            pauses=[ghost_pause],
-        ),
+        **{
+            name: Object(
+                lambda style=style: ghost(style),
+                f"{style.eyes} eyes, {style.mouth} mouth, {style.texture}; "
+                "standing, pausing for its magnets",
+                settings=ghost_settings,
+                pauses=[ghost_pause],
+            )
+            for name, style in GHOSTS.items()
+        },
         "vote": Object(
             vote,
             "Face down, pausing for its insert",
@@ -1083,22 +1109,14 @@ project(
             pauses=[vote_pause],
         ),
         "fit": Object(fit, "The socket alone, at each press, to try on a pencil"),
-        **{
-            name: Object(
-                lambda style=style: ghost(style),
-                f"With {style}",
-                settings=ghost_settings,
-                pauses=[ghost_pause],
-            )
-            for name, style in samples.items()
-        },
     },
     views={
-        "assembly": Object(assembly, "On its pencil, its vote in its mouth"),
-        "eyes": row("eyes"),
-        "mouths": row("mouth"),
-        "textures": row("texture"),
+        "assembly": View(
+            assembly,
+            "Each ghost on its pencil, its vote in its mouth",
+            [*GHOSTS, "vote"],
+        )
     },
     # Apart: the vote's layers are thinner than the ghost's.
-    plates=["ghost", "vote"],
+    plates=[" ".join(GHOSTS), f"vote*{ghost_n}"],
 )
