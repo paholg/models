@@ -2157,12 +2157,18 @@ Pieces = list[Piece]
 
 def half_a_pieces() -> Pieces:
     body, icons = half_a_tray()
-    return [body_piece(body, "half a", game), icons_piece(icons, "half a")]
+    return [
+        body_piece(body, "half a tray", game, "half a"),
+        icons_piece(icons, "half a", "half a"),
+    ]
 
 
 def half_b_pieces() -> Pieces:
     body, icons = half_b_tray()
-    return [body_piece(body, "half b", game), icons_piece(icons, "half b")]
+    return [
+        body_piece(body, "half b tray", game, "half b"),
+        icons_piece(icons, "half b", "half b"),
+    ]
 
 
 def big_pieces() -> Pieces:
@@ -2325,28 +2331,23 @@ def frame_half() -> Part:
 
 
 def assembly(objects: Mapping[str, Pieces]) -> Pieces:
-    """The insert in the box, with the boards and the rulebooks, grouped by
-    layer in FreeCAD: the objects printed twice twice, the second half trays
-    behind the first, and the second frame half the first turned half round
-    the box's middle."""
+    """The insert in the box, with the boards and the rulebooks. Each thing
+    of several pieces is a group in FreeCAD, and nothing groups those: the
+    objects printed twice twice, the second half trays behind the first, and
+    the second frame half the first turned half round the box's middle."""
 
-    def into(
-        group: str, pieces: Pieces, at: Location | None = None, suffix: str = ""
-    ) -> Pieces:
-        """Moved by `at`, named with `suffix`, in `group`, and their own groups
-        in that."""
+    def again(pieces: Pieces, at: Location, suffix: str) -> Pieces:
+        """Another of them: moved by `at`, they and their group named with
+        `suffix`."""
         return [
             replace(
                 p,
-                shape=(at or Location()) * p.shape,
+                shape=at * p.shape,
                 name=p.name + suffix,
-                parent=f"{group}/{p.parent}" if p.parent else group,
+                parent=p.parent and p.parent + suffix,
             )
             for p in pieces
         ]
-
-    def layer(group: str, *names: str) -> Pieces:
-        return [p for n in names for p in into(group, objects[n])]
 
     middle = Vector(box[0] / 2, box[1] / 2)
     turned = Pos(middle) * Rot(0, 0, 180) * Pos(-middle)
@@ -2354,19 +2355,22 @@ def assembly(objects: Mapping[str, Pieces]) -> Pieces:
     z = board_stack_h
     books = cuboid(x0, y0, z, x0 + rulebooks[0], y0 + rulebooks[1], z + rulebooks[2])
     halves = objects["half_a"] + objects["half_b"]
-    tray = "half trays/half tray"
-    decks = ["deck_setup", "deck_occupations", "deck_weapons"]
+    twice = {"frame_half", "half_a", "half_b"}
+    # The cap is glued on: one thing with its tray.
+    glued = {"buildings": "buildings tray", "buildings_cap": "buildings tray"}
     return (
-        layer("boards", "frame_half")
-        + into("boards", objects["frame_half"], turned, " 2")
-        + into("boards", board_stack() + [Piece(books, "rulebooks", "ivory")])
-        + into(f"{tray} 1", halves, suffix=" 1")
-        + into(f"{tray} 2", halves, Pos(0, half[1]), " 2")
-        + layer("special boards", "special_forge", "special_others")
-        + layer("columns/bottom", "strips", "boats", "misc", "setup_buildings")
-        + layer("columns/bottom", "riser", "wood", "vikings")
-        + layer("columns/middle", *decks, "islands")
-        + layer("columns/top", "vp", "spacer", "big", "buildings", "buildings_cap")
+        again(objects["frame_half"], Location(), " 1")
+        + again(objects["frame_half"], turned, " 2")
+        + board_stack()
+        + [Piece(books, "rulebooks", "ivory")]
+        + again(halves, Location(), " 1")
+        + again(halves, Pos(0, half[1]), " 2")
+        + [
+            replace(p, parent=glued.get(n, p.parent))
+            for n in objects
+            if n not in twice
+            for p in objects[n]
+        ]
     )
 
 
