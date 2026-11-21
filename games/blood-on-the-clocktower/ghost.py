@@ -553,17 +553,6 @@ def inradius(convex: Sketch) -> float:
 
 # The ghost's seams are scattered, not in a line.
 ghost_settings = {"seam_position": "random"}
-# The sheet's texture: soft bumps on the outside of the white alone, which
-# leaves the socket's springs, and the black, smooth.
-sheet_settings = {
-    "fuzzy_skin": "external",
-    "fuzzy_skin_thickness": 0.2,
-    "fuzzy_skin_point_distance": 0.3,
-    "fuzzy_skin_noise_type": "perlin",
-    "fuzzy_skin_scale": 2.5,
-    "fuzzy_skin_octaves": 2,
-    "fuzzy_skin_persistence": 0.4,
-}
 # The vote's layers are thin, for its chamfered edges and for the room over its
 # insert to be more than a layer (see `insert_c`).
 vote_settings = {
@@ -601,7 +590,7 @@ def ghost() -> list[Piece]:
     )
     black = (part(deep + tube) & inner(mouth_depth)) - (slot() + magnets)
     return [
-        Piece(white, "sheet", "white", settings=sheet_settings, parent="ghost"),
+        Piece(white, "sheet", "white", parent="ghost"),
         Piece(whole & eye_cut, "eyes", "black", parent="ghost"),
         Piece(black, "mouth", "black", parent="ghost"),
     ]
