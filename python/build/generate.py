@@ -10,6 +10,7 @@ Only the standard library is imported here, so as not to hold up the server.
 """
 
 import multiprocessing
+import os
 import runpy
 import sys
 from multiprocessing import forkserver
@@ -20,6 +21,9 @@ def main() -> None:
     if len(sys.argv) < 2:
         sys.exit("usage: python -m build.generate FILE [ARGS...]")
     file = sys.argv[1]
+    # Below what's in use, so that drawing on every core doesn't bog it down:
+    # the workers and Orca, started from here, are as nice.
+    os.nice(10)
     # What cad.workers() asks for: the server is the same one, already running.
     context = multiprocessing.get_context("forkserver")
     context.set_forkserver_preload([f"{__package__}.worker"])
