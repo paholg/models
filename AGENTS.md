@@ -20,10 +20,14 @@ function that draws it and a description. An object is one or more pieces,
 each with its own name, color and slicer settings, which become its parts in
 Orca.
 
-Pieces are drawn where they sit when assembled, and each object's function
-moves and rotates its pieces into position for printing. A project with
-several objects has an `assembly` view showing them together, and passes
-`plates` to lay them out for printing.
+Each piece has its own color, and two positions from where it's drawn: `at`,
+where it sits when assembled, and `place`, where it's printed. Both are moves
+and turns, never mirrors: a mirrored part is a piece of its own. A `View`
+draws nothing of an object's: it takes the pieces of the objects it `uses`,
+where they sit, and arranges them, adding whatever isn't printed, like bought
+hardware. A project's views are its assemblies; one with several objects
+passes `plates` to lay them out for printing. Some views still draw what they
+show themselves, as an `Object`, until they're converted.
 
 Give pieces a `parent`, to group them in FreeCAD.
 

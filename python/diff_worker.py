@@ -86,7 +86,9 @@ def draw(tree: Path, file: Path, name: str, out: Path) -> list[str]:
         drawn = [Piece(drawn, name)]
     out.mkdir(parents=True, exist_ok=True)
     for i, piece in enumerate(drawn):
-        export_brep(piece.shape, out / f"{i}.brep")
+        # As printed: where a tree's pieces have a place for that, at it.
+        printed = getattr(piece, "printed", None)
+        export_brep(printed().shape if printed else piece.shape, out / f"{i}.brep")
     return [p.name for p in drawn]
 
 

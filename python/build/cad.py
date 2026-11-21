@@ -6,13 +6,25 @@ import io
 import multiprocessing
 import os
 import sys
+import tempfile
+import threading
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from build123d import Color, Compound, Part, Shape, Sketch, export_step
+from build123d import (
+    Color,
+    Compound,
+    Location,
+    Part,
+    Shape,
+    Sketch,
+    export_brep,
+    export_step,
+    import_brep,
+)
 
 # OCP has no stubs for these; build123d imports them where ty can see them.
 from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
@@ -69,11 +81,34 @@ class Piece:
     # The group it goes under in FreeCAD, to show and hide with the rest of it,
     # as a path of groups in groups: "lid/top", say. Orca doesn't see it.
     parent: str = ""
+    # Where it sits, put together, and where it's printed, from where it's
+    # drawn: moves and turns, never a mirror, which is another piece.
+    at: Location = field(default_factory=Location)
+    place: Location = field(default_factory=Location)
+
+    def sitting(self) -> "Piece":
+        """Where it sits, put together: as a view gets it."""
+        return replace(self, shape=self.at * self.shape, at=Location())
+
+    def printed(self) -> "Piece":
+        return replace(self, shape=self.place * self.shape, place=Location())
+
+
+@dataclass
+class View:
+    """To look at: the objects it `uses`, each a list of its pieces where they
+    sit (see Piece.sitting()), arranged. It gets them once they're drawn, for
+    their own prints, so a view doesn't draw them again; what it adds, a magnet
+    say, it draws itself. It returns pieces as they're to be shown."""
+
+    arrange: Callable[[Mapping[str, list[Piece]]], list[Piece]]
+    description: str  # shown beside its name
+    uses: Sequence[str] = ()
 
 
 @dataclass
 class Object:
-    """An object to print or a view."""
+    """An object to print, or a view that draws what it shows itself."""
 
     draw: Callable[[], Shape | list[Piece]]  # called only when it's wanted
     description: str  # shown beside its name
@@ -116,15 +151,32 @@ def write_stl(shape: Shape, path: Path) -> None:
         sys.exit(f"couldn't write {path}")
 
 
+# Of a piece, what a view's worker gets beside its shape: its name, color,
+# filament and parent.
+type Seen = tuple[str, str, str, str]
+
+
 def render(
-    name: str, obj: Object, orca: Mapping[str, object], work: Path, step: Path
-) -> build.Render:
-    """Draw an object, write a mesh of each of its pieces into `work`, and all of
-    them as a STEP file to `step`."""
+    name: str,
+    obj: Object,
+    orca: Mapping[str, object],
+    work: Path,
+    step: Path,
+    keep: Path | None = None,
+) -> tuple[build.Render, list[Seen]]:
+    """Draw an object, write a mesh of each of its pieces, as printed, into
+    `work`, and all of them as a STEP file to `step`. With `keep`, write each
+    piece where it sits there too, 0.brep on, for views; and say what else of
+    them a view needs."""
     solids = []
     filaments = {}
     low, high = [float("inf")] * 3, [float("-inf")] * 3
-    drawn = pieces(name, obj)
+    made = pieces(name, obj)
+    if keep is not None:
+        keep.mkdir(parents=True)
+        for i, piece in enumerate(made):
+            export_brep(piece.sitting().shape, keep / f"{i}.brep")
+    drawn = [p.printed() for p in made]
     for i, piece in enumerate(drawn, 1):
         if not piece.shape.is_valid:
             sys.exit(f"{name}: {piece.name} is not a valid solid")
@@ -139,13 +191,27 @@ def render(
         low = [min(a, b) for a, b in zip(low, tuple(box.min))]
         high = [max(a, b) for a, b in zip(high, tuple(box.max))]
     write_step(drawn, step)
-    return build.Render(
+    rendered = build.Render(
         solids,
         (tuple(low), tuple(high)),
         list(obj.pauses),
         filaments,
         texts({**orca, **obj.settings}),
     )
+    return rendered, [(p.name, p.color, p.filament, p.parent) for p in made]
+
+
+def arranged(view: View, objects: Mapping[str, list[Piece]]) -> list[Piece]:
+    """What a view shows, of the objects it uses, where they sit."""
+    return view.arrange({n: objects[n] for n in view.uses})
+
+
+def kept(folder: Path, seen: list[Seen]) -> list[Piece]:
+    """An object's pieces as render() kept them, where they sit."""
+    return [
+        Piece(import_brep(folder / f"{i}.brep"), name, color, filament, parent=parent)
+        for i, (name, color, filament, parent) in enumerate(seen)
+    ]
 
 
 # In a worker, what its project() was given, to draw from; none elsewhere. The
@@ -153,21 +219,44 @@ def render(
 given: dict | None = None
 
 
-def draw(name: str, work: Path, step: Path) -> tuple[build.Render, str]:
+def draw(
+    name: str, work: Path, step: Path, keep: Path | None
+) -> tuple[tuple[build.Render, list[Seen]], str]:
     """In a worker, render an object (see render())."""
     assert given is not None
-    return heard(render, name, given["objects"][name], given["orca"], work, step)
+    obj = given["objects"][name]
+    return heard(render, name, obj, given["orca"], work, step, keep)
 
 
-def draw_view(name: str, step: Path) -> tuple[None, str]:
-    """In a worker, write a view as a STEP file."""
+def draw_view(
+    name: str, step: Path, uses: Mapping[str, tuple[Path, list[Seen]]]
+) -> tuple[None, str]:
+    """In a worker, write a view as a STEP file: an arranged one from the
+    objects it uses, as render() kept them."""
     assert given is not None
-    return heard(write_step_of, name, given["views"][name], step)
+    view = given["views"][name]
+
+    def write() -> None:
+        if isinstance(view, View):
+            objects = {n: kept(*uses[n]) for n in view.uses}
+            write_step(arranged(view, objects), step)
+        else:
+            write_step(pieces(name, view), step)
+
+    return heard(write)
 
 
-def write_step_of(name: str, obj: Object, out: Path) -> None:
-    """Draw an object or view, and write it as a STEP file."""
-    write_step(pieces(name, obj), out)
+def write_step_of(
+    name: str, shown: Object | View, objects: Mapping[str, Object], out: Path
+) -> None:
+    """Draw an object, as printed, or a view, and write it as a STEP file."""
+    if isinstance(shown, View):
+        sitting = {n: [p.sitting() for p in pieces(n, objects[n])] for n in shown.uses}
+        write_step(arranged(shown, sitting), out)
+    elif name in objects:
+        write_step([p.printed() for p in pieces(name, shown)], out)
+    else:
+        write_step(pieces(name, shown), out)
 
 
 def heard[T](work: Callable[..., T], *args) -> tuple[T, str]:
@@ -250,7 +339,7 @@ def project(
     objects: Mapping[str, Object],
     orca: Mapping[str, object] | None = None,
     plates: list[str] | None = None,
-    views: Mapping[str, Object] | None = None,
+    views: Mapping[str, Object | View] | None = None,
 ) -> None:
     """Write the project's .3mf files to gen/<dir>/: one per object, and one of `plates`,
     each a group like "lid*2 base". `orca` is settings for all of them, an
@@ -258,6 +347,8 @@ def project(
     are only to look at. The plates' project applies what its objects share, and
     puts the rest on each object, where Orca lets an object have it, and pauses
     each plate wherever one of its objects pauses, stopping the rest there too.
+    A view is a View, which arranges objects drawn for their prints, or an
+    Object, which draws what it shows itself.
 
     Beside them, for FreeCAD, go <stem>-<name>.step for each view and object,
     an object as it's printed, and <stem>-views.tsv, which lists views, then
@@ -275,6 +366,9 @@ def project(
         return
     if both := sorted(objects.keys() & views.keys()):
         sys.exit(f"both an object and a view: {', '.join(both)}")
+    for name, view in views.items():
+        if isinstance(view, View) and (missing := set(view.uses) - set(objects)):
+            sys.exit(f"view {name} uses what isn't an object: {', '.join(missing)}")
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
@@ -286,7 +380,7 @@ def project(
                 generate(path, objects, views, orca or {}, plates or [])
         case ["--view", name] if name in shown:
             out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
-            write_step_of(name, shown[name], out)
+            write_step_of(name, shown[name], objects, out)
             print(out.relative_to(build.ROOT))
         case _:
             sys.exit(f"usage: {path.name} [--view OBJECT]")
@@ -295,7 +389,7 @@ def project(
 def generate(
     path: Path,
     objects: Mapping[str, Object],
-    views: Mapping[str, Object],
+    views: Mapping[str, Object | View],
     orca: Mapping[str, object],
     plates: list[str],
 ) -> None:
@@ -320,13 +414,11 @@ def generate(
         print(said, end="")
         return done
 
-    def look(pool: ProcessPoolExecutor, name: str) -> Future[tuple[None, str]]:
-        """Start drawing a view, counted as it finishes, not when it's waited on."""
-        what = f"drawing {name}"
-        progress.start(what)
-        future = pool.submit(draw_view, name, step(name))
-        future.add_done_callback(lambda _: progress.finish(what))
-        return future
+    def uses(name: str) -> Sequence[str]:
+        view = views[name]
+        return view.uses if isinstance(view, View) else ()
+
+    used = {n for v in views for n in uses(v)}
 
     # Each in a worker, but for one alone, which isn't worth starting one for.
     count = len(objects) + len(views)
@@ -334,19 +426,51 @@ def generate(
         workers(min(count, os.cpu_count() or 1))
         if count > 1
         else contextlib.nullcontext() as pool,
+        # Where objects' pieces are kept for the views that use them.
+        tempfile.TemporaryDirectory() as tmp,
     ):
-        # The views go first, to draw while the objects are assembled in Orca.
-        # With any, there are workers.
+        # Each view goes once the objects it uses are drawn, the rest at once,
+        # to draw while the objects are assembled in Orca. With any, there are
+        # workers.
         progress.expect(len(views))
-        looks = {n: look(pool, n) for n in views if pool}
+        looks: dict[str, Future[tuple[None, str]]] = {}
+        made: dict[str, tuple[Path, list[Seen]]] = {}
+        lock = threading.Lock()
+
+        def look(name: str) -> None:
+            """Start drawing a view, counted as it finishes, not when it's
+            waited on."""
+            assert pool is not None
+            what = f"drawing {name}"
+            progress.start(what)
+            given_over = {n: made[n] for n in uses(name)}
+            looks[name] = pool.submit(draw_view, name, step(name), given_over)
+            looks[name].add_done_callback(lambda _: progress.finish(what))
+
+        def ready() -> None:
+            """Start the views whose objects are all drawn."""
+            with lock:
+                for name in views:
+                    if name not in looks and set(uses(name)) <= made.keys():
+                        look(name)
+
+        if pool:
+            ready()
 
         def drawn(name: str, work: Path) -> build.Render:
+            keep = Path(tmp) / name if name in used else None
             if pool is None:
-                return render(name, objects[name], orca, work, step(name))
-            return result(pool.submit(draw, name, work, step(name)))
+                done, _ = render(name, objects[name], orca, work, step(name))
+                return done
+            done, seen = result(pool.submit(draw, name, work, step(name), keep))
+            if keep is not None:
+                with lock:
+                    made[name] = keep, seen
+                ready()
+            return done
 
         build.run(path, list(objects), build.groups_of(plates), drawn)
-        for drawing in looks.values():
+        for drawing in list(looks.values()):
             result(drawing)
 
     rows = [("view", n, o) for n, o in views.items()]

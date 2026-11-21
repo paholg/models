@@ -37,12 +37,10 @@ on.
 
 In a half's own frame the face is at z = 0 and the seam side is up.
 
-"radial" and "axial" are the prints, each the coin with its lock. The views
-are each put together, pulled apart, cut through the lock, and opened beside
-its black half.
+"radial" and "axial" are the prints, each the coin with its lock, and each
+has a view of it put together, to cut through or take apart in FreeCAD.
 """
 
-from dataclasses import replace
 from math import atan, degrees, hypot, radians, tan
 
 from build123d import (
@@ -59,7 +57,7 @@ from build123d import (
     extrude,
 )
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 from designs.coin import (
     ARROW_COLORS,
     FILAMENTS,
@@ -69,7 +67,6 @@ from designs.coin import (
     Coin,
     D,
     arrow_settings,
-    flipped,
     half_settings,
     up,
 )
@@ -174,17 +171,6 @@ apin_a = 180
 # Every 45 degrees the halves' bumps line up again.
 coin = Coin("knurled", half_t=half_t)
 steps = 8
-
-hardware_colors = {
-    "hub": "peru",
-    "wedge": "peru",
-    "plunger": "peru",
-    "ring": "khaki",
-    "sleeve": "khaki",
-    "washer": "silver",
-    "pin": "silver",
-    "magnets": "dimgray",
-}
 
 seat_r = ring_d / 2 + play
 # The black half's room for the ring.
@@ -406,155 +392,135 @@ def cylinder(d: float, h: float) -> Part:
     return extrude(Circle(d / 2), h)
 
 
-def hardware(lock: str) -> list[Piece]:
-    """What isn't a half, where it rests when locked."""
-    parts = {
-        "hub": Pos(0, 0, half_t - cav_depth + play) * hub(),
-        "washer": Pos(0, 0, half_t - ring_down - spring_h) * washer(),
-        "ring": Pos(0, 0, half_t - ring_down) * ring(lock),
-    }
-    if lock == "radial":
-        on = Rot(0, 0, pin_a) * Pos(0, 0, half_t)
-        along_x = Rot(0, 90, 0)
-        pin_z = pin_d / 2 + 0.05 - wedge_down
-        parts |= {
-            "wedge": on * Pos(0, 0, wedge_up) * Rot(180, 0, 0) * wedge(),
-            "pin": on * Pos(lock_r, 0, pin_z) * along_x * cylinder(pin_d, pin_l),
-            "magnets": on * Pos(seat_r - hold_l) * along_x * cylinder(hold_d, hold_l),
-        }
-    else:
-        on = Rot(0, 0, apin_a) * Pos(apin_r, 0)
-        magnet = Pos(0, 0, half_t + engage - roof - apin_t) * cylinder(apin_d, apin_t)
-        # The black half's, one at each of its seats.
-        hold = Pos(apin_r, 0, half_t + seat_depth_b) * cylinder(ahold_d, ahold_t)
-        parts |= {
-            "sleeve": on * Pos(0, 0, half_t - pocket_depth) * sleeve(),
-            "plunger": on * Pos(0, 0, half_t - seated) * plunger(),
-            "magnets": part(
-                on * magnet
-                + [Rot(0, 0, apin_a + i * 360 / steps) * hold for i in range(steps)]
-            ),
-        }
-    return [Piece(s, n, hardware_colors[n], parent="lock") for n, s in parts.items()]
-
-
-# Put together
-
-
-def assembly(lock: str, apart: float = 0, top: bool = True) -> list[Piece]:
-    """Locked, or pulled `apart`: the hardware between the halves, a layer at a
-    time."""
-    lifts = {"hub": 1 / 3, "washer": 1 / 2, "ring": 2 / 3}
-    pieces = [
-        Piece(half_a(lock), "half 0", HALF_COLORS[0], parent=HALVES[0]),
-        Piece(coin.arrow(0), "arrow 0", ARROW_COLORS[0], parent=HALVES[0]),
-    ] + [
-        replace(p, shape=Pos(0, 0, apart * lifts.get(p.name, 1)) * p.shape)
-        for p in hardware(lock)
-    ]
-    if top:
-        z = 2 * half_t + 2 * apart
-        pieces += [
-            Piece(flipped(half_b(lock), z), "half 1", HALF_COLORS[1], parent=HALVES[1]),
-            Piece(
-                flipped(coin.arrow(1), z), "arrow 1", ARROW_COLORS[1], parent=HALVES[1]
-            ),
-        ]
-    return pieces
-
-
-def section(lock: str) -> list[Piece]:
-    """Cut through the lock."""
-    turn = Rot(0, 0, pin_a if lock == "radial" else apin_a)
-    keep = turn * Pos(0, D / 2, -5) * extrude(Rectangle(2 * D, D), 20)
-    return [
-        replace(p, shape=cut)
-        for p in assembly(lock)
-        if (cut := p.shape & keep) is not None and part(cut).volume > 0
-    ]
-
-
-def inside(lock: str) -> list[Piece]:
-    """The gold half with what's in it, and the black half beside it."""
-    return assembly(lock, top=False) + [
-        Piece(Pos(D + 5) * half_b(lock), "half 1", HALF_COLORS[1], parent=HALVES[1]),
-        Piece(Pos(D + 5) * coin.arrow(1), "arrow 1", ARROW_COLORS[1], parent=HALVES[1]),
-    ]
-
-
-# Prints
+# Put together, each half's face at z = 0, the gold's down and the black's up.
+top = Pos(0, 0, 2 * half_t) * Rot(180, 0, 0)
 
 
 def bed(x: float, y: float = 0) -> Pos:
     return Pos(x * (D + 5), -y * (D + 5))
 
 
-def prints(lock: str) -> list[Piece]:
-    """Both halves face down, their arrows, and the lock's parts beside them."""
+def printed(lock: str) -> list[Piece]:
+    """What's printed, each where it sits and where it's printed: both halves
+    face down, their arrows, and the lock's parts beside them."""
     gold = HALF_COLORS[0]
-    pieces = (
-        [
-            Piece(
-                bed(i) * half,
-                f"half {i}",
-                HALF_COLORS[i],
-                FILAMENTS[i],
-                half_settings(coin.shape),
-                parent=HALVES[i],
-            )
-            for i, half in enumerate([half_a(lock), half_b(lock)])
-        ]
-        + [
-            Piece(
-                bed(i) * coin.arrow(i),
-                f"arrow {i}",
-                ARROW_COLORS[i],
-                FILAMENTS[1 - i],
-                arrow_settings(coin.angles[i]),
-                parent=HALVES[i],
-            )
-            for i in (0, 1)
-        ]
-        + [
-            Piece(bed(0, 0.75) * ring(lock), "ring", gold, parent="lock"),
-            Piece(bed(1, 0.75) * hub(), "hub", gold, parent="lock"),
-        ]
-    )
+    pieces = [
+        Piece(
+            half,
+            f"half {i}",
+            HALF_COLORS[i],
+            FILAMENTS[i],
+            half_settings(coin.shape),
+            parent=HALVES[i],
+            at=at,
+            place=bed(i),
+        )
+        for i, (half, at) in enumerate(
+            [(half_a(lock), Location()), (half_b(lock), top)]
+        )
+    ]
+    pieces += [
+        Piece(
+            coin.arrow(i),
+            f"arrow {i}",
+            ARROW_COLORS[i],
+            FILAMENTS[1 - i],
+            arrow_settings(coin.angles[i]),
+            parent=HALVES[i],
+            at=at,
+            place=bed(i),
+        )
+        for i, at in enumerate([Location(), top])
+    ]
+    pieces += [
+        Piece(
+            ring(lock),
+            "ring",
+            gold,
+            parent="lock",
+            at=Pos(0, 0, half_t - ring_down),
+            place=bed(0, 0.75),
+        ),
+        Piece(
+            hub(),
+            "hub",
+            gold,
+            parent="lock",
+            at=Pos(0, 0, half_t - cav_depth + play),
+            place=bed(1, 0.75),
+        ),
+    ]
     if lock == "radial":
-        pieces.append(
+        on = Rot(0, 0, pin_a) * Pos(0, 0, half_t)
+        at = on * Pos(0, 0, wedge_up) * Rot(180, 0, 0)
+        place = bed(0.5, 0.75) * Rot(0, 0, 90) * Pos(-lock_r)
+        pieces.append(Piece(wedge(), "wedge", gold, at=at, place=place, parent="lock"))
+    else:
+        on = Rot(0, 0, apin_a) * Pos(apin_r, 0)
+        pieces += [
             Piece(
-                bed(0.5, 0.75) * Rot(0, 0, 90) * Pos(-lock_r) * wedge(),
-                "wedge",
+                sleeve(),
+                "sleeve",
                 gold,
                 parent="lock",
-            )
-        )
-    else:
-        pieces += [
-            Piece(bed(0.3, 0.75) * sleeve(), "sleeve", gold, parent="lock"),
-            Piece(bed(0.6, 0.75) * plunger(), "plunger", gold, parent="lock"),
+                at=on * Pos(0, 0, half_t - pocket_depth),
+                place=bed(0.3, 0.75),
+            ),
+            Piece(
+                plunger(),
+                "plunger",
+                gold,
+                parent="lock",
+                at=on * Pos(0, 0, half_t - seated),
+                place=bed(0.6, 0.75),
+            ),
         ]
     return pieces
 
 
-views = {}
-for lock in LOCKS:
-    views |= {
-        f"{lock}-assembly": Object(lambda lock=lock: assembly(lock), "Locked"),
-        f"{lock}-exploded": Object(lambda lock=lock: assembly(lock, 6), "Pulled apart"),
-        f"{lock}-section": Object(
-            lambda lock=lock: section(lock), "Cut through the lock"
-        ),
-        f"{lock}-inside": Object(
-            lambda lock=lock: inside(lock), "Opened, the black half beside it"
-        ),
-    }
+def bought(lock: str) -> list[Piece]:
+    """What's bought, where it sits, to show: the washer, and the lock's pin
+    and magnets."""
+    steel, magnet = "silver", "dimgray"
+    washer_at = Pos(0, 0, half_t - ring_down - spring_h)
+    pieces = [Piece(washer(), "washer", steel, at=washer_at, parent="lock")]
+    if lock == "radial":
+        on = Rot(0, 0, pin_a) * Pos(0, 0, half_t)
+        along_x = Rot(0, 90, 0)
+        pin_z = pin_d / 2 + 0.05 - wedge_down
+        pin = on * Pos(lock_r, 0, pin_z) * along_x * cylinder(pin_d, pin_l)
+        hold = on * Pos(seat_r - hold_l) * along_x * cylinder(hold_d, hold_l)
+        pieces += [
+            Piece(pin, "pin", steel, parent="lock"),
+            Piece(hold, "magnets", magnet, parent="lock"),
+        ]
+    else:
+        on = Rot(0, 0, apin_a) * Pos(apin_r, 0)
+        pin = Pos(0, 0, half_t + engage - roof - apin_t) * cylinder(apin_d, apin_t)
+        # The black half's, one at each of its seats.
+        hold = Pos(apin_r, 0, half_t + seat_depth_b) * cylinder(ahold_d, ahold_t)
+        holds = [Rot(0, 0, apin_a + i * 360 / steps) * hold for i in range(steps)]
+        pieces.append(Piece(part(on * pin + holds), "magnets", magnet, parent="lock"))
+    return [p.sitting() for p in pieces]
+
+
+# Views
+
+
+views = {
+    f"{lock}-assembly": View(
+        lambda coins, lock=lock: coins[lock] + bought(lock),
+        "Locked, with what's bought",
+        [lock],
+    )
+    for lock in LOCKS
+}
 
 project(
     __file__,
     objects={
         lock: Object(
-            lambda lock=lock: prints(lock), f"The {lock} lock's coin, face down"
+            lambda lock=lock: printed(lock), f"The {lock} lock's coin, face down"
         )
         for lock in LOCKS
     },
