@@ -80,14 +80,18 @@ from build.cad import Object, Piece, View, part, project, sketch
 
 # Ghost
 
-# Across the shoulders, where the dome starts.
+# Across the shoulders, where the dome starts. The height and the shoulder's
+# are with the oval mouth: a ghost is taller by as much as its mouth reaches
+# higher (see `lift()`), its body straight up that much further.
 d = 28
 h = 40
 shoulder = 25
 # A bell: the body is this much wider each side at the hem, and the power sets
-# how late it flares.
+# how late it flares, up to this height, from where it's straight up to the
+# shoulder.
 bell = 4.5
 bell_power = 1.8
+bell_h = 25
 
 
 @dataclass(frozen=True)
@@ -160,7 +164,9 @@ groove_round = 1
 # Eyes
 
 eye_x = 5
-eye_z = 31
+# From the top of the mouth up to the eyes' middles, so that they go up over
+# a taller mouth.
+eye_over_mouth = 6.2
 eye_w = 3.6
 eye_h = 5.2
 eye_depth = 0.8
@@ -283,31 +289,34 @@ assert mag_skin < lining, "the magnets' pocket starts on the lining's face"
 
 def body_r(z: float) -> float:
     """The body's radius below the shoulder, without the ripples or folds."""
-    return r + bell * max(0, 1 - z / shoulder) ** bell_power
+    return r + bell * max(0, 1 - z / bell_h) ** bell_power
 
 
-def sheet(z: float, a: float, texture: Texture, folded: float) -> float:
+def sheet(
+    z: float, a: float, texture: Texture, folded: float, taller: float = 0
+) -> float:
     """The skin's distance from the axis, z high and a degrees round from +x,
-    with `folded` of its folds there."""
+    with `folded` of its folds there, on a ghost taller by `taller`."""
     # Two sets of folds, out of step, fading out toward the crown.
     t = texture
-    turn = t.twist * (1 - z / h) ** t.twist_power
+    tall = h + taller
+    turn = t.twist * (1 - z / tall) ** t.twist_power
     folds = (
         t.fold
-        * (1 - z / h) ** 0.6
+        * (1 - z / tall) ** 0.6
         * folded
         * (
             (1 - t.second) * cos(radians(t.fold_n * (a + turn)))
             + t.second * cos(radians((t.fold_n + 4) * (a + t.second_twist * turn) + 40))
         )
     )
-    return folds + plain(z, a, t)
+    return folds + plain(z, a, t, taller)
 
 
-def plain(z: float, a: float, t: Texture) -> float:
+def plain(z: float, a: float, t: Texture, taller: float = 0) -> float:
     """The sheet without its folds."""
-    if z >= shoulder:
-        return profile(z)
+    if z >= shoulder + taller:
+        return profile(z, taller)
     hem = max(0, 1 - z / t.hem_h) ** 2
     return body_r(z) + t.hem_ripple * cos(radians(t.hem_lobes * a)) * hem
 
@@ -315,16 +324,29 @@ def plain(z: float, a: float, t: Texture) -> float:
 def radius(z: float, a: float, style: Style) -> float:
     """The skin, its folds fading out round the eyes and mouth."""
     t = TEXTURES[style.texture]
+    up = lift(style.mouth)
     off_face = (a - 270 + 180) % 360 - 180
-    around = profile(z) * radians(off_face)
-    return sheet(z, a, t, face_clear(style.eyes, style.mouth)(around, z))
+    around = profile(z, up) * radians(off_face)
+    return sheet(z, a, t, face_clear(style.eyes, style.mouth)(around, z), up)
 
 
-def profile(z: float) -> float:
-    """The sheet's radius z high, without the hem's ripples or the folds."""
-    if z >= shoulder:
-        return r * sqrt(max(0, 1 - ((z - shoulder) / (h - shoulder)) ** 2))
+def profile(z: float, taller: float = 0) -> float:
+    """The sheet's radius z high, without the hem's ripples or the folds, on a
+    ghost taller by `taller`."""
+    if z >= shoulder + taller:
+        return r * sqrt(max(0, 1 - ((z - shoulder - taller) / (h - shoulder)) ** 2))
     return body_r(z)
+
+
+@cache
+def mouth_top(mouth: str) -> float:
+    return MOUTHS[mouth]().bounding_box().max.Y
+
+
+def lift(mouth: str) -> float:
+    """How much taller the ghost is than with the oval mouth: as much as its
+    mouth reaches higher, and no less."""
+    return max(0.0, mouth_top(mouth) - mouth_top("oval"))
 
 
 def slot_radius(z: float, a: float) -> float:
@@ -344,10 +366,10 @@ def face_clear(eyes: str, mouth: str) -> Callable[[float, float], float]:
     it is on the sheet, and grows all the way round to the back."""
 
     def unrolled(x: float, z: float) -> tuple[float, float]:
-        q = profile(z)
+        q = profile(z, lift(mouth))
         return q * asin(max(-1, min(1, x / q))), z
 
-    outlines = [MOUTHS[mouth](), *eye_outlines(eyes)]
+    outlines = [MOUTHS[mouth](), *eye_outlines(eyes, mouth)]
     features = shapely.unary_union(
         [
             shapely.Polygon(
@@ -389,13 +411,15 @@ def ring(z: float, inset: float, style: Style) -> Wire:
 def skin(style: Style) -> Part:
     """The ghost's whole outside, solid: a 45° chamfer at the foot, the body
     lofted up through rings, and the dome closing to a point at the crown."""
-    body_zs = [foot_chamfer] + [1 + 1.5 * k for k in range(16)]
-    dome_zs = [shoulder + (h - shoulder) * sin(radians(a)) for a in range(0, 88, 6)]
+    top = shoulder + lift(style.mouth)
+    tall = h + lift(style.mouth)
+    body_zs = [foot_chamfer] + [1 + 1.5 * k for k in range(int((top - 1) / 1.5))]
+    dome_zs = [top + (tall - top) * sin(radians(a)) for a in range(0, 88, 6)]
     foot = Solid.make_loft(
         [ring(0, foot_chamfer, style), ring(foot_chamfer, 0, style)], ruled=True
     )
     body = Solid.make_loft(
-        [ring(z, 0, style) for z in body_zs + dome_zs] + [Vertex(0, 0, h)]
+        [ring(z, 0, style) for z in body_zs + dome_zs] + [Vertex(0, 0, tall)]
     )
     return part(Part() + [foot, body])
 
@@ -403,7 +427,8 @@ def skin(style: Style) -> Part:
 def inner(depth: float, style: Style) -> Part:
     """The skin, this far in: shrunk about the shoulder's middle."""
     f = 1 - depth / r
-    return part(Pos(0, 0, shoulder * (1 - f)) * scale(skin(style), f))
+    middle = shoulder + lift(style.mouth)
+    return part(Pos(0, 0, middle * (1 - f)) * scale(skin(style), f))
 
 
 def groove(style: Style) -> Part:
@@ -476,12 +501,13 @@ EYES: dict[str, Callable[[int], Sketch]] = {
 }
 
 
-def eye_outlines(eyes: str) -> list[Sketch]:
-    return [Pos(s * eye_x, eye_z) * EYES[eyes](s) for s in (-1, 1)]
+def eye_outlines(eyes: str, mouth: str) -> list[Sketch]:
+    z = mouth_top(mouth) + eye_over_mouth
+    return [Pos(s * eye_x, z) * EYES[eyes](s) for s in (-1, 1)]
 
 
-def eye_holes(eyes: str) -> Part:
-    return part(Part() + [into_face(e) for e in eye_outlines(eyes)])
+def eye_holes(eyes: str, mouth: str) -> Part:
+    return part(Part() + [into_face(e) for e in eye_outlines(eyes, mouth)])
 
 
 # Mouths: the oval's top, which takes in the whole of the slot's opening, and a
@@ -795,7 +821,7 @@ def ghost(style: Style = PLAIN) -> list[Piece]:
     # cut one from the other there. Nor does anything cut from either meet
     # its faces face on face: each reaches past what it leaves.
     whole = skin(style)
-    eye_cut = eye_holes(style.eyes) - inner(eye_depth, style)
+    eye_cut = eye_holes(style.eyes, style.mouth) - inner(eye_depth, style)
     hole = mouth_hole(style.mouth)
     deep = hole - Cylinder(body_r(mouth_z) - mouth_back, h)
     # The slot is within its lining and the mouth's black, so the white
