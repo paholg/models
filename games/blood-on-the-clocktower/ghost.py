@@ -148,7 +148,7 @@ clear_fade = 5
 class Style:
     """Which of EYES, MOUTHS and TEXTURES a ghost has."""
 
-    eyes: str = "oval"
+    eyes: str = "happy"
     mouth: str = "oval"
     texture: str = "folds"
 
@@ -479,9 +479,84 @@ def bar(length: float, angle: float, w: float = 1.2) -> Sketch:
     return sketch(Rot(0, 0, angle) * SlotCenterToCenter(length - w, w))
 
 
+def arch() -> Sketch:
+    """An eye shut in a smile, ^."""
+    return sketch(Pos(0, -1.2) * SlotArc(CenterArc((0, 0), 2.2, 25, 130), 1.2))
+
+
+def heart(a: float) -> Sketch:
+    """A heart about its middle: a square of side `a` on its corner, and a
+    circle on each of its upper sides."""
+    c = a / (2 * sqrt(2))
+    lobes = [Pos(x * c, c) * Circle(a / 2) for x in (-1, 1)]
+    return sketch(Pos(0, (a / 2 - c) / 2) * (Rot(0, 0, 45) * Rectangle(a, a) + lobes))
+
+
+def wedge(r: float, angle: float, wide: float) -> Sketch:
+    """A slice `wide` degrees across, out to r, its middle `angle` from +x."""
+    rim = [
+        (r * cos(radians(angle + t)), r * sin(radians(angle + t)))
+        for t in (-wide / 2, 0, wide / 2)
+    ]
+    return sketch(Polygon((0, 0), *rim, align=None))
+
+
+def star(r: float, inner: float, points: int = 5) -> Sketch:
+    """A star, a point up: its points at r, the corners between at `inner`."""
+    corners = [
+        (q * cos(t), q * sin(t))
+        for k in range(2 * points)
+        for q, t in [(inner if k % 2 else r, pi / 2 + k * pi / points)]
+    ]
+    return sketch(Polygon(*corners, align=None))
+
+
+def spiral(r: float, turns: float, w: float) -> Sketch:
+    """A stroke w wide, winding out from the middle to r, counter-clockwise."""
+    n = round(24 * turns)
+
+    def side(off: float) -> list[Vector | Sequence[float]]:
+        return [
+            Vector(q * cos(t), q * sin(t))
+            for k in range(n + 1)
+            for q, t in [(w / 2 + (r - w) * k / n + off, 2 * pi * turns * k / n)]
+        ]
+
+    out, back = side(w / 2), side(-w / 2)[::-1]
+    edges = [
+        Edge.make_spline(out),
+        Edge.make_line(out[-1], back[0]),
+        Edge.make_spline(back),
+        Edge.make_line(back[-1], out[0]),
+    ]
+    return sketch(Face(Wire(edges)))
+
+
+def tear(r: float, h: float) -> Sketch:
+    """A drop h high, from its point at the top down."""
+    return sketch(
+        make_hull((Pos(0, r - h) * Circle(r) + Pos(0, -r / 4) * Circle(r / 4)).edges())
+    )
+
+
+def lashes(side: int) -> Sketch:
+    """Three strokes fanned up and out from an eye's rim."""
+    return sketch(
+        Sketch()
+        + [
+            Rot(0, 0, 90 + side * (a - 90)) * Pos(2.6, 0) * bar(2, 0, 0.75)
+            for a in (35, 65, 95)
+        ]
+    )
+
+
 EYES: dict[str, Callable[[int], Sketch]] = {
-    "oval": lambda s: sketch(Ellipse(eye_w / 2, eye_h / 2)),
-    "round": lambda s: sketch(Circle(2.2)),
+    # One open and one shut in a smile.
+    "wink": lambda s: sketch(Ellipse(eye_w / 2, eye_h / 2)) if s < 0 else arch(),
+    # Hearts.
+    "smitten": lambda s: heart(2.6),
+    # A slice out of each, as in an old cartoon, both glancing the same way.
+    "pie": lambda s: sketch(Ellipse(2.3, 3) - wedge(8, 35, 50)),
     # Brows down toward the nose.
     "angry": lambda s: sketch(Ellipse(2.1, 2.8) - brow(0.5, s * 28)),
     # Brows down toward the cheeks.
@@ -489,11 +564,7 @@ EYES: dict[str, Callable[[int], Sketch]] = {
     # Lids half down.
     "sleepy": lambda s: sketch(Ellipse(2.2, 2.6) - brow(0.3, 0)),
     # Arches, ^ ^.
-    "happy": lambda s: sketch(
-        Pos(0, -1.2) * SlotArc(CenterArc((0, 0), 2.2, 25, 130), 1.2)
-    ),
-    # Big, tall and hollow.
-    "hollow": lambda s: sketch(Ellipse(2.5, 3.7)),
+    "happy": lambda s: arch(),
     # One big and one small.
     "odd": lambda s: sketch(Circle(2.6) if s < 0 else Pos(0, 0.6) * Circle(1.5)),
     # Crosses, X X.
@@ -501,6 +572,33 @@ EYES: dict[str, Callable[[int], Sketch]] = {
     # Squeezed shut, > <, each pointing in.
     "squint": lambda s: sketch(
         Sketch() + [Pos(-s * 0.8, t * 1.1) * bar(3.4, t * s * 35) for t in (-1, 1)]
+    ),
+    # Stars.
+    "starry": lambda s: star(2.9, 1.3),
+    # Shut, and curved down: U U.
+    "asleep": lambda s: sketch(Rot(0, 0, 180) * arch()),
+    # Flat lines, - -.
+    "deadpan": lambda s: bar(4.6, 0, 1.3),
+    # A tear under each, toward the cheek.
+    "weepy": lambda s: sketch(
+        Pos(0, 0.9) * Circle(1.9) + Pos(s * 1.2, -1.3) * tear(0.75, 2.3)
+    ),
+    # Wide open: a ring of black, and a pupil.
+    "startled": lambda s: sketch(Circle(2.7) - Circle(1.9) + Circle(0.8)),
+    # Dots under brows, one flat and low and one cocked high.
+    "skeptic": lambda s: sketch(
+        Pos(0, -1.2) * Circle(1.4)
+        + (Pos(0, 1.4) * bar(4, 0, 1) if s < 0 else Pos(0, 2.4) * bar(4, 20, 1))
+    ),
+    # Spirals.
+    "dizzy": lambda s: spiral(2.8, 1.5, 0.85),
+    # Lashes, fanned up and out.
+    "lashes": lambda s: sketch(Pos(0, -0.5) * (Circle(2) + lashes(s))),
+    # Big and shiny, a white glint in each.
+    "glint": lambda s: sketch(Ellipse(2.4, 3.2) - Pos(0.8, 1.3) * Circle(0.8)),
+    # Sewn shut.
+    "stitched": lambda s: sketch(
+        bar(5, 0, 0.9) + [Pos(x, 0) * bar(2.6, 90, 0.8) for x in (-1.5, 0, 1.5)]
     ),
 }
 
@@ -1049,7 +1147,10 @@ def styles(n: int, seed: int) -> list[Style]:
             return [Style(*s) for s in drawn]
 
 
-GHOSTS = {f"ghost-{k}": s for k, s in enumerate(styles(ghost_n, ghost_seed), 1)}
+# Each named after its eyes, which no other has, in EYES' order.
+GHOSTS = {s.eyes: s for s in styles(ghost_n, ghost_seed)}
+GHOSTS = {eyes: GHOSTS[eyes] for eyes in EYES}
+assert len(GHOSTS) == ghost_n, "two ghosts have the same eyes"
 
 
 def pencil() -> Part:
@@ -1095,7 +1196,7 @@ project(
         **{
             name: Object(
                 lambda style=style: ghost(style),
-                f"{style.eyes} eyes, {style.mouth} mouth, {style.texture}; "
+                f"{style.mouth} mouth, {style.texture}; "
                 "standing, pausing for its magnets",
                 settings=ghost_settings,
                 pauses=[ghost_pause],
