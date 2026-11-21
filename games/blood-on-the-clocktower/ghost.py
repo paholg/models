@@ -21,19 +21,29 @@ with black, so that no white shows down it.
 The ghost faces -y, standing on z = 0, its axis the z axis. In the vote's own
 frame its face is at z = 0, and the end that goes in the mouth is at -x.
 
+Each ghost has a `Style`: its eyes, its mouth and its sheet's texture, each
+named from EYES, MOUTHS and TEXTURES. Every mouth takes in the whole of the
+slot's opening, and the slot is drawn against the plain sheet's face, so it's
+the same whatever the style. The folds fade out round the eyes and mouth. "ghost" is the plain
+one; each sample, "eyes-angry" say, is the plain one but for one thing, and
+the views "eyes", "mouths" and "textures" set each kind's samples in a row.
+
 "fit" is the socket alone, at each of `fit_press`, to try on a pencil: the dots
 on each count from the loosest. The view "assembly" is the ghost on its pencil,
 holding its vote.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from functools import cache
-from math import atan2, cos, degrees, exp, pi, radians, sin, sqrt
+from math import asin, atan2, cos, degrees, exp, pi, radians, sin, sqrt
 
+import shapely
 from build123d import (
     Align,
     Axis,
     Box,
+    CenterArc,
     Circle,
     Cylinder,
     Edge,
@@ -51,6 +61,8 @@ from build123d import (
     RegularPolygon,
     Rot,
     Sketch,
+    SlotArc,
+    SlotCenterToCenter,
     Solid,
     Text,
     Vector,
@@ -65,7 +77,7 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, Piece, part, project, sketch
+from build.cad import Object, Piece, View, part, project, sketch
 
 # Ghost
 
@@ -77,17 +89,67 @@ shoulder = 25
 # how late it flares.
 bell = 4.5
 bell_power = 1.8
-# The hem ripples below this height.
-hem_h = 10
-hem_ripple = 1.2
-hem_lobes = 6
-# Folds in the sheet, from the crown to the hem: how deep, how many, and how
-# far they wind round on the way down, in degrees. They fade out over the face.
-fold = 0.9
-fold_n = 7
-fold_twist = 40
-# Degrees each side of the face's middle with no folds: past the mouth's corners.
-fold_clear = 50
+
+
+@dataclass(frozen=True)
+class Texture:
+    """The sheet's folds and the hem's ripples."""
+
+    # Folds, from the crown to the hem: how deep, how many, and how far they
+    # wind round on the way down, in degrees, and how late in the way down
+    # they do: 1 evenly, more nearer the hem.
+    fold: float = 0.9
+    fold_n: int = 7
+    twist: float = 40
+    twist_power: float = 1
+    # A second set of folds, out of step with the first, so that no two are
+    # alike: its share of the depth, and how it winds, for each turn of the
+    # first's.
+    second: float = 0.4
+    second_twist: float = -0.6
+    # The hem ripples below this height.
+    hem_h: float = 10
+    hem_ripple: float = 1.2
+    hem_lobes: int = 6
+
+
+TEXTURES = {
+    "folds": Texture(),
+    # Wound round most of a turn, like a sheet wrung out.
+    "swirl": Texture(fold=1.1, fold_n=6, twist=220, second=0),
+    # Straight down, close together.
+    "pleats": Texture(fold=0.9, fold_n=13, twist=0, second=0),
+    # Few, deep and blown round at the hem.
+    "windswept": Texture(fold=1.4, fold_n=5, twist=150, twist_power=2.5, second=0.3),
+    # Two sets as deep, winding opposite ways, crossing.
+    "crossed": Texture(fold=1.1, fold_n=5, twist=160, second=0.5, second_twist=-1),
+    # No folds, and a hem of big, slow waves.
+    "smooth": Texture(fold=0, hem_h=13, hem_ripple=1.8, hem_lobes=5),
+    # A ragged hem of many deep scallops, and the folds.
+    "tatters": Texture(hem_h=13, hem_ripple=1.6, hem_lobes=11),
+}
+# The folds fade out round the eyes and mouth, seen from in front: none
+# within `clear_rim` of their outlines, so that they don't make the mouth's
+# rim wobble, and all of them `clear_fade` further out.
+clear_rim = 1.2
+clear_fade = 5
+# The slot is drawn against the plain sheet as it was first drawn, with no
+# folds this many degrees each side of the face's middle, past the mouth's
+# corners: so it's the same whatever the style, and the mouth's back, within
+# its opening, is as it was.
+slot_clear = 50
+
+
+@dataclass(frozen=True)
+class Style:
+    """Which of EYES, MOUTHS and TEXTURES a ghost has."""
+
+    eyes: str = "oval"
+    mouth: str = "oval"
+    texture: str = "folds"
+
+
+PLAIN = Style()
 foot_chamfer = 0.4
 # The groove under the hem: from this radius on the bed, outside the socket's
 # springs (about 6.1), out to a rim this wide that follows the hem, its sides
@@ -229,60 +291,127 @@ def body_r(z: float) -> float:
     return r + bell * max(0, 1 - z / shoulder) ** bell_power
 
 
-def radius(z: float, a: float) -> float:
-    """The skin's distance from the axis, z high and a degrees round from +x."""
-    # Two sets of folds, out of step, so that no two are alike, fading out
-    # toward the crown, and gone from the face as wide as the mouth, so that
-    # they don't make its rim wobble.
-    turn = fold_twist * (1 - z / h)
-    off_face = min(abs(a - 270), 360 - abs(a - 270))
-    face = 1 - exp(-((max(0, off_face - fold_clear) / 30) ** 2))
+def sheet(z: float, a: float, texture: Texture, folded: float) -> float:
+    """The skin's distance from the axis, z high and a degrees round from +x,
+    with `folded` of its folds there."""
+    # Two sets of folds, out of step, fading out toward the crown.
+    t = texture
+    turn = t.twist * (1 - z / h) ** t.twist_power
     folds = (
-        fold
+        t.fold
         * (1 - z / h) ** 0.6
-        * face
+        * folded
         * (
-            0.6 * cos(radians(fold_n * (a + turn)))
-            + 0.4 * cos(radians((fold_n + 4) * (a - 0.6 * turn) + 40))
+            (1 - t.second) * cos(radians(t.fold_n * (a + turn)))
+            + t.second * cos(radians((t.fold_n + 4) * (a + t.second_twist * turn) + 40))
         )
     )
+    return folds + plain(z, a, t)
+
+
+def plain(z: float, a: float, t: Texture) -> float:
+    """The sheet without its folds."""
     if z >= shoulder:
-        return folds + r * sqrt(max(0, 1 - ((z - shoulder) / (h - shoulder)) ** 2))
-    hem = max(0, 1 - z / hem_h) ** 2
-    return folds + body_r(z) + hem_ripple * cos(radians(hem_lobes * a)) * hem
+        return profile(z)
+    hem = max(0, 1 - z / t.hem_h) ** 2
+    return body_r(z) + t.hem_ripple * cos(radians(t.hem_lobes * a)) * hem
 
 
-def ring(z: float, inset: float = 0) -> Wire:
+def radius(z: float, a: float, style: Style) -> float:
+    """The skin, its folds fading out round the eyes and mouth."""
+    t = TEXTURES[style.texture]
+    off_face = (a - 270 + 180) % 360 - 180
+    around = profile(z) * radians(off_face)
+    return sheet(z, a, t, face_clear(style.eyes, style.mouth)(around, z))
+
+
+def profile(z: float) -> float:
+    """The sheet's radius z high, without the hem's ripples or the folds."""
+    if z >= shoulder:
+        return r * sqrt(max(0, 1 - ((z - shoulder) / (h - shoulder)) ** 2))
+    return body_r(z)
+
+
+def slot_radius(z: float, a: float) -> float:
+    """The skin that the slot is drawn against (see `slot_clear`)."""
+    off_face = min(abs(a - 270), 360 - abs(a - 270))
+    face = 1 - exp(-((max(0, off_face - slot_clear) / 30) ** 2))
+    return sheet(z, a, TEXTURES["folds"], face)
+
+
+@cache
+def face_clear(eyes: str, mouth: str) -> Callable[[float, float], float]:
+    """How much of the folds there are at a point on the sheet: none near the
+    eyes and mouth, all further out, and between, a smooth step of the
+    distance from their outlines. The point is so far round the sheet from the
+    face's middle, to the right, and z high: the outlines, which are seen
+    from in front, are unrolled likewise, so that the distance is about as
+    it is on the sheet, and grows all the way round to the back."""
+
+    def unrolled(x: float, z: float) -> tuple[float, float]:
+        q = profile(z)
+        return q * asin(max(-1, min(1, x / q))), z
+
+    outlines = [MOUTHS[mouth](), *eye_outlines(eyes)]
+    features = shapely.unary_union(
+        [
+            shapely.Polygon(
+                [
+                    unrolled(v.X, v.Y)
+                    for v in (
+                        face.outer_wire().position_at(i / 400) for i in range(400)
+                    )
+                ]
+            )
+            for outline in outlines
+            for face in outline.faces()
+        ]
+    )
+    shapely.prepare(features)
+
+    def clear(x: float, z: float) -> float:
+        k = (shapely.distance(features, shapely.Point(x, z)) - clear_rim) / clear_fade
+        k = min(1.0, max(0.0, k))
+        return k * k * (3 - 2 * k)
+
+    return clear
+
+
+def ring(z: float, inset: float, style: Style) -> Wire:
     """The skin round at height z, drawn in by `inset`. Every ring is a spline
     by the same parameters, so that the loft through them is one smooth sheet."""
     n = 96
     points: list[Vector | Sequence[float]] = [
         (q * cos(radians(a)), q * sin(radians(a)), z)
         for a in (360 * j / n for j in range(n))
-        for q in [radius(z, a) - inset]
+        for q in [radius(z, a, style) - inset]
     ]
     params = [j / n for j in range(n + 1)]
     return Wire([Edge.make_spline(points, periodic=True, parameters=params)])
 
 
 @cache
-def skin() -> Part:
+def skin(style: Style) -> Part:
     """The ghost's whole outside, solid: a 45° chamfer at the foot, the body
     lofted up through rings, and the dome closing to a point at the crown."""
     body_zs = [foot_chamfer] + [1 + 1.5 * k for k in range(16)]
     dome_zs = [shoulder + (h - shoulder) * sin(radians(a)) for a in range(0, 88, 6)]
-    foot = Solid.make_loft([ring(0, foot_chamfer), ring(foot_chamfer)], ruled=True)
-    body = Solid.make_loft([ring(z) for z in body_zs + dome_zs] + [Vertex(0, 0, h)])
+    foot = Solid.make_loft(
+        [ring(0, foot_chamfer, style), ring(foot_chamfer, 0, style)], ruled=True
+    )
+    body = Solid.make_loft(
+        [ring(z, 0, style) for z in body_zs + dome_zs] + [Vertex(0, 0, h)]
+    )
     return part(Part() + [foot, body])
 
 
-def inner(depth: float) -> Part:
+def inner(depth: float, style: Style) -> Part:
     """The skin, this far in: shrunk about the shoulder's middle."""
     f = 1 - depth / r
-    return part(Pos(0, 0, shoulder * (1 - f)) * scale(skin(), f))
+    return part(Pos(0, 0, shoulder * (1 - f)) * scale(skin(style), f))
 
 
-def groove() -> Part:
+def groove(style: Style) -> Part:
     """The groove under the hem, reaching below the bed to cut cleanly: inside
     the hem's outline drawn in by the rim, closing in at 45°, and outside a
     cone round the socket, opening out at 45°. Its peak is where they meet,
@@ -292,7 +421,7 @@ def groove() -> Part:
     tall = 7
     rim = foot_chamfer + groove_rim
     outer = Solid.make_loft(
-        [Pos(0, 0, z) * ring(0, rim + z) for z in (-1, tall)], ruled=True
+        [Pos(0, 0, z) * ring(0, rim + z, style) for z in (-1, tall)], ruled=True
     )
     cone = Polygon((0, -1), (groove_in - 1, -1), (groove_in + tall, tall), (0, tall))
     cut = outer - revolve((Plane.XZ * cone).faces(), Axis.Z)
@@ -300,21 +429,116 @@ def groove() -> Part:
     return part(fillet(ridge, groove_round))
 
 
-# Eyes: holes into the face, from the axis out
+# The face: outlines as seen from in front of it, x across, to the right, and
+# y up, which is the ghost's z; cut into it straight out from y = 0.
 
 
-def into_face(x: float, z: float, w: float, tall: float) -> Part:
-    """An ellipse w across and `tall` high, its middle at (x, z), straight out
-    the face from y = 0."""
-    return extrude(Plane.XZ * Pos(x, z) * Ellipse(w / 2, tall / 2), d)
+def into_face(outline: Sketch) -> Part:
+    return extrude(Plane.XZ * outline, d)
 
 
-def eye_holes() -> Part:
-    return part(Part() + [into_face(s * eye_x, eye_z, eye_w, eye_h) for s in (-1, 1)])
+# Eyes, each drawn about its middle, given which side it's on: 1 on the right.
 
 
-def mouth_hole() -> Part:
-    return into_face(0, mouth_z, mouth_w, mouth_h)
+def brow(cut: float, tilt: float) -> Sketch:
+    """What's above a line `cut` above an eye's middle, raised by `tilt`
+    degrees on the right."""
+    return sketch(
+        Rot(0, 0, tilt)
+        * Pos(0, cut)
+        * Rectangle(20, 10, align=(Align.CENTER, Align.MIN))
+    )
+
+
+def bar(length: float, angle: float, w: float = 1.2) -> Sketch:
+    """A stroke with round ends, `angle` from across."""
+    return sketch(Rot(0, 0, angle) * SlotCenterToCenter(length - w, w))
+
+
+EYES: dict[str, Callable[[int], Sketch]] = {
+    "oval": lambda s: sketch(Ellipse(eye_w / 2, eye_h / 2)),
+    "round": lambda s: sketch(Circle(2.2)),
+    # Brows down toward the nose.
+    "angry": lambda s: sketch(Ellipse(2.1, 2.8) - brow(0.5, s * 28)),
+    # Brows down toward the cheeks.
+    "sad": lambda s: sketch(Ellipse(2.1, 2.8) - brow(0.5, -s * 28)),
+    # Lids half down.
+    "sleepy": lambda s: sketch(Ellipse(2.2, 2.6) - brow(0.3, 0)),
+    # Arches, ^ ^.
+    "happy": lambda s: sketch(
+        Pos(0, -1.2) * SlotArc(CenterArc((0, 0), 2.2, 25, 130), 1.2)
+    ),
+    # Big, tall and hollow.
+    "hollow": lambda s: sketch(Ellipse(2.5, 3.7)),
+    # One big and one small.
+    "odd": lambda s: sketch(Circle(2.6) if s < 0 else Pos(0, 0.6) * Circle(1.5)),
+    # Crosses, X X.
+    "dead": lambda s: sketch(bar(4.6, 45) + bar(4.6, -45)),
+    # Squeezed shut, > <, each pointing in.
+    "squint": lambda s: sketch(
+        Sketch() + [Pos(-s * 0.8, t * 1.1) * bar(3.4, t * s * 35) for t in (-1, 1)]
+    ),
+}
+
+
+def eye_outlines(eyes: str) -> list[Sketch]:
+    return [Pos(s * eye_x, eye_z) * EYES[eyes](s) for s in (-1, 1)]
+
+
+def eye_holes(eyes: str) -> Part:
+    return part(Part() + [into_face(e) for e in eye_outlines(eyes)])
+
+
+# Mouths: the oval's top, which takes in the whole of the slot's opening, and a
+# lower lip of its own. The lip stays under `mouth_core` where the oval's
+# lower half is wider than the core, and turns up into the oval's sides.
+
+# Below this, the slot's opening doesn't reach the oval's sides.
+mouth_core = 16.2
+
+
+def lip(depth: Callable[[float], float], power: float = 2) -> Sketch:
+    """The oval, but for its lower half: `depth(u)` times as far below the
+    middle, u across from -1 on the left to 1 on the right, of a superellipse
+    of this power, which is the oval's lower half at 2 and squarer above it."""
+    a, b = mouth_w / 2, mouth_h / 2
+    top = [
+        (a * cos(radians(t)), mouth_z + b * sin(radians(t))) for t in range(0, 180, 5)
+    ]
+    bottom = []
+    for t in range(180, 360, 3):
+        u = cos(radians(t))
+        below = (1 - abs(u) ** power) ** (1 / power)
+        bottom.append((a * u, mouth_z - b * below * depth(u)))
+    points: list[Vector | Sequence[float]] = [Vector(x, y) for x, y in top + bottom]
+    return sketch(Face(Wire([Edge.make_spline(points, periodic=True)])))
+
+
+def bump(u: float, at: float, width: float) -> float:
+    return exp(-(((u - at) / width) ** 2))
+
+
+MOUTHS: dict[str, Callable[[], Sketch]] = {
+    "oval": lambda: sketch(Pos(0, mouth_z) * Ellipse(mouth_w / 2, mouth_h / 2)),
+    # Dropped open, Oooo.
+    "wail": lambda: lip(lambda u: 1.6 - 0.2 * u * u),
+    # Wide and square below, like a carved pumpkin's.
+    "grin": lambda: lip(lambda u: 1.3, power=4),
+    # High in the middle, its corners drooping.
+    "frown": lambda: lip(lambda u: 0.55 + 4 * u**6),
+    # Two teeth up from the lower lip.
+    "fangs": lambda: lip(
+        lambda u: 1.15 - 0.5 * (bump(u, -0.38, 0.15) + bump(u, 0.38, 0.15))
+    ),
+    # A lower lip of waves.
+    "wavy": lambda: lip(lambda u: 1.25 + 0.22 * cos(3.5 * pi * u)),
+    # Dropped further on the right than the left.
+    "lopsided": lambda: lip(lambda u: 1.05 + 0.35 * (1 + u)),
+}
+
+
+def mouth_hole(mouth: str) -> Part:
+    return into_face(MOUTHS[mouth]())
 
 
 # The slot: points are in its frame, (along, across, up), as in `slot_frame()`.
@@ -328,8 +552,7 @@ def slot_axes() -> tuple[Vector, Vector]:
 
 def skin_y(z: float) -> float:
     """Where the face is, in the middle, z high."""
-    q = radius(z, 270)
-    return -q
+    return -slot_radius(z, 270)
 
 
 @cache
@@ -361,7 +584,7 @@ def behind_back(p: Vector) -> float:
     across = sqrt(x * x + y * y)
     if not 0 < z < h:
         return -across
-    return radius(z, degrees(atan2(y, x)) % 360) - across
+    return slot_radius(z, degrees(atan2(y, x)) % 360) - across
 
 
 def back_along(w: float, v: float) -> float:
@@ -571,24 +794,24 @@ vote_settings = {
 # The pieces
 
 
-def ghost() -> list[Piece]:
+def ghost(style: Style = PLAIN) -> list[Piece]:
     """The ghost as it prints, standing."""
     # The white and the black are each cut from the same shapes, not one from
     # the other: they meet face on face, and OCCT takes tens of seconds to
     # cut one from the other there. Nor does anything cut from either meet
     # its faces face on face: each reaches past what it leaves.
-    whole = skin()
-    eye_cut = eye_holes() - inner(eye_depth)
-    hole = mouth_hole()
+    whole = skin(style)
+    eye_cut = eye_holes(style.eyes) - inner(eye_depth, style)
+    hole = mouth_hole(style.mouth)
     deep = hole - Cylinder(body_r(mouth_z) - mouth_depth - mouth_back, h)
     # The slot is within its lining and the mouth's back, so the white needn't
     # be cut by it too.
     magnets = magnet_pocket()
     tube = lining_tube()
     white = round_rim(part(whole - deep)) - (
-        tube + eye_cut + socket(press) + magnets + groove()
+        tube + eye_cut + socket(press) + magnets + groove(style)
     )
-    black = (part(deep + tube) & inner(mouth_depth)) - (slot() + magnets)
+    black = (part(deep + tube) & inner(mouth_depth, style)) - (slot() + magnets)
     return [
         Piece(white, "sheet", "white", parent="ghost"),
         Piece(whole & eye_cut, "eyes", "black", parent="ghost"),
@@ -672,6 +895,33 @@ def assembly() -> list[Piece]:
     return ghost() + placed_vote(held) + [Piece(pencil, "pencil", "gray20")]
 
 
+# Samples, each the plain ghost but for one thing, in rows of each.
+samples = {
+    f"{kind}-{name}": replace(PLAIN, **{kind: name})
+    for kind, names in [("eyes", EYES), ("mouth", MOUTHS), ("texture", TEXTURES)]
+    for name in names
+    if replace(PLAIN, **{kind: name}) != PLAIN
+}
+
+
+def row(kind: str) -> View:
+    names = [n for n in samples if n.startswith(f"{kind}-")]
+
+    def arrange(objects: Mapping[str, list[Piece]]) -> list[Piece]:
+        return [
+            replace(
+                p,
+                shape=Pos(k * (d + 2 * bell + 6)) * p.shape,
+                name=f"{name} {p.name}",
+                parent=f"{name}/{name} {p.parent}",
+            )
+            for k, (name, pieces) in enumerate(objects.items())
+            for p in pieces
+        ]
+
+    return View(arrange, f"Each {kind}, beside the plain ghost", ["ghost", *names])
+
+
 project(
     __file__,
     objects={
@@ -688,8 +938,22 @@ project(
             pauses=[vote_pause],
         ),
         "fit": Object(fit, "The socket alone, at each press, to try on a pencil"),
+        **{
+            name: Object(
+                lambda style=style: ghost(style),
+                f"With {style}",
+                settings=ghost_settings,
+                pauses=[ghost_pause],
+            )
+            for name, style in samples.items()
+        },
     },
-    views={"assembly": Object(assembly, "On its pencil, its vote in its mouth")},
+    views={
+        "assembly": Object(assembly, "On its pencil, its vote in its mouth"),
+        "eyes": row("eyes"),
+        "mouths": row("mouth"),
+        "textures": row("texture"),
+    },
     # Apart: the vote's layers are thinner than the ghost's.
     plates=["ghost", "vote"],
 )
