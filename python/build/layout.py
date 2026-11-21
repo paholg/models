@@ -19,8 +19,8 @@ def pack(group: list[str], sizes: dict[str, tuple[float, float]]) -> list[list[t
     """Lay a group's parts out on as few plates as it can.
 
     Returns each plate's (part, x, y, turned): where the part's box goes on the bed,
-    and whether it's turned a quarter. The best of many orders: biggest first, then
-    shuffled ones.
+    and whether it's turned a quarter, which it is only where it fits on a plate
+    no other way. The best of many orders: biggest first, then shuffled ones.
     """
     rng = random.Random(0)
     orders = [
@@ -35,7 +35,8 @@ def pack_in_order(
     group: list[str], sizes: dict[str, tuple[float, float]]
 ) -> list[list[tuple]]:
     """Lay parts out in the order given, each on the first plate with room, where it
-    leaves the least of the free rectangle it best fits (MaxRects)."""
+    leaves the least of the free rectangle it best fits (MaxRects): as it is, if
+    it fits that way, and turned only if not."""
     room = [BED[k] - 2 * PLATE_MARGIN + PLATE_GAP for k in (0, 1)]
     plates: list[tuple[list, list]] = []  # each one's free rectangles, and its parts
     for part in group:
@@ -46,12 +47,14 @@ def pack_in_order(
             if n == len(plates):
                 plates.append(([(0.0, 0.0, *room)], []))
             free, placed = plates[n]
-            fits = [
-                (min(fw - a, fh - b), fx, fy, a, b, turned)
-                for fx, fy, fw, fh in free
-                for a, b, turned in ((w, h, False), (h, w, True))
-                if a <= fw + 1e-6 and b <= fh + 1e-6
-            ]
+            for a, b, turned in ((w, h, False), (h, w, True)):
+                fits = [
+                    (min(fw - a, fh - b), fx, fy, a, b, turned)
+                    for fx, fy, fw, fh in free
+                    if a <= fw + 1e-6 and b <= fh + 1e-6
+                ]
+                if fits:
+                    break
             if fits:
                 break
         _, x, y, a, b, turned = min(fits)
