@@ -51,3 +51,8 @@ diff *args:
 [positional-arguments]
 slice project *args:
     @uv --project python run python/slice.py "$@"
+
+# Check that the printer's loaded filaments and Spoolman agree, so Orca's filament sync picks the
+# right presets (see python/spools.py).
+spools:
+    @uv --project python run python/spools.py
