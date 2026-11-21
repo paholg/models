@@ -2,9 +2,9 @@
 
 ## Blood on the Clocktower
 
-- Reprint the ghost
-- Measure the pencil
-- Print the vote with steel
+- Print test ghost with 12x3 magnet
+- Print 19 more ghosts
+- Setup travelers
 
 ## A Feast for Odin
 

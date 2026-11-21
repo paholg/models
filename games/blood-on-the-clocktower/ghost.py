@@ -156,7 +156,7 @@ class Style:
 PLAIN = Style()
 foot_chamfer = 0.4
 # The groove under the hem: from this radius on the bed, outside the socket's
-# springs (about 6.1), out to a rim this wide that follows the hem, its sides
+# springs (about 6.2), out to a rim this wide that follows the hem, its sides
 # at 45°, and its peak rounded.
 groove_in = 8.5
 groove_rim = 2
@@ -174,9 +174,10 @@ eye_depth = 0.8
 
 # Wand
 
-# The pencil, across its flats and across its corners.
+# The pencil, across its flats and across its corners, which are rounded off:
+# as measured.
 pencil_flats = 7.0
-pencil_corners = 8.0
+pencil_corners = 7.5
 wand_l = 180
 # The pencil goes in by its plain end, its dipped end out.
 socket_depth = 11
@@ -184,7 +185,7 @@ socket_depth = 11
 socket_c = 0.15
 # Each spring is a wall across the socket, the socket's whole depth, held at
 # its ends, with room behind to bend into.
-spring_t = 0.5
+spring_t = 0.8
 spring_span = 8
 spring_gap = 0.6
 # How far the pencil pushes each spring back.
@@ -1032,8 +1033,9 @@ def assembly() -> list[Piece]:
         * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c)
         * Rot(180, 0, 0)
     )
+    hexagon = RegularPolygon(pencil_flats / 2, 6, major_radius=False)
     pencil = Pos(0, 0, socket_depth - wand_l) * extrude(
-        RegularPolygon(pencil_corners / 2, 6), wand_l
+        sketch(hexagon & Circle(pencil_corners / 2)), wand_l
     )
     return ghost() + placed_vote(held) + [Piece(pencil, "pencil", "gray20")]
 
