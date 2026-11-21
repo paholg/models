@@ -325,10 +325,23 @@ def write_step(drawn: list[Piece], out: Path) -> None:
         group.append(shape)
 
     def built(group: list) -> list[Shape]:
-        return [
-            Compound(label=e[0], children=built(e[1])) if isinstance(e, tuple) else e
-            for e in group
-        ]
+        """A group's shapes and groups, a group moved as one where all it holds
+        is: so that FreeCAD gives the group that placement, and its children
+        none, and the group's box turns with them, as a placed piece's does."""
+        out = []
+        for e in group:
+            if not isinstance(e, tuple):
+                out.append(e)
+                continue
+            children = built(e[1])
+            at = children[0].location if children else None
+            if at is None or any(c.location != at for c in children):
+                out.append(Compound(label=e[0], children=children))
+                continue
+            undo = at.inverse()
+            children = [c.moved(undo) for c in children]
+            out.append(Compound(label=e[0], children=children).moved(at))
+        return out
 
     out.parent.mkdir(parents=True, exist_ok=True)
     export_step(Compound(label=out.stem, children=built(top)), out)
