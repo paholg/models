@@ -11,8 +11,12 @@ Pieces whose shapes are the same are left out; the rest are compared by
 OCCT's booleans, not meshes. Each that came out different goes in
 tmp/diff/diff.step, an object to a spot, labeled: green for what the change
 adds, red for what it takes away, and what stays in gray, as "<piece> common"
-to hide (STEP keeps no transparency). The commit's files are in tmp/diff/old,
-and the pieces' shapes in tmp/diff/drawn.
+to hide (STEP keeps no transparency). Where the booleans go wrong, as OCCT's
+can on faces of the two that nearly coincide, the piece is shown whole, as
+"<piece> old" in red and "<piece> new" in green, side by side. The
+commit's files are in tmp/diff/old, and the pieces' shapes in tmp/diff/drawn.
+
+What fails to draw or compare is said at the end, and fails the diff.
 
 Usage: diff.py [REF] [PROJECT...] [--no-open]
 """
@@ -36,6 +40,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "tmp/diff"
 OLD = OUT / "old"
 DRAWN = {"old": OUT / "drawn/old", "new": OUT / "drawn/new"}
+# What failed to draw or compare, for the end.
+FAILED: list[str] = []
 
 
 @dataclass(frozen=True)
@@ -119,8 +125,11 @@ def workers() -> ProcessPoolExecutor:
     return ProcessPoolExecutor(os.cpu_count(), context, max_tasks_per_child=1)
 
 
-def failure(e: BaseException) -> str:
-    return f"{type(e).__name__}: {e}"
+def fail(what: str, e: BaseException) -> None:
+    """Say what failed, now and again at the end, where it fails the diff."""
+    line = f"{what}: {type(e).__name__}: {e}"
+    print(f"  {line}")
+    FAILED.append(line)
 
 
 def folder(side: str, file: Path, name: str) -> Path:
@@ -200,10 +209,9 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
             progress.expect(1)
             with progress.stage("writing diff.step"):
                 pool.submit(diff_worker.view, objects, title, path).result()
-    if not shown:
-        return
-    print(path.relative_to(ROOT))
-    if show:
+    if shown:
+        print(path.relative_to(ROOT))
+    if shown and show:
         subprocess.Popen(
             ["freecad", path, ROOT / "nix/fit.FCMacro"],
             start_new_session=True,
@@ -211,6 +219,9 @@ def diff(ref: str, named: list[Path], show: bool) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+    if FAILED:
+        lines = "\n".join(f"  {line}" for line in FAILED)
+        sys.exit(f"{len(FAILED)} failed:\n{lines}")
 
 
 def counted[T](
@@ -247,7 +258,7 @@ def draw(pool: ProcessPoolExecutor, files: list[Path]) -> list[Unit]:
         try:
             names = done.result()
         except Exception as e:  # noqa: BLE001  # whatever the project raises
-            print(f"  {file}, {side}: {failure(e)}")
+            fail(f"{file}, {side}", e)
             failed.add((file, ""))
             continue
         for name in names:
@@ -260,7 +271,7 @@ def draw(pool: ProcessPoolExecutor, files: list[Path]) -> list[Unit]:
         try:
             units.update(dict.fromkeys(pieces(side, file, name, done.result())))
         except Exception as e:  # noqa: BLE001  # whatever the project raises
-            print(f"  {file} {name}, {side}: {failure(e)}")
+            fail(f"{file} {name}, {side}", e)
             failed.add((file, name))
     kept = [
         u
@@ -301,14 +312,20 @@ def compare(pool: ProcessPoolExecutor, units: list[Unit]) -> list[Unit]:
     ]
     shown = []
     for unit, job in zip(differ, jobs):
+        piece = "" if unit.piece == unit.object else f" {unit.piece}"
         try:
-            has = job.result()
+            has, problem = job.result()
         except Exception as e:  # noqa: BLE001  # whatever the project raises
-            print(f"  {unit.label} {unit.piece}: {failure(e)}")
+            fail(f"{unit.label} {unit.piece}", e)
             continue
         if has:
             shown.append(unit)
-            piece = "" if unit.piece == unit.object else f" {unit.piece}"
+        if problem:
+            # Shown whole, old and new, but not compared.
+            line = f"{unit.label}{piece}: {problem}"
+            print(f"  {line}")
+            FAILED.append(line)
+        elif has:
             print(f"  {unit.label}{piece}: {', '.join(has)}")
     print(f"  {len(units) - len(shown)} of {len(units)} pieces are the same")
     return shown

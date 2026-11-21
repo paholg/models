@@ -33,10 +33,17 @@ LABEL = 12
 # A solid thinner than this on average, in mm, is no change: the film a boolean
 # of two near-equal shapes can leave.
 FILM = 1e-3
+# How far, in mm³, added, removed and common may be from adding up to the two
+# shapes before the booleans are taken to have gone wrong, as OCCT's can on
+# faces of the two that nearly coincide.
+SLACK = 0.05
 COLORS = {
     "added": (0, 0.7, 0, 1),
     "removed": (0.85, 0, 0, 1),
     "common": (0.8, 0.8, 0.8, 0.25),
+    # Of a piece the booleans failed on, each shape whole, side by side.
+    "old": (0.85, 0, 0, 0.5),
+    "new": (0, 0.7, 0, 0.5),
 }
 
 
@@ -98,9 +105,14 @@ def thickness(shape: "Shape") -> float:
     return 2 * shape.compute_volume() / area if area else 0.0
 
 
-def compare(old: Path, new: Path, out: Path) -> list[str]:
+def volume(shape: "Shape | None") -> float:
+    return shape.compute_volume() if shape is not None else 0.0
+
+
+def compare(old: Path, new: Path, out: Path) -> tuple[list[str], str | None]:
     """Write the solids of a piece's diff to `out`: added, removed and common,
-    of those there are. Returns which there are of added and removed."""
+    of those there are. Returns which there are of added and removed, and
+    whether the booleans failed, when it writes old and new whole instead."""
     from build123d import export_brep, import_brep
 
     out.mkdir(parents=True, exist_ok=True)
@@ -108,20 +120,41 @@ def compare(old: Path, new: Path, out: Path) -> list[str]:
         # All of the one there is has been added, or removed.
         kind, path = ("added", new) if new.exists() else ("removed", old)
         (out / f"{kind}.brep").write_bytes(path.read_bytes())
-        return [kind]
+        return [kind], None
     a, b = import_brep(old), import_brep(new)
+    va, vb = volume(a), volume(b)
+    try:
+        solids = {"added": b - a, "removed": a - b}
+        # What stays is only there to see the change by, and to check the
+        # others with, and is the slowest of the three: a piece drawn the same,
+        # though not to the same bytes, skips it.
+        if volume(solids["added"]) or volume(solids["removed"]):
+            solids["common"] = b & a
+        else:
+            solids["common"] = b
+        sums = [
+            volume(solids["common"]) + volume(solids[k]) for k in ("added", "removed")
+        ]
+        if abs(sums[0] - vb) > SLACK or abs(sums[1] - va) > SLACK:
+            raise ValueError(
+                f"common and added come to {sums[0]:.3f} mm³ of {vb:.3f}, "
+                f"common and removed to {sums[1]:.3f} of {va:.3f}"
+            )
+    # OCCT's own, or the ValueError build123d raises on what comes out null.
+    except Exception as e:  # noqa: BLE001
+        export_brep(a, out / "old.brep")
+        export_brep(b, out / "new.brep")
+        return ["old", "new"], f"booleans failed: {type(e).__name__}: {e}"
     found = []
-    for kind, solid in (("added", b - a), ("removed", a - b)):
-        if solid is not None and solid.compute_volume() and thickness(solid) >= FILM:
+    for kind in ("added", "removed"):
+        solid = solids[kind]
+        if solid is not None and volume(solid) and thickness(solid) >= FILM:
             export_brep(solid, out / f"{kind}.brep")
             found.append(kind)
-    # What stays is only there to see the change by, and is the slowest of the
-    # three: a piece drawn the same, though not to the same bytes, skips it.
-    if found:
-        common = b & a
-        if common is not None and common.compute_volume():
-            export_brep(common, out / "common.brep")
-    return found
+    common = solids["common"]
+    if found and common is not None and volume(common):
+        export_brep(common, out / "common.brep")
+    return found, None
 
 
 def unhollowed(shape: "Shape") -> "Shape":
@@ -166,6 +199,12 @@ def view(objects: dict[str, dict[str, Path]], title: str, path: Path) -> None:
             for kind, color in COLORS.items():
                 if (folder / f"{kind}.brep").exists():
                     shape = unhollowed(import_brep(folder / f"{kind}.brep"))
+                    if kind == "new" and (folder / "old.brep").exists():
+                        # Beside the old, not in it: STEP keeps no
+                        # transparency, so the one would hide the other.
+                        before = shapes[-1][2].bounding_box()
+                        right = before.max.X - shape.bounding_box().min.X
+                        shape = Pos(right + GAP / 2, 0, 0) * shape
                     shapes.append((f"{piece} {kind}", color, shape))
         box = Compound([s for *_, s in shapes]).bounding_box()
         # No narrower than its label.
