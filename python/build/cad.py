@@ -118,6 +118,7 @@ class Object:
     # Heights to pause at, to put something in: the print pauses once it's that
     # high, or a layer sooner, so leave a layer's room over what goes in.
     pauses: Sequence[float] = ()
+    count: int = 1  # how many to print: a plate it's on gets that many
 
 
 def pieces(name: str, obj: Object) -> list[Piece]:
@@ -351,11 +352,11 @@ def project(
     file: str,
     objects: Mapping[str, Object],
     orca: Mapping[str, object] | None = None,
-    plates: list[str] | None = None,
+    plates: Sequence[Sequence[str]] | None = None,
     views: Mapping[str, Object | View] | None = None,
 ) -> None:
     """Write the project's .3mf files to gen/<dir>/: one per object, and one of `plates`,
-    each a group like "lid*2 base". `orca` is settings for all of them, an
+    each the names of the objects to print together. `orca` is settings for all of them, an
     object's own `settings` for its prints, and a piece's for that piece; views
     are only to look at. The plates' project applies what its objects share, and
     puts the rest on each object, where Orca lets an object have it, and pauses
@@ -382,6 +383,9 @@ def project(
     for name, view in views.items():
         if isinstance(view, View) and (missing := set(view.uses) - set(objects)):
             sys.exit(f"view {name} uses what isn't an object: {', '.join(missing)}")
+    for plate in plates or []:
+        if isinstance(plate, str) or not set(plate) <= set(objects):
+            sys.exit(f"a plate is a list of objects' names, not {plate!r}")
     # Show each line as it is printed, even into a pipe.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
@@ -404,7 +408,7 @@ def generate(
     objects: Mapping[str, Object],
     views: Mapping[str, Object | View],
     orca: Mapping[str, object],
-    plates: list[str],
+    plates: Sequence[Sequence[str]],
 ) -> None:
     """project()'s work with no arguments: everything it writes to gen/."""
     out_dir = build.ROOT / "gen" / path.parent.relative_to(build.ROOT)
@@ -482,7 +486,11 @@ def generate(
                 ready()
             return done
 
-        build.run(path, list(objects), build.groups_of(plates), drawn)
+        # Each plate's objects, a copy at a time.
+        groups = [
+            [n for n in plate for _ in range(objects[n].count)] for plate in plates
+        ]
+        build.run(path, list(objects), groups, drawn)
         for drawing in list(looks.values()):
             result(drawing)
 

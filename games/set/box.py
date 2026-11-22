@@ -266,5 +266,5 @@ project(
     },
     orca=SETTINGS,
     # Apart: five colors are more than the printer's four heads.
-    plates=["body", "lid"],
+    plates=[["body"], ["lid"]],
 )

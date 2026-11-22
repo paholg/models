@@ -2362,11 +2362,12 @@ orca = {"reduce_infill_retraction": 0}
 
 objects = {
     "half_a": Object(
-        placed(half_a_pieces, halves_at), "Half a tray of goods tiles: print two"
+        placed(half_a_pieces, halves_at), "Half a tray of goods tiles", count=2
     ),
     "half_b": Object(
         placed(half_b_pieces, halves_at * Pos(half_a.x, 0)),
-        "The rest of a half tray, and its money: print two",
+        "The rest of a half tray, and its money",
+        count=2,
     ),
     "big": Object(
         placed(big_pieces, back * Pos(islands_size[0], 0, deep_h)),
@@ -2419,7 +2420,7 @@ objects = {
         "Beside the VP tray",
     ),
     "frame_half": Object(
-        single(frame_half, "frame half", setup, corner), "Round the boards: print two"
+        single(frame_half, "frame half", setup, corner), "Round the boards", count=2
     ),
     "deck_setup": Object(deck(0), "The setup occupation cards"),
     "deck_occupations": Object(deck(1), "The in-game occupation cards"),
@@ -2443,10 +2444,27 @@ project(
     orca=orca,
     # A line per set of filaments.
     plates=[
-        "frame_half*2",
-        "half_a*2 half_b*2 big",
-        "setup_buildings misc strips riser spacer deck_setup islands vikings",
-        "special_forge special_others",
-        "buildings buildings_cap wood boats vp deck_occupations deck_weapons",
+        ["frame_half"],
+        ["half_a", "half_b", "big"],
+        [
+            "setup_buildings",
+            "misc",
+            "strips",
+            "riser",
+            "spacer",
+            "deck_setup",
+            "islands",
+            "vikings",
+        ],
+        ["special_forge", "special_others"],
+        [
+            "buildings",
+            "buildings_cap",
+            "wood",
+            "boats",
+            "vp",
+            "deck_occupations",
+            "deck_weapons",
+        ],
     ],
 )

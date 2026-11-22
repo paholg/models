@@ -17,7 +17,7 @@ import contextlib
 import os
 import runpy
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -62,7 +62,7 @@ def given(tree: Path, file: Path) -> dict[str, "Object"]:
         file: str,
         objects: Mapping[str, cad.Object],
         orca: Mapping[str, object] | None = None,
-        plates: list[str] | None = None,
+        plates: Sequence[Sequence[str]] | None = None,
         views: Mapping[str, cad.Object] | None = None,
     ) -> None:
         found.update(objects)

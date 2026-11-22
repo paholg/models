@@ -43,5 +43,5 @@ project(
     },
     views={"assembly": View(assembly, "The three closed, side by side", list(boxes))},
     orca=SETTINGS,
-    plates=list(boxes),
+    plates=[[name] for name in boxes],
 )

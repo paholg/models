@@ -765,6 +765,6 @@ project(
         )
     },
     # Together: the plate pauses for the back's magnets.
-    plates=["top back sliders rupees"],
+    plates=[["top", "back", "sliders", "rupees"]],
     orca=first_layer,
 )

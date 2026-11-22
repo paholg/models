@@ -434,5 +434,5 @@ project(
             ["plate", "cap"],
         )
     },
-    plates=["plate cap"],
+    plates=[["plate", "cap"]],
 )

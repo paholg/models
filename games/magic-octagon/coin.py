@@ -22,5 +22,5 @@ project(
         for shape, coin in coins.items()
     },
     views={"assembly": View(row, "Each shape, glued", list(coins))},
-    plates=[" ".join(SHAPES)],
+    plates=[list(SHAPES)],
 )

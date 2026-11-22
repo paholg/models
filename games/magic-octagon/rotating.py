@@ -525,5 +525,5 @@ project(
         for lock in LOCKS
     },
     views=views,
-    plates=["radial", "axial"],
+    plates=[["radial"], ["axial"]],
 )

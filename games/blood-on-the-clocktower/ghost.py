@@ -1205,6 +1205,7 @@ project(
             "Face down, pausing for its insert",
             settings=vote_settings,
             pauses=[vote_pause],
+            count=ghost_n,
         ),
         "fit": Object(fit, "The socket alone, at each press, to try on a pencil"),
     },
@@ -1216,5 +1217,5 @@ project(
         )
     },
     # Apart: the vote's layers are thinner than the ghost's.
-    plates=[" ".join(GHOSTS), f"vote*{ghost_n}"],
+    plates=[list(GHOSTS), ["vote"]],
 )

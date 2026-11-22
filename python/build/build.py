@@ -31,7 +31,7 @@ in it, laid out on as many plates as it takes. It applies the settings its
 objects share; one that only some have goes on those objects' own, if Orca lets
 an object have it, and is left out with a warning if not. A plate pauses
 wherever one of its objects does, and everything on it with it. Each plate is a
-group of objects to print together, with `*N` for copies: "lid*2 base".
+group of objects to print together, as many of each as its `count`.
 
 A group that doesn't fit one plate goes on several. Its objects are packed by
 their bounding boxes, turned a quarter where that helps; nothing keeps room for
@@ -69,19 +69,6 @@ class Render:
     pauses: list[float]  # the heights to pause at
     filaments: dict[str, str]  # what to call the filament each color stands for
     settings: dict[str, str]  # for the whole print, presets and all
-
-
-def groups_of(lines: list[str]) -> list[list[str]]:
-    """Each plate line's parts, a copy at a time: "lid*2 base" is lid, lid, base."""
-    return [
-        [
-            part
-            for item in line.split()
-            for part, _, n in [item.partition("*")]
-            for _ in range(int(n or 1))
-        ]
-        for line in lines
-    ]
 
 
 class Told:

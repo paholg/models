@@ -418,5 +418,5 @@ project(
             ["stacker", "lid", "strip"],
         )
     },
-    plates=["stacker lid strip"],
+    plates=[["stacker", "lid", "strip"]],
 )

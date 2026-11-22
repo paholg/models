@@ -96,5 +96,5 @@ project(
     views={"assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])},
     orca=SETTINGS,
     # The tests together, before the box.
-    plates=["seam magnets", "panels"],
+    plates=[["seam", "magnets"], ["panels"]],
 )
