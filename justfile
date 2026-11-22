@@ -39,6 +39,16 @@ view file object:
     uv --project python run "{{file}}" --view "{{object}}"
     setsid freecad "tmp/view/$(basename "{{file}}" .py)-{{object}}.step" nix/fit.FCMacro >/dev/null 2>&1 &
 
+# Look a project's objects, or those named, over for edges left sharp and for slivers where
+# cuts meet, and fail if there are any (see python/build/audit.py).
+audit file *objects:
+    uv --project python run "{{file}}" --audit {{objects}}
+
+# Write line drawings of an object or view to tmp/shots/<stem>-<object>-*.png: from all round,
+# or close up at each X,Y,Z given, or, with `audit`, at each spot its audit finds.
+shots file object *where:
+    uv --project python run "{{file}}" --shots "{{object}}" {{where}}
+
 # Open FreeCAD on what the working tree's changes since a commit (HEAD by default) do to each
 # piece of each project they reach, or of the projects named: green for what they add, red for
 # what they remove, clear gray for what stays (see python/diff.py).

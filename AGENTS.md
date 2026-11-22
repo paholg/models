@@ -37,6 +37,14 @@ each set of changes to a project.** It draws in worker processes, each of
 which runs the file again up to `project()`, so keep the file's top-level code
 fast, and don't rely on a cache one object fills being there for another.
 
+`just audit FILE.py [OBJECT]` lists an object's spots: edges left sharp, and
+slivers where cuts meet. Run it with generating, on what you changed. And
+`just shots FILE.py OBJECT audit` draws each close up, to `tmp/shots/`, as
+`just shots FILE.py OBJECT [X,Y,Z]` does the whole object, or any spot. **Look
+at a spot's pictures before calling it fixed, or deliberate.** What an object
+leaves sharp on purpose, it lists as its `skip_audit`: see
+`python/build/audit.py`.
+
 `just view FILE.py OBJECT` opens an object or view in FreeCAD, as an assembly
 of its pieces and groups, for the Assembly workbench's exploded views, and
 `just diff [REF]` shows in FreeCAD what the changes since REF (HEAD by

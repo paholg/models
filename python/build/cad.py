@@ -21,6 +21,7 @@ from build123d import (
     Part,
     Shape,
     Sketch,
+    Vector,
     export_brep,
     export_step,
     import_brep,
@@ -30,7 +31,7 @@ from build123d import (
 from build123d.exporters3d import BRepMesh_IncrementalMesh, StlAPI_Writer
 from build123d.text import Font_FontMgr
 
-from . import build, progress
+from . import audit, build, progress
 from .orca import Solid
 
 # build123d points fontconfig at /etc/fonts/fonts.conf when it first sets
@@ -119,6 +120,8 @@ class Object:
     # high, or a layer sooner, so leave a layer's room over what goes in.
     pauses: Sequence[float] = ()
     count: int = 1  # how many to print: a plate it's on gets that many
+    # What its audit is to pass over, as left sharp on purpose: see audit.py.
+    skip_audit: Sequence[audit.Skip] = ()
 
 
 def pieces(name: str, obj: Object) -> list[Piece]:
@@ -200,6 +203,65 @@ def render(
         texts({**orca, **obj.settings}),
     )
     return rendered, [(p.name, p.color, p.filament, p.parent) for p in made]
+
+
+def audited(name: str, obj: Object) -> tuple[list[audit.Spot], int]:
+    """An object's pieces, together where they sit, audited (see audit.py)."""
+    made = pieces(name, obj)
+    return audit.audit([p.sitting().shape for p in made], obj.skip_audit)
+
+
+def shapes_of(
+    name: str, shown: Object | View, objects: Mapping[str, Object]
+) -> list[Shape]:
+    """What an object or view shows, where it sits."""
+    if isinstance(shown, View):
+        sitting = {n: [p.sitting() for p in pieces(n, objects[n])] for n in shown.uses}
+        return [p.shape for p in arranged(shown, sitting)]
+    return [p.sitting().shape for p in pieces(name, shown)]
+
+
+def run_audit(names: Sequence[str], objects: Mapping[str, Object]) -> None:
+    """Print each object's spots, and fail if there are any."""
+    if unknown := [n for n in names if n not in objects]:
+        sys.exit(f"not an object: {', '.join(unknown)}")
+    bad = 0
+    for name in names or objects:
+        spots, skipped = audited(name, objects[name])
+        bad += len(spots)
+        print(
+            f"{name}: {len(spots)} spots" + (f", {skipped} skipped" if skipped else "")
+        )
+        for spot in spots:
+            print(f"  {spot}")
+    if bad:
+        sys.exit(1)
+
+
+def run_shots(
+    stem: str,
+    name: str,
+    where: Sequence[str],
+    shown: Object | View,
+    objects: Mapping[str, Object],
+) -> None:
+    """Write pictures of an object or view to tmp/shots/: from all round, or
+    close up at each of `where`, an "X,Y,Z" or, for an object, "audit" for
+    each of its audit's spots."""
+    shapes = shapes_of(name, shown, objects)
+    spots: list[Vector] | None = None
+    for w in where:
+        spots = spots or []
+        if w == "audit":
+            skip = shown.skip_audit if isinstance(shown, Object) else ()
+            spots += [s.at for s in audit.audit(shapes, skip)[0]]
+        else:
+            spots.append(Vector(*[float(v) for v in w.split(",")]))
+    out = build.ROOT / "tmp/shots" / f"{stem}-{name}"
+    for old in out.parent.glob(f"{out.name}-*.png"):
+        old.unlink()
+    for path in audit.shots(shapes, out, spots):
+        print(path.relative_to(build.ROOT))
 
 
 def arranged(view: View, objects: Mapping[str, list[Piece]]) -> list[Piece]:
@@ -371,7 +433,11 @@ def project(
     With more than one thing to draw, they're drawn in workers, each of which
     runs the file again (see workers()).
 
-    `--view NAME` writes just tmp/view/<stem>-<name>.step instead.
+    `--view NAME` writes just tmp/view/<stem>-<name>.step instead. `--audit
+    [OBJECT...]` looks the objects over for sharp edges and slivers, and fails
+    if it finds any. `--shots NAME [X,Y,Z |
+    audit]...` writes pictures of an object or view to tmp/shots/ (see
+    audit.py).
     """
     views = views or {}
     if given is not None:
@@ -399,8 +465,15 @@ def project(
             out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
             write_step_of(name, shown[name], objects, out)
             print(out.relative_to(build.ROOT))
+        case ["--audit", *names]:
+            run_audit(names, objects)
+        case ["--shots", name, *where] if name in shown:
+            run_shots(path.stem, name, where, shown[name], objects)
         case _:
-            sys.exit(f"usage: {path.name} [--view OBJECT]")
+            sys.exit(
+                f"usage: {path.name} [--view OBJECT | --audit [OBJECT...] |"
+                " --shots OBJECT [X,Y,Z | audit]...]"
+            )
 
 
 def generate(

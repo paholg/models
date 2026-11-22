@@ -126,6 +126,8 @@
             with pkgs;
             [
               freecad
+              # Turns the SVGs `just shots` draws into PNGs.
+              imagemagick
               just
               prusa-slicer
               ruff
