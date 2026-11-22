@@ -1020,8 +1020,6 @@ def inradius(convex: Sketch) -> float:
 
 # Settings
 
-# The ghost's seams are scattered, not in a line.
-ghost_settings = {"seam_position": "random"}
 # The vote's layers are thin, for its chamfered edges and for the room over its
 # insert to be more than a layer (see `insert_c`).
 vote_settings = {
@@ -1198,7 +1196,6 @@ project(
                 lambda style=style: ghost(style),
                 f"{style.mouth} mouth, {style.texture}; "
                 "standing, pausing for its magnets",
-                settings=ghost_settings,
                 pauses=[ghost_pause],
             )
             for name, style in GHOSTS.items()
