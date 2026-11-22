@@ -49,12 +49,12 @@ at your option, except as noted below.
 
 ### Work by others
 
-These files were created by other authors. They retain their license, as do any
-models created with them:
+These files were created by other authors, or are adapted from their work.
+They retain their license, as do any models created with them:
 
 | Files | Work | License |
 | --- | --- | --- |
-| `games/feast-for-odin/card-trays/*.stl` | [Remixed A Feast for Odin card trays](https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays) by DewLeen, a remix of A Feast for Odin (+exp) Organizer / Insert by RiftForge 3D. See [its README](games/feast-for-odin/card-trays/README.md). | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) |
+| `games/feast-for-odin/card-trays/*.stl`, and `deck_tray()` in `games/feast-for-odin/insert.py`, which redraws them | [Remixed A Feast for Odin card trays](https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays) by DewLeen, a remix of A Feast for Odin (+exp) Organizer / Insert by RiftForge 3D. See [its README](games/feast-for-odin/card-trays/README.md). | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) |
 | `games/fox-in-the-forest/fox.svg` | [Fox](https://game-icons.net/1x1/caro-asercion/fox.html) by Caro Asercion, modified | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | `games/fox-in-the-forest/forest.svg` | [Forest entrance](https://game-icons.net/1x1/delapouite/forest-entrance.html) by Delapouite, modified | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | `games/fox-in-the-forest/logo.svg` | The title of The Fox in the Forest, traced from the Deluxe edition's box front. It belongs to the game's publishers, Renegade Game Studios and White Goblin Games. | Not licensed; all rights remain with its owners |

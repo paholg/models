@@ -10,10 +10,9 @@ Bottom to top:
    fit the bed.
 3. The special tiles' boards.
 4-6. The rest, in columns of trays that all come to one height:
-   - The front strip, under the card trays (not ours: see card-trays/README.md):
-     the mountain strips, in two stacks. At its end: the boat market and the
-     misc bin (4), and over them the VP and penalty tokens and the 2x5 money
-     (6), beside a spacer.
+   - The front strip, under the card trays: the mountain strips, in two
+     stacks. At its end: the boat market and the misc bin (4), and over them
+     the VP and penalty tokens and the 2x5 money (6), beside a spacer.
    - The back, in two stacks. A square one at the end of the box: the setup
      buildings, and a riser behind them (4); the islands (5); the in-game
      buildings (6). Beside it, the rest of the length: the wooden goods and
@@ -53,7 +52,6 @@ from build123d import (
     Keep,
     Kind,
     Location,
-    Mesher,
     Part,
     Plane,
     Polygon,
@@ -79,7 +77,6 @@ from build123d import (
     scale,
     split,
 )
-from shapely import MultiPoint
 
 from build.cad import Object, Piece, View, part, project, sketch
 
@@ -607,49 +604,59 @@ def t(x: int, y: int) -> tuple[float, float]:
 
 # The layers over the special boards, all zone_h tall
 
-# The card trays are imported, not modeled here: "Remixed A Feast for Odin
-# card trays" by DewLeen (@DewLeen_91662 on Printables),
+# The card trays: a deck stands in each on its cards' long edges, running
+# along the tray and leaning back between two end walls that lean with it.
+# Each end wall has a notch down its middle, to get a thumb on the deck.
+#
+# They are not original to this repository: deck_tray() redraws, from
+# measurements of its files, "Remixed A Feast for Odin card trays" by DewLeen
+# (@DewLeen_91662 on Printables),
 # https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays,
 # a remix of "A Feast for Odin (+exp) Organizer / Insert" by RiftForge 3D
-# (@RiftForge3D3). Licensed CC BY-NC-SA 4.0; see card-trays/README.md. The
-# STLs here are as downloaded; deck_tray() adapts them (shorter, and a lip at
-# each end), and what's exported is under their license. Cards stand on their
-# long edges, the deck running along the tray.
+# (@RiftForge3D3), shorter and with a lip at each end. That work is licensed
+# CC BY-NC-SA 4.0, and so are deck_tray() and the trays it draws, as
+# adaptations of it: see card-trays/README.md, beside the original files.
 
 
 @dataclass(frozen=True)
 class Deck:
     name: str
-    stl: str
-    # How much is cut out of its length: the decks are shorter than the trays.
-    cut: float
+    length: float  # along the deck, over all
     setup: bool = False
 
 
 decks = [
-    Deck("setup occupations", "weapon_cards_tray_x2.stl", 5, setup=True),
-    Deck("occupations", "occupation_cards_tray.stl", 10),
-    Deck("weapons", "weapon_cards_tray_x2.stl", 5),
+    Deck("setup occupations", 52.5, setup=True),
+    Deck("occupations", 105),
+    Deck("weapons", 52.5),
 ]
-# The trays, as they come: across, along, up.
-deck_size = {
-    "weapon_cards_tray_x2.stl": (74, 57.5),
-    "occupation_cards_tray.stl": (74, 115),
-}
-# Where the cut is, from the tray's front, as a share of its length: in the
-# plain stretch between the thumb notch and the sloped back.
-deck_cut_at = 0.5
-# Sleeved cards stand this tall on the trays' 1 mm floors.
-card_w = 46
+# Across the cards, over all: sleeved, they're 72 long between the side walls.
+deck_across = 74
+# The side walls and the floor are thinner than the other trays', for that.
+deck_wall = 1
 deck_floor = 1
+# Sleeved cards stand this tall on the floor, a little proud of the tray.
+card_w = 46
+deck_h = deck_floor + card_w - 0.4
+# How far the end walls lean back from upright, in degrees.
+deck_tilt = 18
+# The thumb notch: what's left of an end wall each side of it, how high its
+# bottom is, and the radius of its corners.
+deck_flange = 18
+deck_notch_z = 16
+deck_notch_r = 8
+# The side walls' top corners: the front one, which stands clear of the front
+# wall's lean, and the back one, where the back wall's top is.
+deck_front_r = 6
+deck_back_r = 1
 # A lip across the floor at each end, this high over it.
 deck_lip = 4
 
 # The card trays, in a row along the front, set the front strip's depth, and
 # their height (the cards stand a little proud of them) most of the zone's.
 up_h = deck_floor + card_w + 0.5
-front_y = deck_size[decks[0].stl][0]
-deck_len = [deck_size[d.stl][1] - d.cut for d in decks]
+front_y = deck_across
+deck_len = [d.length for d in decks]
 decks_x = sum(deck_len)
 # Behind the front strip.
 back_y = inner[1] - front_y
@@ -2073,50 +2080,100 @@ def special_others() -> tuple[Part, Part]:
 
 
 @cache
-def deck_stl(stl: str) -> Solid:
-    """As downloaded, its corner at the origin."""
-    shape = Mesher().read(str(HERE / "card-trays" / stl))[0]
-    assert isinstance(shape, Solid), f"{stl} isn't watertight"
-    return Pos(-shape.bounding_box().min) * shape
+def deck_end_wall() -> Part:
+    """An end wall of a card tray, lying flat: x across the tray, y up the
+    wall from the floor's underside, its outer face on z = 0 and its inner
+    one a wall under it. It runs half way into each side wall. Every edge the
+    notch and the wall's top make is rounded, on both faces."""
+    x0, x1 = deck_wall / 2, deck_across - deck_wall / 2
+    lean = cos(deck_tilt * pi / 180)
+    top, low = deck_h / lean, deck_notch_z / lean
+    a, b = x0 + deck_wall / 2 + deck_flange, x1 - deck_wall / 2 - deck_flange
+    face = round_corners(
+        polygon(
+            [(x0, 0), (x1, 0), (x1, top), (b, top), (b, low), (a, low), (a, top)]
+            + [(x0, top)]
+        ),
+        [(a, top), (b, top), (a, low), (b, low)],
+        deck_notch_r,
+    )
+    flat = extrude(face, wall, (0, 0, -1))
+    # All its faces' edges but the foot's and the sides', which are inside
+    # the floor and the side walls.
+    edges = [
+        e
+        for e in flat.edges()
+        if abs(e.start_point().Z - e.end_point().Z) < 1e-6
+        and e.center().Y > 1e-6
+        and x0 + 1e-6 < e.center().X < x1 - 1e-6
+    ]
+    return part(fillet(edges, rim_c))
 
 
 @cache
-def deck_tray(stl: str, cut: float) -> Part:
-    """A card tray, with `cut` out of its length (its y): a slice from where
-    its section is the same all along, the back part moved up to the front
-    one. At each end it gets a lip across the floor, deck_lip high over it,
-    from side wall to side wall: the trays come with only the floor's edge
-    there, and the side walls' ends, for the next thing in the box to sit
-    against. The lips' top edges are rounded, and they're trimmed to the
-    tray's own outside: its corners and bottom edges are rounded over, and a
-    square bar would stand proud of them."""
-    whole = deck_stl(stl)
-    x, y = deck_size[stl]
-    z = whole.bounding_box().max.Z
-    at = deck_cut_at * y
-    front = cuboid(-1, -1, -1, x + 1, at, z + 1) & whole
-    back = Pos(0, -cut, 0) * (cuboid(-1, at + cut, -1, x + 1, y + 1, z + 1) & whole)
-    tray = front + back
-    length = y - cut
-    h = deck_floor + deck_lip
-    # Each lip runs on past the tray's outside, below its rounded top, for the
-    # trim to end it.
-    lip = round_corners(rect(0, -1, wall, h), [(0, h), (wall, h)], rim_c)
-    sections = [
-        lip + rect(-1, -1, wall / 2, h - rim_c),
-        Pos(length - wall, 0) * (lip + rect(wall / 2, -1, wall + 1, h - rim_c)),
-    ]
-    lips = part(
-        Part() + [extrude(sketch(Plane.YZ.offset(-1) * f), x + 2) for f in sections]
+def deck_tray(length: float) -> Part:
+    """A card tray, from the origin: the cards across x, the deck along y,
+    leaning back towards +y.
+
+    A floor and two side walls, their edges rounded but for the three round
+    the front end, the floor's and the side walls': stood on that end, the
+    tray holds its cards upright, so it's flat to its edges.
+    Between the side walls, two end walls that lean, the front one's outer
+    face from the floor's front edge and the back one's top over the floor's
+    end, and a lip across the floor at each end, from side wall to side wall:
+    something for the next thing in the box to sit against, where the back
+    wall leans away from it.
+
+    The floor, side walls and lips are outlines drawn flat, each run through
+    the tray: from the end, from the side and from above. What they have in
+    common is the tray."""
+    x, h, sw, r = deck_across, deck_h, deck_wall, rim_c
+    # From the end: the floor and side walls, their foot and tops rounded.
+    trough = round_corners(
+        polygon(
+            [(0, 0), (x, 0), (x, h), (x - sw, h), (x - sw, deck_floor)]
+            + [(sw, deck_floor), (sw, h), (0, h)]
+        ),
+        [(0, 0), (x, 0), (0, h), (sw, h), (x - sw, h), (x, h)],
+        r,
     )
-    # The trim: the tray's outline seen along each axis.
-    points = [(v.X, v.Y, v.Z) for v in tray.vertices()]
-    depth = 2 * max(x, y, z) + 2
-    for plane, (a, b) in ((Plane.XY, (0, 1)), (Plane.XZ, (0, 2)), (Plane.YZ, (1, 2))):
-        outline = MultiPoint([(p[a], p[b]) for p in points]).convex_hull
-        seen = polygon(outline.exterior.coords[:-1])
-        lips &= extrude(plane.offset(-depth / 2) * seen, depth, plane.z_dir)
-    return part(tray + lips)
+    # From the side: the back foot and the top corners rounded, the front
+    # foot square.
+    side = round_corners(rect(0, 0, length, h), [(length, 0)], r)
+    side = round_corners(side, [(0, h)], deck_front_r)
+    side = round_corners(side, [(length, h)], deck_back_r)
+    # From above: the floor, and each side wall, their back corners rounded,
+    # their front ones square.
+    plan = round_corners(rect(0, 0, x, length), [(0, length), (x, length)], r)
+    strip = round_corners(rect(0, 0, sw, length), [(0, length), (sw, length)], r)
+    across = extrude(Plane.XZ * trough, length, (0, 1, 0))
+    along = extrude(Plane.YZ * side, x)
+    shell = part(
+        across
+        & along
+        & (up(plan, 0, deck_floor) + up(strip, 0, h) + up(Pos(x - sw, 0) * strip, 0, h))
+    )
+    # The lips, their tops rounded, half way into the side walls.
+    lip_h = deck_floor + deck_lip
+    lip = round_corners(rect(0, 0, wall, lip_h), [(0, lip_h), (wall, lip_h)], r)
+    lips = extrude(
+        sketch(Plane.YZ.offset(sw / 2) * (lip + Pos(length - wall, 0) * lip)), x - sw
+    )
+    # The end walls, stood up and leaning: the front one's outer face meets
+    # the floor's top at y = 0, the back one's top reaches the tray's end.
+    tilt = deck_tilt * pi / 180
+    front = -deck_floor * tan(tilt)
+    back = length - h * tan(tilt) - wall * cos(tilt)
+    assert back > wall / cos(tilt), "the tray is too short for its end walls' lean"
+    leaning = [
+        Plane((0, y, 0), x_dir=(1, 0, 0), z_dir=(0, -cos(tilt), sin(tilt)))
+        * deck_end_wall()
+        for y in (front, back)
+    ]
+    # What of them is outside the tray, below the floor and past its ends,
+    # goes.
+    inside = part(part(lips + leaning) & along & up(plan, 0, h))
+    return part(shell + inside)
 
 
 # Pieces
@@ -2220,7 +2277,7 @@ def deck(i: int) -> Callable[[], Pieces]:
     color = setup if d.setup else game
     x = sum(deck_len[: i + 1])
     at = base * Pos(x, 0, base_h) * Rot(0, 0, 90)
-    return single(lambda: deck_tray(d.stl, d.cut), f"{d.name} tray", color, at)
+    return single(lambda: deck_tray(d.length), f"{d.name} tray", color, at)
 
 
 # As printed: the buildings' tray standing on its end wall, the cap on its

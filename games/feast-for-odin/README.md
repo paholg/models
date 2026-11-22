@@ -97,10 +97,13 @@ I recommend placing the rulebooks on the very top.
 
 ## License
 
-This insert uses, cut a little shorter and with a lip added at each end, the
-wonderful
+The card trays are not original to this insert. They are redrawn, a little
+shorter and with a lip added at each end, from the wonderful
 [Remixed A Feast for Odin card trays](https://www.printables.com/model/1145265-remixed-a-feast-for-odin-card-trays)
 by Printables user [@DewLeen_91662](https://www.printables.com/@DewLeen_91662),
 a remix of A Feast for Odin (+exp) Organizer / Insert by
 [@RiftForge3D3](https://www.printables.com/@RiftForge3D3). They are licensed
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/), and so
+are the card trays here, as adaptations of them: `deck_tray()` in `insert.py`,
+and the trays generated from it. The original files are in
+[`card-trays/`](card-trays/README.md).
