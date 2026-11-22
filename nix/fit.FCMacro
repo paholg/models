@@ -99,14 +99,18 @@ def whole(doc) -> None:
             mend(root)
 
 
-def assemble(doc):
+def assemble(doc, assembly=None):
     """Put what was imported in an assembly, in place of the part the STEP
-    file's own compound came in as, and return it."""
+    file's own compound came in as, and return it: the one given, on a reload,
+    or a new one. It's one assembly for as long as the document is open, since
+    it's being edited, and FreeCAD crashes over an edited object that's gone."""
     whole(doc)
-    roots = doc.RootObjects
-    assembly = doc.addObject("Assembly::AssemblyObject", "Assembly")
-    assembly.Type = "Assembly"
-    assembly.newObject("Assembly::JointGroup", "Joints")
+    roots = [root for root in doc.RootObjects if root != assembly]
+    made = assembly is None
+    if made:
+        assembly = doc.addObject("Assembly::AssemblyObject", "Assembly")
+        assembly.Type = "Assembly"
+        assembly.newObject("Assembly::JointGroup", "Joints")
     for root in roots:
         if root.TypeId != "App::Part":
             assembly.addObject(root)
@@ -116,9 +120,11 @@ def assemble(doc):
         # Its label is the file's name, and free once it's gone.
         label = root.Label
         doc.removeObject(root.Name)
-        assembly.Label = label
-    # Active, which the workbench's commands are grayed out without.
-    Gui.getDocument(doc.Name).setEdit(assembly)
+        if made:
+            assembly.Label = label
+    if made:
+        # Active, which the workbench's commands are grayed out without.
+        Gui.getDocument(doc.Name).setEdit(assembly)
     return assembly
 
 
@@ -262,10 +268,16 @@ class Watcher:
         camera = view.getCamera() if view else None
         hidden = {o.Label for o in doc.Objects if not o.Visibility}
         views = exploded(doc)
-        # The assembly, if it's being edited, as it stays once a task closes.
-        if gui:
-            gui.resetEdit()
-        for name in [o.Name for o in doc.Objects]:
+        # All but the assembly and the groups it keeps its joints and views in.
+        assembly = next(
+            (o for o in doc.Objects if o.TypeId == "Assembly::AssemblyObject"), None
+        )
+        kept = {assembly} | {
+            o
+            for o in (assembly.Group if assembly else [])
+            if o.TypeId in ("Assembly::JointGroup", "Assembly::ViewGroup")
+        }
+        for name in [o.Name for o in doc.Objects if o not in kept]:
             # Removing a group may already have taken what's in it.
             if doc.getObject(name) is not None:
                 doc.removeObject(name)
@@ -274,7 +286,7 @@ class Watcher:
         except Exception as e:
             FreeCAD.Console.PrintError(f"Reloading {self.step}: {e}\n")
             return
-        explode(assemble(doc), views)
+        explode(assemble(doc, assembly), views)
         for o in doc.Objects:
             if o.Label in hidden:
                 o.Visibility = False
