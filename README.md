@@ -43,7 +43,7 @@ Orca projects, G-code, or STL files, is licensed under any of
 
 * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 * MIT license ([LICENSE-MIT](LICENSE-MIT))
-* CC0 1.0 ([LICENSE-CC0](LICENSE-CC0))
+* CC BY 4.0 ([LICENSE-CC-BY](LICENSE-CC-BY))
 
 at your option, except as noted below.
 
