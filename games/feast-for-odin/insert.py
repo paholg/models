@@ -1124,13 +1124,6 @@ assert special_others_size[0] >= layout["boards"]["others"]["size"][0], (
 forge_icon_w = 32
 forge_icon_d = 0.6
 forge_icon_at = (45, 28)
-# Test board: a few doubtful tiles, (board, index in it, where).
-special_test_tiles = [
-    ("forge", 1, (0, 0)),
-    ("others", 7, (0, 24.8)),
-    ("forge", 3, (57.8, 0)),
-]
-special_test_margin = 2
 
 # The frame round the board stack: it fills the box round the player boards,
 # so they can't slide, and is the stack's height, for what's above to sit on.
@@ -1953,7 +1946,7 @@ class Tile:
     def drops(self, z: float) -> Part:
         """The drops' cut, from their floor at z, along each press end: the
         tile's edge at the pocket's clearance, the S of the step tilt_a in.
-        Within its own pocket: on the test board, tiles' pockets interlock."""
+        Within its own pocket."""
         x, y = self.size
         planes = {
             "left": Plane((0, y + 1, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0)),
@@ -2076,19 +2069,6 @@ def special_others() -> tuple[Part, Part]:
     )
 
 
-@cache
-def special_test() -> tuple[Part, Part]:
-    """A few doubtful tiles on a small board, to try the fit and the tip."""
-    m = special_test_margin + pocket_clear
-    tiles = []
-    for board, i, (x, y) in special_test_tiles:
-        t = layout["boards"][board]["tiles"][i]
-        tiles.append(Tile(tuple(tuple(c) for c in t["cells"]), m + x, m + y))
-    size_x = max(t.x + t.size[0] for t in tiles) + m
-    size_y = max(t.y + t.size[1] for t in tiles) + m
-    return special_board(octagon(size_x, size_y), tiles)
-
-
 # The card trays
 
 
@@ -2198,14 +2178,6 @@ def special_others_pieces() -> Pieces:
     return [
         body_piece(body, "others board panel", game, "others board"),
         body_piece(floors, "others pocket floors", pocket_floor, "others board"),
-    ]
-
-
-def special_test_pieces() -> Pieces:
-    body, floors = special_test()
-    return [
-        body_piece(body, "test board panel", game, "test board"),
-        body_piece(floors, "test pocket floors", pocket_floor, "test board"),
     ]
 
 
@@ -2459,7 +2431,6 @@ objects = {
         placed(special_others_pieces, special_at * Pos(special_forge_size[0], 0)),
         "The other special tiles",
     ),
-    "special_test": Object(special_test_pieces, "A few doubtful special tiles, to try"),
 }
 
 
@@ -2467,9 +2438,7 @@ project(
     __file__,
     objects=objects,
     views={
-        "assembly": View(
-            assembly, "In the box", [n for n in objects if n != "special_test"]
-        ),
+        "assembly": View(assembly, "In the box", list(objects)),
     },
     orca=orca,
     # A line per set of filaments.
