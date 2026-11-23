@@ -14,9 +14,10 @@ Along the box:
    are scooped out from here, their wall toward it open for most of its
    width, and their floor cut back under them. At its far side the sonar
    tokens lie in a stack, flush with the top, in a round well whose side
-   toward the middle is gone, the floor there too: to lift out as many as are
-   wanted. The well goes well over half way round them, solid from there to
-   the cards' walls, so they don't slide out.
+   toward the middle is gone: to lift out as many as are wanted. The well goes
+   well over half way round them, solid from there to the cards' walls, so
+   they don't slide out. The rail at the other side dips, to get a finger
+   under the manuals.
 3. The task cards in two stacks along the box, one at each side. Between them
    the box is open to its bottom again, on from the middle, and each stack's
    wall open onto that, its floor cut back.
@@ -37,7 +38,6 @@ from build123d import (
     Align,
     Circle,
     Cylinder,
-    Edge,
     Ellipse,
     FontStyle,
     Location,
@@ -74,11 +74,10 @@ from designs.tray import (
 
 # Inside, measured.
 box = (122, 172, 38)
-# Between the insert and the box, at each side.
-box_clear = 1
+# The insert, across and along: a millimeter less each side was loose.
+size = (121.5, 172)
 # Left over the insert, for the manuals.
 manuals = 4
-size = (box[0] - 2 * box_clear, box[1] - 2 * box_clear)
 h = box[2] - manuals
 
 wall = 1.2
@@ -120,6 +119,10 @@ token_clear = 0.7
 
 # What's left at the side of the middle, to hold the ends together.
 rail = 2
+# A dip in the top of it, to get a finger under the manuals that lie over the
+# insert: across, down from the top, and the round-over of its sides.
+lift = (20, 12)
+lift_r = 4
 # How much of a deck's wall stays at each side of its opening, below the
 # opening's round-over.
 main_post = 12
@@ -175,14 +178,16 @@ gap_x = (task_xs[0] + task_well[0] + wall, task_xs[1] - wall)
 middle_y = (main_face + wall, task_y - wall)
 
 # The sonar tokens' well, in the middle, at its far side: its middle, and its
-# floor. It's a little wider than the middle, and takes that from the walls.
+# floor. If it's wider than the middle, it takes that from the walls.
 token_r = (token_d + token_clear) / 2
 token_at = (size[0] - wall - token_r, (middle_y[0] + middle_y[1]) / 2)
 token_floor = h - under - token_n * token_t
 token_bite = token_r - (middle_y[1] - middle_y[0]) / 2
-# Where the tokens' floor stops, short of their middle: half way round the
-# wall's ends, where they're nearest each other, and how far apart they are.
+# Half way round the ends of the tokens' well's wall, where they're nearest
+# each other: how far short of the tokens' middle, and how far apart they are.
 token_lip = token_wrap - token_lip_r
+# The tokens' floor runs as far as those ends do, to a flat face below it.
+token_face = token_at[0] - token_wrap
 token_open = 2 * (((token_r + token_lip_r) ** 2 - token_lip**2) ** 0.5 - token_lip_r)
 
 # Labels
@@ -206,7 +211,7 @@ assert side_x[1] - tile_x[1] >= 15, "no room for a finger beside the cardboard t
 assert tile_slot[1] <= main_well[1], "the cardboard tokens' slot is too long"
 assert h - tile_depth >= floor_t, "the cardboard tokens are too tall"
 assert wall - max(token_bite, 0) >= 0.9, "the sonar tokens' well leaves too little wall"
-assert token_at[0] - token_wrap - pinch_top_r >= main_x + main_open / 2 + pinch_top_r, (
+assert token_face - pinch_top_r >= main_x + main_open / 2 + pinch_top_r, (
     "the sonar tokens are in the way of the main cards' opening"
 )
 assert token_open <= token_d - 2.5, "the sonar tokens' well is open too wide"
@@ -272,29 +277,27 @@ def token_plan() -> Sketch:
 
 
 def middle_cuts() -> list[Part]:
-    """The middle, open down through the floor: from the rail to the sonar
-    tokens' floor, which stops half way round the ends of their well's wall,
-    and on between the task cards. Its corners rounded."""
-    cx, cy = token_at
-    half = (middle_y[1] - middle_y[0]) / 2
-    plan = rect(rail, middle_y[0], cx - token_wrap, middle_y[1]) + rect(
+    """The middle, open down through the floor: from the rail to the flat
+    face under the sonar tokens' floor, and on between the task cards. Its
+    corners rounded. And the dip in the rail."""
+    plan = rect(rail, middle_y[0], token_face, middle_y[1]) + rect(
         gap_x[0], middle_y[1] - 1, gap_x[1], size[1] - label_strip
     )
     r = fillet_r / 2
     plan = grown(grown(plan, -r), r)
     plan = grown(grown(plan, r), -r)
-    # Before the tokens, between the ends of their well's wall: its corners
-    # there left square, for the rounding of their floor's edge to end on.
-    plan += token_plan() & rect(
-        cx - token_wrap - 1, cy - half, cx - token_lip, cy + half
-    )
-    return [up(plan, -1, h + 2)]
+    y = (middle_y[0] + middle_y[1]) / 2
+    dip = Slot(0, y, (1, 0), rail, pinch(lift[0], h - lift[1], h, lift_r))
+    return [up(plan, -1, h + 2), *dip.cuts()]
 
 
 def token_cuts() -> list[Part]:
     """The sonar tokens' round well: the middle takes the side of it toward
     the main cards' opening, less than half, so what's left holds the tokens
-    in."""
+    in. Their floor's edge there is flush with the ends of the well's wall.
+    The floor meets that wall square: OCCT can't round it into the wall and
+    round its edge too, where the one runs into the other at the wall's
+    ends."""
     return [up(token_plan(), token_floor, h + 1 - token_floor)]
 
 
@@ -370,16 +373,7 @@ def insert() -> Part:
     """Cut square, then every edge eased at once; the labels' pockets after,
     which stay sharp, for the inlays."""
     cuts = main_cuts() + token_cuts() + tile_cuts() + task_cuts() + middle_cuts()
-
-    def token_floor_edge(e: Edge) -> bool:
-        """The sonar tokens' floor's edge along their wall: rounded too, as
-        the cards' wells' floors are into theirs."""
-        box = e.bounding_box()
-        return abs(box.min.Z - token_floor) < 1e-4 > abs(box.max.Z - token_floor)
-
-    body = eased(
-        carve(up(octagon(*size), 0, h), cuts), foot=foot_c, inside=token_floor_edge
-    )
+    body = eased(carve(up(octagon(*size), 0, h), cuts), foot=foot_c)
     return carve(body, [inlay(i, cut=True) for i in range(len(labels))])
 
 
