@@ -14,8 +14,7 @@
 
 ## SET
 
-- Measure the cards and the deck, set `sleeve` and `deck`
-- Print the body and the lid
+- Print
 
 ## Magic Octagon
 

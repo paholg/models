@@ -39,10 +39,9 @@ from designs.card_box import SETTINGS, Art, CardBox
 
 # Contents
 
-# TODO: measure. A card, in its sleeve if it has one, at its largest: width,
-# length. (A bare SET card is 57 x 89.)
-sleeve = (66.5, 92.5)
-# TODO: measure. The 81 cards, as they stand in the box.
+# Dimensions of the sleeved cards.
+sleeve = (59.5, 91.0)
+# Depth of the full deck.
 deck = 50
 
 # Colors
