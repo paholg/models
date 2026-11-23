@@ -82,18 +82,22 @@ from build123d import (
 
 from build.cad import Piece
 
-# The joints fit at 0.08 mm layers over a 0.2 mm first one, as test coupons
-# found; at 0.2 mm the mitres' steps stand proud and lever the joints out of
-# square. Every thickness in the panels ends on one of those layers, so its
-# face falls midway between Orca's slicing planes. Arachne prints the magnets'
-# covers as one line; classic walls silently leave them out. And each piece's
-# lines turn with it, as plate packing may turn a panel a quarter.
 SETTINGS = {
+    # The joints fit at 0.08 mm layers over a 0.2 mm first one, as test coupons
+    # found; at 0.2 mm the mitres' steps stand proud and lever the joints out
+    # of square. Every thickness in the panels ends on one of those layers, so
+    # its face falls midway between Orca's slicing planes.
     "process": "0.08 High Quality",
     "layer_height": 0.08,
     "initial_layer_print_height": 0.2,
+    # Prints the magnets' covers as one line; classic walls silently leave
+    # them out.
     "wall_generator": "arachne",
+    # The wall surfaces are set up to match the panels.
     "align_infill_direction_to_model": True,
+    # A guess at why the panels lift off the bed: the preset fills the first
+    # layer at 105 mm/s, and Snapmaker suggests no more than 50. Untested.
+    "initial_layer_infill_speed": 30,
 }
 
 # On the bed: between a wall's body and lid pieces, and between panels.
