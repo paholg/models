@@ -15,59 +15,44 @@ on by magnets.
     )
 
 x is across the cards, centered; y is front (0) to back; z is up. The seam is
-level across the front and back walls and slopes up between them along the
-sides.
+level across the front and back and slopes up between them along the sides.
 
-The box is ten flat panels, glued, for faces off the bed all round and inlays
-that print flat: the floor, the top, and a body and a lid piece of each wall.
-Every panel prints with its outside face on the bed. They join in mitred
-rabbets, whose seams fall on the box's edges, so no joint shows on a face. To
-glue the body, or the lid: tape its panels up dry, outside, then run thin CA
-along the inside corners.
+Ten flat panels, glued: the floor, the top, and a body and a lid piece of each
+wall. Each prints outside down, so every face is off the bed and inlays print
+flat. To glue the body, or the lid: tape its panels up dry, outside, then run
+thin CA along the inside corners.
 
-The joint. A mitre runs through the outer `mitre` of the wall, so the seam
-falls on the box's edge. Inside it, one panel ends square and sits in a rabbet
-in the other: the front and back drop between the sides, and the floor and top
-into all four walls. So every panel goes on from outside, along its own
-normal; none is trapped, and squeezing the box closes every joint at once.
-Printed outside down, every mating face is a wall or faces up: nothing
-overhangs, so nothing droops and binds. Thin CA wicks through the rabbet and
-stops at the glue break, a trough under the mitre's inner end, short of the
-outside.
+The joint is a mitred rabbet. The mitre runs through the outer `mitre` of the
+wall, so the seam falls on the box's edge. Inside it, one panel ends square in
+the other's rabbet: the front and back between the sides, the floor and top in
+all four walls. Every panel goes on from outside, so none is trapped, and
+nothing overhangs as printed. CA wicks through the rabbet and stops at the
+glue break, a trough under the mitre's inner end.
 
-A panel's last layers, its inside face, flare a little past its edges. So the
-inside edges that meet another piece are chamfered by `ease`: the end of a
-panel that sits in a rabbet (by `relief`), the top of the rabbet's wall, which
-is the box's inside corner and makes a V that holds a drop of CA on the joint,
-and the seam's inside edges, keys and all, which would otherwise hold the lid
-off. The rabbet's wall is what squares the joint: leave most of it.
+A panel's last layers flare a little past its edges, so the inside edges that
+meet another piece are chamfered by `ease`: the top of a rabbet's wall, the
+seam's edges, and (by `relief`) the end of a panel in a rabbet. The rabbet's
+wall squares the joint: leave most of it.
 
-Bar magnets stand on edge in the front and back walls, in pockets open to the
-inside, each facing its partner edge to edge across the seam. A cover of
-plastic stands between each magnet and the seam, so that magnets never touch
-and the seam bears on plastic: a wall one line wide, as a panel prints,
-stopping `ease` short of the wall's inside face, where the seam's chamfer would
-leave it a feather. They're magnetized through their thickness, so glue one of
-each pair in flipped, to attract. A trapezoid key on each wall's seam locates
-the lid.
+Bar magnets stand on edge in pockets in the front and back walls, each facing
+its partner across the seam, behind a cover of plastic one line wide, so the
+seam bears on plastic. They're magnetized through their thickness: glue one of
+each pair in flipped. A trapezoid key on each wall's seam locates the lid.
 
-Art is inlaid flush in the front, the back and the top: each face's a list of
-`Art`, layers of their own colors and pieces, a later one covering those
-before it. Each is drawn in 2D as it reads from outside:
-  front  x across, y up from the floor, 0 at the front's bottom center
-  back   the same on the back, seen from behind
-  top    x across, y to the back, 0 at the top's center
-`size`, the box's outside, and `seam`, the seam's height at the front and at
-the back, are there to fit it by: draw it for a box without art, and
-`dataclasses.replace()` it in. It is trimmed to its panel: the front's and
-the back's to the body's, to print with it, and the top's to the lid's.
+Art is inlaid flush in the front, back and top: each a list of `Art`, later
+layers covering earlier ones. Each is drawn in 2D as it reads from outside:
+  front  x across, y up, 0 at the bottom center
+  back   the same, seen from behind
+  top    x across, y to the back, 0 at the center
+`size` and `seam` are there to fit it by: draw it for a box without art, and
+`dataclasses.replace()` it in. It's trimmed to its panel: on the front and
+back, the body's piece.
 
-Printing: SETTINGS, for the project, are the layers the joints fit at.
-`panels` is every panel; with more colors than the printer has heads, `body`
-and `lid` print apart, as objects of their own.
+SETTINGS are the layers the joints fit at. `panels` is every panel; with more
+colors than the printer has heads, print `body` and `lid` apart.
 
-`seam_test` is the front wall across the seam, cut short, and `magnet_test` a
-strip of magnet pockets: each at a few fits, to try before printing a box.
+`seam_test` and `magnet_test` are coupons of the seam and the magnet pockets
+at a few fits, to try before printing a box.
 """
 
 from collections.abc import Sequence
@@ -97,17 +82,12 @@ from build123d import (
 
 from build.cad import Piece
 
-# The joints fit as drawn at 0.08 mm layers over a 0.2 mm first one, as test
-# coupons found; at 0.2 mm layers the mitres' steps stand proud and lever the
-# joints out of square. Every thickness in the panels ends on one of those
-# layers from the bed up (the 0.6 mm inlays, the 0.68 mm glue break, the
-# 0.84 mm magnet skins, the 1 mm mitres, the 2.04 mm walls, the 3.4 mm front
-# and back, and each less `ease`), so its face falls midway between Orca's
-# slicing planes, at the layers' middles. Arachne walls print the magnets'
-# covers, `cover` thick, as one line, which classic walls leave out without a
-# word; a thicker cover would hold the magnets further apart. And each piece's
-# lines (`solid_infill_direction`) turn with it, as plate packing may turn a
-# panel a quarter.
+# The joints fit at 0.08 mm layers over a 0.2 mm first one, as test coupons
+# found; at 0.2 mm the mitres' steps stand proud and lever the joints out of
+# square. Every thickness in the panels ends on one of those layers, so its
+# face falls midway between Orca's slicing planes. Arachne prints the magnets'
+# covers as one line; classic walls silently leave them out. And each piece's
+# lines turn with it, as plate packing may turn a panel a quarter.
 SETTINGS = {
     "process": "0.08 High Quality",
     "layer_height": 0.08,
@@ -116,8 +96,7 @@ SETTINGS = {
     "align_infill_direction_to_model": True,
 }
 
-# On the bed: between a wall's body piece and its lid piece, and between
-# panels.
+# On the bed: between a wall's body and lid pieces, and between panels.
 LID_GAP = 5
 BED_GAP = 5
 
@@ -148,8 +127,7 @@ Points = list[tuple[float, float]]
 
 
 def offset_polygon(points: Points, d: float) -> Points:
-    """A counter-clockwise polygon grown by d, or shrunk for d below 0, its
-    corners mitred: each corner where its two sides, moved, meet. Point for
+    """A counter-clockwise polygon grown by d, its corners mitred. Point for
     point, so that a ruled loft between the two is planar faces."""
     out = []
     for i, p in enumerate(points):
@@ -163,8 +141,7 @@ def offset_polygon(points: Points, d: float) -> Points:
 
 
 def _moved(a: tuple[float, float], b: tuple[float, float], d: float):
-    """The side from a to b moved d to its right, outward: a point, and its
-    direction."""
+    """The side from a to b moved d outward: a point, and its direction."""
     dx, dy = b[0] - a[0], b[1] - a[1]
     n = hypot(dx, dy)
     return (a[0] + d * dy / n, a[1] - d * dx / n), (dx, dy)
@@ -185,15 +162,14 @@ def box(lo: Sequence[float], hi: Sequence[float]) -> Part:
 
 @dataclass(frozen=True)
 class Art:
-    """One layer of a face's inlay, drawn as it reads from outside, in the
-    face's own frame (see the module's docstring)."""
+    """One layer of a face's inlay, in the face's frame (see the module's
+    docstring)."""
 
     name: str  # its piece's
     color: str
     shape: Compound  # a Sketch, or what build123d's operators make of one
-    # The pattern its face prints in, on the bed, or none for lines: its
-    # panel's, turned as the art is, by `turn`, counter-clockwise as seen from
-    # outside.
+    # Its bottom surface pattern, or none for its panel's lines, turned by
+    # `turn`, counter-clockwise from outside.
     pattern: str = ""
     turn: float = 0
 
@@ -202,38 +178,33 @@ class Art:
 class Magnets:
     """Bar magnets in the seam, and the pockets they're glued into."""
 
-    # Length along the wall, height, thickness.
+    # Length, height, thickness.
     size: tuple[float, float, float] = (18.4, 9, 2.5)
-    # Pocket clearance on the thickness, where the pocket is open to the
-    # inside.
-    clear: float = 0.12
-    # Room for the magnet's height, between the cover and the pads. Loose: a
-    # magnet that's tight there bows the cover out at the seam, and its
-    # partner's pull seats it against the cover anyway.
+    # Pocket clearance on the thickness.
+    clearance: float = 0.12
+    # Room on the magnet's height. Loose: a tight magnet bows the cover out
+    # at the seam, and its partner's pull seats it anyway.
     slack: float = 0.3
-    # Gap for excess glue, past each end of a magnet and past its far edge
-    # from the seam. Crush ribs and stop pads cross it to hold the magnet in
-    # place.
-    glue: float = 0.4
-    # How far each end's crush ribs bite into the magnet's length.
+    # Gap for excess glue past a magnet's ends and far edge, crossed by crush
+    # ribs and stop pads.
+    glue_gap: float = 0.4
+    # How far each end's crush ribs bite.
     crush: float = 0.1
-    # A crush rib's width at its root, and at its tip: flat, and wide enough
-    # to print at its full height. A pointed rib came out about 0.1 mm short,
-    # rounded off by the nozzle, and a 0.15 mm crush gripped nothing.
-    rib_w: float = 1.2
-    rib_tip: float = 0.4
-    # Plastic outside a pocket; with the magnet, the front's and back's
-    # thickness.
+    # A crush rib's width at its root and at its flat tip. A pointed rib
+    # printed about 0.1 mm short, and a 0.15 mm crush gripped nothing.
+    rib_width: float = 1.2
+    rib_tip_width: float = 0.4
+    # Plastic outside a pocket.
     skin: float = 0.84
-    # Plastic between a magnet and its seam face.
+    # Plastic between a magnet and the seam.
     cover: float = 0.4
-    # Either side of center, on the front and the back.
-    x: float = 20
+    # Either side of center.
+    offset: float = 20
 
     @property
     def depth(self) -> float:
-        """A pocket's, into the wall from its inside face."""
-        return self.size[2] + self.clear / 2
+        """A pocket's, into the wall."""
+        return self.size[2] + self.clearance / 2
 
     @property
     def reach(self) -> float:
@@ -246,57 +217,54 @@ class CardBox:
     """A card box, as a value: its panels are its methods, and closed()
     arranges them."""
 
-    # A card in its sleeve, outside, at its largest: width, length.
+    # A sleeved card at its largest: width, length.
     sleeve: tuple[float, float] = (66.5, 92.5)
-    # What stands in the box, front to back: the deck, and whatever goes in
-    # beside it.
+    # The deck's thickness, with whatever goes in beside it.
     stack: float = 40
-    # Room round that: across the cards, front to back, and above them, under
-    # the lid. 2.5 across is what a bought deck box has.
-    clear: tuple[float, float, float] = (2.5, 0.5, 0.5)
-    # Goes before its pieces' names, to tell boxes apart.
+    # Margins around the deck: width, depth, height.
+    margin: tuple[float, float, float] = (2.0, 0.0, 2.0)
+    # Prefixes its pieces' names.
     name: str = ""
     color: str = "forestgreen"
     lid_color: str = ""  # or the body's
     front: Sequence[Art] = ()
     back: Sequence[Art] = ()
     top: Sequence[Art] = ()
-    # The side walls, the floor and the top.
-    wall: float = 2.04
-    # How far the seam drops from the back to the front, and the lid's height
-    # at the back, its top included.
+    # The sides, floor and top.
+    wall_thickness: float = 2.04
+    # The seam's drop from back to front, and the lid's outside height at the
+    # back.
     seam_drop: float = 25
-    lid_back_h: float = 14
-    # On the outside edges, which also blunts the mitres' knife edges.
-    chamfer: float = 0.6
-    # The inside edges that meet another piece: the seam's, and the top of a
-    # rabbet's wall.
+    lid_back_height: float = 14
+    # On the outside edges; also blunts the mitres' knife edges.
+    outer_chamfer: float = 0.6
+    # On the inside edges that meet another piece.
     ease: float = 0.24
-    # The joint: the mitre's depth below the outside faces, and so the
-    # thickness of the tongue beside a rabbet; the glue break's depth; and the
-    # chamfer on the inside end of a panel that sits in a rabbet.
+    # The joint: the mitre's depth, the glue break's, and the chamfer on the
+    # end of a panel in a rabbet.
     mitre: float = 1
     glue_break: float = 0.32
     relief: float = 0.24
     art_depth: float = 0.6
     magnets: Magnets = field(default_factory=Magnets)
-    # The seam's keys: width at the base, height, how far each flank leans in,
-    # and the clearance round a key in the lid.
-    key_w: float = 14
-    key_h: float = 2.5
+    # The seam's keys: base width, height, each flank's lean, and clearance
+    # in the lid.
+    key_width: float = 14
+    key_height: float = 2.5
     key_lean: float = 1.25
-    key_c: float = 0.05
+    key_clearance: float = 0.05
 
     def __post_init__(self) -> None:
         m = self.magnets
-        z_top = self.size[2] - self.wall
-        assert z_top - self.seam[1] >= m.reach + m.glue + 1, (
+        z_top = self.size[2] - self.wall_thickness
+        assert z_top - self.seam[1] >= m.reach + m.glue_gap + 1, (
             "lid too short at the back for its magnets"
         )
-        assert m.x - m.size[0] / 2 - m.glue - 1 >= self.key_w / 2 + self.key_c, (
-            "magnets crowd the key"
-        )
-        assert m.x + m.size[0] / 2 + m.glue + 1 <= self.cavity[0] / 2, (
+        assert (
+            m.offset - m.size[0] / 2 - m.glue_gap - 1
+            >= self.key_width / 2 + self.key_clearance
+        ), "magnets crowd the key"
+        assert m.offset + m.size[0] / 2 + m.glue_gap + 1 <= self.cavity[0] / 2, (
             "magnets run into the corners"
         )
         assert self.ease <= 0.5, "ease reaches under the keys"
@@ -307,29 +275,33 @@ class CardBox:
     # Its measures
 
     @property
-    def thick(self) -> tuple[float, float, float]:
+    def thickness(self) -> tuple[float, float, float]:
         """The panels' thickness, by axis: the front and back hold the
         magnets."""
-        return (self.wall, self.magnets.depth + self.magnets.skin, self.wall)
+        return (
+            self.wall_thickness,
+            self.magnets.depth + self.magnets.skin,
+            self.wall_thickness,
+        )
 
     @property
     def cavity(self) -> tuple[float, float, float]:
         return (
-            self.sleeve[0] + self.clear[0],
-            self.stack + self.clear[1],
-            self.sleeve[1] + self.clear[2],
+            self.sleeve[0] + self.margin[0],
+            self.stack + self.margin[1],
+            self.sleeve[1] + self.margin[2],
         )
 
     @property
     def size(self) -> tuple[float, float, float]:
         """The box, outside."""
-        (cx, cy, cz), (tx, ty, tz) = self.cavity, self.thick
+        (cx, cy, cz), (tx, ty, tz) = self.cavity, self.thickness
         return (cx + 2 * tx, cy + 2 * ty, cz + 2 * tz)
 
     @property
     def seam(self) -> tuple[float, float]:
         """The seam's height, at the front and at the back."""
-        back = self.size[2] - self.lid_back_h
+        back = self.size[2] - self.lid_back_height
         return (back - self.seam_drop, back)
 
     def _lo(self, axis: int) -> float:
@@ -345,14 +317,16 @@ class CardBox:
 
     def _in(self, face: str) -> float:
         """Where its inside face is."""
-        return self._out(face) - sign(face) * self.thick[AXIS[face]]
+        return self._out(face) - sign(face) * self.thickness[AXIS[face]]
 
     # The panels, as regions of the box
 
     @cached_property
     def _outer(self) -> Compound:
         bx, by, bz = self.size
-        return chamfer(box((-bx / 2, 0, 0), (bx / 2, by, bz)).edges(), self.chamfer)
+        return chamfer(
+            box((-bx / 2, 0, 0), (bx / 2, by, bz)).edges(), self.outer_chamfer
+        )
 
     def _edge(self, a: str, b: str, points: Points) -> Part:
         """A cut along the edge panels a and b share: points in (depth below
@@ -367,33 +341,48 @@ class CardBox:
     def _region(self, face: str) -> Compound:
         """All of the box that's this panel's: its face's slab, less what
         each joint gives its neighbor."""
-        a, t = AXIS[face], self.thick[AXIS[face]]
+        axis = AXIS[face]
+        thick = self.thickness[axis]
         lo = [self._lo(k) for k in range(3)]
         hi = [self._hi(k) for k in range(3)]
         if face in FAR:
-            lo[a] = hi[a] - t
+            lo[axis] = hi[axis] - thick
         else:
-            hi[a] = lo[a] + t
+            hi[axis] = lo[axis] + thick
         big = 2 * max(self.size)
-        m, e, brk = self.mitre, self.ease, self.glue_break
+        mitre, ease, relief = self.mitre, self.ease, self.relief
         cuts = []
         for other in FACES:
-            b = AXIS[other]
-            if b == a:
+            other_axis = AXIS[other]
+            if other_axis == axis:
                 continue
-            if a > b:
-                # This one gives up what's outside the mitre, and then past
-                # its square end, its inside corner relieved.
-                r = self.relief
-                points = [(-1, -1), (m, m), (t - r, m), (t, m + r), (big, m + r)]
-                cuts.append(self._edge(face, other, [*points, (big, -1)]))
+            if axis > other_axis:
+                # This one ends square, its inside corner relieved.
+                points = [
+                    (-1, -1),
+                    (mitre, mitre),
+                    (thick - relief, mitre),
+                    (thick, mitre + relief),
+                    (big, mitre + relief),
+                    (big, -1),
+                ]
+                cuts.append(self._edge(face, other, points))
             else:
-                # This one gives up what's outside the mitre, the glue break,
-                # the rabbet, as wide as the other is thick, and the top of
-                # its wall.
-                u = self.thick[b]
-                points = [(-1, -1), (m - brk, m - brk), (m, m - brk), (m, m)]
-                points += [(u, m), (u, t - e), (u + e, t), (u + e, big), (-1, big)]
+                # This one has the glue break and the rabbet, its wall's top
+                # eased.
+                rabbet = self.thickness[other_axis]
+                trough = mitre - self.glue_break
+                points = [
+                    (-1, -1),
+                    (trough, trough),
+                    (mitre, trough),
+                    (mitre, mitre),
+                    (rabbet, mitre),
+                    (rabbet, thick - ease),
+                    (rabbet + ease, thick),
+                    (rabbet + ease, big),
+                    (-1, big),
+                ]
                 cuts.append(self._edge(other, face, points))
         return box(lo, hi) - cuts
 
@@ -404,31 +393,46 @@ class CardBox:
 
     # The seam
 
-    def _key(self, g: float = 0) -> Points:
-        """A key's outline, grown by g: (along the seam from its middle, up
-        from the seam), from its right foot round to its left."""
-        w, h, lean = self.key_w / 2, self.key_h, self.key_lean
-        flank = hypot(lean, h)
-        foot = w + g * flank / h
-        top = w - lean + g * (flank - lean) / h
-        return [(foot, 0), (top, h + g), (-top, h + g), (-foot, 0)]
+    def _key(self, clearance: float = 0) -> Points:
+        """A key's outline, grown by `clearance`: (along the seam from its
+        middle, up from the seam), from its right foot round to its left."""
+        half, height, lean = self.key_width / 2, self.key_height, self.key_lean
+        flank = hypot(lean, height)
+        foot = half + clearance * flank / height
+        top = half - lean + clearance * (flank - lean) / height
+        peak = height + clearance
+        return [(foot, 0), (top, peak), (-top, peak), (-foot, 0)]
 
-    def _below_seam(self, wall: str, g: float) -> Points:
-        """What the body keeps of a wall, in the wall's own coordinates:
-        (across it in the box's x, or y for a side, up), its keys grown by g;
-        counter-clockwise."""
+    def _below_seam(self, wall: str, clearance: float) -> Points:
+        """What the body keeps of a wall, in (along the wall, up), its keys
+        grown by `clearance`; counter-clockwise."""
         big = 2 * max(self.size)
         front, back = self.seam
+        key = self._key(clearance)
         if wall in ("front", "back"):
             z = front if wall == "front" else back
-            key = [(s, z + n) for s, n in self._key(g)]
-            return [(-big, -big), (big, -big), (big, z), *key, (-big, z)]
-        t = self.thick[1]
+            return [
+                (-big, -big),
+                (big, -big),
+                (big, z),
+                *[(along, z + up) for along, up in key],
+                (-big, z),
+            ]
+        thick = self.thickness[1]
         slope = self.seam_drop / self.cavity[1]
         mid = self.size[1] / 2
-        key = [(mid + s, front + slope * (mid + s - t) + n) for s, n in self._key(g)]
-        corners = [(-big, -big), (big, -big), (big, back), (self.size[1] - t, back)]
-        return [*corners, *key, (t, front), (-big, front)]
+        return [
+            (-big, -big),
+            (big, -big),
+            (big, back),
+            (self.size[1] - thick, back),
+            *[
+                (mid + along, front + slope * (mid + along - thick) + up)
+                for along, up in key
+            ],
+            (thick, front),
+            (-big, front),
+        ]
 
     def _across(self, wall: str, sections: list[tuple[Points, float]]) -> Solid:
         """A ruled loft through outlines in a wall's coordinates, each where it
@@ -443,21 +447,20 @@ class CardBox:
         ]
         return Solid.make_loft(wires, ruled=True)
 
-    def _split(self, wall: str, grow: float, g: float) -> Solid:
-        """Below the seam, keys grown by g, through the wall, from past its
-        outside to `ease` short of its inside, and then grown by `grow` per
-        unit further in, past the inside face: 45° either way, chamfering the
-        seam's inside edges."""
+    def _split(self, wall: str, flare: float, clearance: float) -> Solid:
+        """Below the seam, keys grown by `clearance`, through the wall. From
+        `ease` short of the inside face it grows by `flare` per unit inward,
+        chamfering the seam's inside edges."""
         inward = -sign(wall)
         out, inside, over = self._out(wall), self._in(wall), 0.5
-        outline = self._below_seam(wall, g)
+        outline = self._below_seam(wall, clearance)
         return self._across(
             wall,
             [
                 (outline, out - inward),
                 (outline, inside - inward * self.ease),
                 (
-                    offset_polygon(outline, grow * (self.ease + over)),
+                    offset_polygon(outline, flare * (self.ease + over)),
                     inside + inward * over,
                 ),
             ],
@@ -473,36 +476,41 @@ class CardBox:
         z = self.seam[0 if wall == "front" else 1]
         return [
             Location(
-                Plane((sx * self.magnets.x, self._in(wall), z), into.cross(away), away)
+                Plane(
+                    (sx * self.magnets.offset, self._in(wall), z),
+                    into.cross(away),
+                    away,
+                )
             )
             for sx in (-1, 1)
         ]
 
     @cached_property
     def _pocket(self) -> Shape:
-        """A magnet's pocket, in its frame: oversize by `glue` at both ends
-        and at the far edge, with two crush ribs on each end, flat-tipped,
-        running the way the magnet drops in, and two pads at the far edge for
-        it to seat against. The cover is the wall left between it and the
-        seam, which stops `ease` short of the inside face, flat."""
+        """A magnet's pocket, in its frame: oversize by `glue_gap` at both ends
+        and the far edge, with two crush ribs on each end and two pads at the
+        far edge. The cover is the wall left between it and the seam, stopping
+        `ease` short of the inside face, where the seam's chamfer would leave
+        it a feather."""
         m = self.magnets
-        half = m.size[0] / 2 + m.glue
-        far = m.reach + m.glue
+        half = m.size[0] / 2 + m.glue_gap
+        far = m.reach + m.glue_gap
         ribs = []
         for zc in (m.cover + f * m.size[1] for f in (0.25, 0.75)):
             for sx in (-1, 1):
-                tip = half - m.glue - m.crush
+                tip = half - m.glue_gap - m.crush
                 rib = [
-                    (half + 1, zc - m.rib_w / 2),
-                    (half + 1, zc + m.rib_w / 2),
-                    (half, zc + m.rib_w / 2),
-                    (tip, zc + m.rib_tip / 2),
-                    (tip, zc - m.rib_tip / 2),
-                    (half, zc - m.rib_w / 2),
+                    (half + 1, zc - m.rib_width / 2),
+                    (half + 1, zc + m.rib_width / 2),
+                    (half, zc + m.rib_width / 2),
+                    (tip, zc + m.rib_tip_width / 2),
+                    (tip, zc - m.rib_tip_width / 2),
+                    (half, zc - m.rib_width / 2),
                 ]
                 ribs.append(Polygon(*[(sx * x, z) for x, z in rib], align=None))
         pads = [
-            Pos(sx * m.size[0] / 4, far) * Rectangle(2, 2 * m.glue) for sx in (-1, 1)
+            Pos(sx * m.size[0] / 4, far) * Rectangle(2, 2 * m.glue_gap)
+            for sx in (-1, 1)
         ]
         room = Pos(0, (m.cover + far) / 2) * Rectangle(2 * half, far - m.cover)
         pocket = Sketch() + room - ribs - pads
@@ -526,14 +534,13 @@ class CardBox:
     @cached_property
     def _shells(self) -> dict[str, Compound]:
         """Each panel as it is in the box, but for its art: the walls' body
-        pieces by their faces' names, their lid pieces as "lid front" and so
-        on, then the floor and the top."""
+        pieces by face, their lid pieces as "lid front" and so on."""
         shells: dict[str, Compound] = {}
         for lid in (False, True):
             for wall in WALLS:
                 blank = self._blanks[wall]
                 if lid:
-                    piece = blank - self._split(wall, 1, self.key_c)
+                    piece = blank - self._split(wall, 1, self.key_clearance)
                 else:
                     piece = blank & self._split(wall, -1, 0)
                 if wall in ("front", "back"):
@@ -564,7 +571,7 @@ class CardBox:
     @cached_property
     def _inlays(self) -> dict[str, list[Compound]]:
         """Each face's art, a solid a layer, less the layers over it, trimmed
-        to its panel, its chamfers, and the front's and back's to the body."""
+        to its panel."""
         inlays = {}
         for face in ("front", "back", "top"):
             layers = self._layers(face)
@@ -593,8 +600,8 @@ class CardBox:
         return f"{self.name} {name}" if self.name else name
 
     def _parent(self, panel: str) -> str:
-        """The group a panel goes in, in FreeCAD: the lid or the body, and in
-        that, the panel's own, with its art and magnets, if it has any."""
+        """A panel's group in FreeCAD: the lid or the body, and in that, its
+        own, if it has art or magnets."""
         group = self._named("lid" if is_lid(panel) else "body")
         face = self._face(panel)
         if face in ("front", "back") or (face == "top" and self.top):
@@ -609,8 +616,7 @@ class CardBox:
         return panel.removeprefix("lid ")
 
     def _art_pieces(self, faces: Sequence[str]) -> list[Piece]:
-        """The art of these faces, each layer a piece under its panel,
-        laid with it."""
+        """These faces' art, each layer a piece, laid with its panel."""
         return [
             Piece(
                 solid,
@@ -625,8 +631,7 @@ class CardBox:
         ]
 
     def closed(self, panels: list[Piece]) -> list[Piece]:
-        """The box closed: its panels and their art, where they sit, and the
-        magnets in them, with their panels."""
+        """The box closed: its panels, their art, and the magnets."""
         magnets = []
         for wall in ("front", "back"):
             for lid in (False, True):
@@ -645,10 +650,9 @@ class CardBox:
     # Printing
 
     def _flat(self, face: str, lid: bool = False) -> Location:
-        """On the bed, outside face down. The front and back lie side by side,
-        the left and right behind them, the floor and top behind those. Each
-        wall's lid piece lies beyond its body piece, the seam between them
-        opened by LID_GAP."""
+        """On the bed, outside down: the front and back side by side, the left
+        and right behind them, the floor and top behind those. A wall's lid
+        piece lies LID_GAP beyond its body piece."""
         bx, by, bz = self.size
         gap, h = BED_GAP, bz + LID_GAP
         y1 = h + gap
@@ -665,9 +669,9 @@ class CardBox:
         return at * Pos(bx / 2, 0, LID_GAP if lid else 0)
 
     def _lines(self, face: str, turn: float = 0) -> dict[str, object]:
-        """Monotonic lines on the bed: up the box on the front and back, across
-        it on the top, and along the seam on the sides, turned by `turn`
-        counter-clockwise as seen from outside."""
+        """Monotonic lines: up the box on the front and back, across it on the
+        top, and along the seam on the sides, turned by `turn`,
+        counter-clockwise from outside."""
         if face in ("front", "back"):
             v = Vector(0, 0, 1)
         elif face == "top":
@@ -697,8 +701,7 @@ class CardBox:
         return self._lines(face, art.turn)
 
     def _laid(self, lid: bool) -> list[Piece]:
-        """The body's panels, or the lid's, on the bed, outside down, with
-        their art, where they lie among all of them."""
+        """The body's panels, or the lid's, on the bed, with their art."""
         pieces = []
         for p, part in self._panels.items():
             if is_lid(p) != lid:
@@ -718,15 +721,15 @@ class CardBox:
         return pieces + self._art_pieces(faces)
 
     def body(self) -> list[Piece]:
-        """The body's panels on the bed, with the front's and back's art."""
+        """The body's panels, with the front's and back's art."""
         return self._laid(lid=False)
 
     def lid(self) -> list[Piece]:
-        """The lid's panels on the bed, with the top's art."""
+        """The lid's panels, with the top's art."""
         return self._laid(lid=True)
 
     def panels(self) -> list[Piece]:
-        """Every panel on the bed, outside down, with its art."""
+        """Every panel, with its art."""
         return self.body() + self.lid()
 
     # Tests
@@ -737,18 +740,20 @@ class CardBox:
         reach: tuple[float, float] = (-9, 31),
         height: float = 14,
     ) -> list[Piece]:
-        """The front wall across the seam, cut short, body and lid: a coupon
-        of each at each of `fits`, (key clearance, magnet crush), notches in
-        its end away from the magnet counting its place. A coupon reaches
-        `reach` along the wall, and `height` from the seam. Each lies outside
-        down with its seam face to the front of the bed, so that Orca's seams,
-        at the back, keep off it."""
-        z, t = self.seam[0], self.thick[1]
-        stub = self.key_h + 1
+        """A coupon of the front wall across the seam, body and lid, at each
+        of `fits`: (key clearance, magnet crush). Notches count its place. It
+        spans `reach` along the wall and `height` from the seam, and lies with
+        its seam face to the front of the bed, away from Orca's seams."""
+        z, t = self.seam[0], self.thickness[1]
+        stub = self.key_height + 1
         width = reach[1] - reach[0]
         coupons = []
-        for i, (key_c, crush) in enumerate(fits):
-            fit = replace(self, key_c=key_c, magnets=replace(self.magnets, crush=crush))
+        for i, (key_clearance, crush) in enumerate(fits):
+            fit = replace(
+                self,
+                key_clearance=key_clearance,
+                magnets=replace(self.magnets, crush=crush),
+            )
             for lid in (False, True):
                 side = 1 if lid else -1
                 span = sorted((z - side * stub, z + side * height))
@@ -760,8 +765,7 @@ class CardBox:
                     (reach[0], -1, span[0]), (reach[1], t + 1, span[1])
                 )
                 coupon -= extrude(sketch(Plane.XZ * notches), t + 1, both=True)
-                # The body's seam face is its top, so stood down toward the
-                # front; the lid's is its bottom, so turned about as well.
+                # The lid's seam face is its bottom, so it's turned about.
                 if lid:
                     at = Pos(reach[1], 2 * stub + height + BED_GAP - z, 0) * Rot(
                         0, 0, 180
@@ -776,13 +780,12 @@ class CardBox:
     def magnet_test(
         self, crushes: Sequence[float] = (0.05, 0.1, 0.2), rim: float = 3
     ) -> list[Piece]:
-        """A strip of the front wall's thickness with a row of magnet pockets,
-        open to the inside as in the box, at each of `crushes`, notches in its
-        edge away from the seam counting each one's place. It lies outside
-        down, its seam face to the front of the bed."""
-        m, t = self.magnets, self.thick[1]
-        pitch = m.size[0] + 2 * m.glue + rim
-        depth = m.reach + m.glue + rim
+        """A strip with a magnet pocket at each of `crushes`, notches counting
+        each one's place. It lies outside down, its seam face to the front of
+        the bed."""
+        m, t = self.magnets, self.thickness[1]
+        pitch = m.size[0] + 2 * m.glue_gap + rim
+        depth = m.reach + m.glue_gap + rim
         n = len(crushes)
         strip = box(
             (-pitch / 2 - rim / 2, 0, 0), ((n - 0.5) * pitch + rim / 2, t, depth)
@@ -796,5 +799,5 @@ class CardBox:
                 fit._pocket + extrude(sketch(Plane.XZ * notches), t + 1, both=True)
             )
         # In the pocket's frame, its inside face up.
-        at = Pos(rim + m.size[0] / 2 + m.glue, 0, t) * Rot(-90, 0, 0)
+        at = Pos(rim + m.size[0] / 2 + m.glue_gap, 0, t) * Rot(-90, 0, 0)
         return [Piece(at * strip, self._named("magnet test"), self.color)]
