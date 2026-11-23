@@ -2,24 +2,14 @@
 
 ## Blood on the Clocktower
 
-- Print test ghost with 12x3 magnet
-- Print 19 more ghosts
 - Setup travelers
-
-## A Feast for Odin
-
-Printing: Forge Special
-To Print: Vikings Yellow, Red, Blue
-
-## The Fox in the Forest
-
-- Reprint the box. The joints seat without trimming; the sides still square
-  the other panels (0.56 mm of rabbet wall left: if loose, `relief` to 0.16);
-  thin CA still wicks from the inside corners' V
 
 ## The Crew: Mission Deep Sea
 
-- Check the cardboard tokens fit their slot: their outlines are off a photo
+- Print the insert
+
+## The Crew: Journey to the Ends of the Earth
+
 - Print the insert
 
 ## SET
