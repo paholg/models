@@ -5,6 +5,9 @@ file's directory in this repo: one object in Orca, with a part for each of its
 pieces, each color on its own filament: the same one in every project of the
 file, the plates' too. The file's earlier projects are removed first.
 
+Asked for only some objects, it writes just theirs, and leaves the rest as they
+are, the plates' too (see cad.py's project()).
+
 Beside them, cad.py writes <stem>-<name>.step of each object and view, for
 FreeCAD, and <stem>-views.tsv listing them (see its project()).
 
@@ -41,6 +44,7 @@ With more colors than heads, those that never print together share one.
 
 import functools
 import io
+import json
 import math
 import os
 import sys
@@ -177,19 +181,27 @@ def combine(
     print(f"{dst.relative_to(ROOT)}: {len(plates)} plates, {objects} objects")
 
 
+def cache(file: Path) -> Path:
+    """Where what generating a model file leaves for its next run is kept."""
+    return ROOT / "tmp/cache" / file.parent.relative_to(ROOT) / file.stem
+
+
 def run(
     file: Path,
     exports: list[str],
     groups: list[list[str]],
     render_part: Callable[[str, Path], Render],
+    whole: bool = True,
 ) -> None:
     """Write the projects of a model file: one for each of `exports`, and one of
     the plates in `groups`, if any. `render_part` draws a part into a folder.
+    Unless that's the `whole` of the file's projects, the others are left.
     """
     out_dir = ROOT / "gen" / file.parent.relative_to(ROOT)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob(f"{file.stem}-*.3mf"):
-        old.unlink()
+    if whole:
+        for old in out_dir.glob(f"{file.stem}-*.3mf"):
+            old.unlink()
 
     built: dict[str, orca.Assembly] = {}
     wanted: dict[str, dict[str, str]] = {}  # each part's settings, presets and all
@@ -281,14 +293,26 @@ def run(
             for p, a in built.items()
         }
         packed = [plate for g in groups for plate in layout.pack(g, sizes)]
-        # A color is on one tool head in every project, the plates' too.
-        heads = layout.heads(
-            list(colors.values())
-            + [
-                list(dict.fromkeys(c for p, *_ in plate for c in colors[p]))
-                for plate in packed
-            ]
-        )
+        # A color is on one tool head in every project, the plates' too: so
+        # the heads are kept, for a run that writes only some of them.
+        kept = cache(file) / "heads.json"
+        heads = {} if whole or not kept.exists() else json.loads(kept.read_text())
+        if not {c for cs in colors.values() for c in cs} <= heads.keys():
+            heads = layout.heads(
+                list(colors.values())
+                + [
+                    list(dict.fromkeys(c for p, *_ in plate for c in colors[p]))
+                    for plate in packed
+                ]
+            )
+            if whole:
+                kept.parent.mkdir(parents=True, exist_ok=True)
+                kept.write_text(json.dumps(heads))
+            else:
+                print(
+                    "  note: tool heads picked for these alone, and may not be"
+                    " the other projects'"
+                )
         # The projects at once too: they spend their time compressing, which
         # threads do side by side.
         at_once(

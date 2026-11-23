@@ -12,7 +12,8 @@ The generated files are not checked-in; you can create them with:
 just generate path/to/file.py
 ```
 
-this will generate files into `./gen/`.
+this will generate files into `./gen/`. To regenerate only some of a project's
+objects and views, name them after the file.
 
 Dependencies:
 

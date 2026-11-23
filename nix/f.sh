@@ -165,6 +165,34 @@ find_projects() {
   shopt -u nullglob
 }
 
+# Pick from what $file's last generation listed, its views and objects, into
+# $picked, a name to a line: one, or with --multi any number. Fails if nothing
+# is listed, or picked.
+pick_listed() {
+  local listed="gen/${file%.py}-views.tsv"
+  picked=""
+  [[ -e $listed ]] || return 1
+  printf '\n'
+  # Each line is a kind (view or object), a name and a description; show
+  # them as columns, the kind in color and the description dimmed.
+  picked="$(
+    awk -F '\t' '
+      { kind[NR] = $1; name[NR] = $2; desc[NR] = $3 }
+      length($2) > width { width = length($2) }
+      END {
+        for (i = 1; i <= NR; i++) {
+          color = kind[i] == "view" ? "36" : "33"
+          printf "%s\t\033[%sm%-6s\033[0m  %-*s  \033[2m%s\033[0m\n",
+            name[i], color, kind[i], width, name[i], desc[i]
+        }
+      }' "$listed" |
+      fzf --ansi --delimiter '\t' --with-nth 2 --height '~40%' \
+        --reverse --select-1 "$@" |
+      cut -f1
+  )" || return 1
+  [[ -n $picked ]]
+}
+
 # Describe into $fresh whether what $file generates is older than its sources,
 # and say so in $state: missing, stale or fresh.
 check_fresh() {
@@ -239,10 +267,11 @@ draw() {
   # $below is how far the cursor ends up below the generate line.
   if [[ $kind == cad ]]; then
     draw_generate
+    printf '  \033[1mG\033[0m    generate only some objects and views (tab picks more)\n'
     printf '  \033[1mo\033[0m    open a generated project in OrcaSlicer\n'
     printf '  \033[1mv\033[0m    view a generated object in FreeCAD\n'
     printf '  \033[1md\033[0m    view what the changes since HEAD do, in FreeCAD\n'
-    below=7
+    below=8
   else
     draw_generate
     printf '  \033[1mv\033[0m    view the G-code\n'
@@ -354,6 +383,21 @@ while true; do
         status="Generation failed."
       fi
       ;;
+    cad:G)
+      # Just those, leaving the rest of what's generated as it is, stale or
+      # not: the list is the last generation's.
+      if [[ ! -e gen/${file%.py}-views.tsv ]]; then
+        status="Nothing generated for $file yet; press g."
+        continue
+      fi
+      pick_listed --multi || continue
+      mapfile -t names <<<"$picked"
+      printf '\nGenerating %s...\n' "${names[*]}"
+      keep=1
+      if ! uv --project python run python -m build.generate "$file" "${names[@]}" 2>&1; then
+        status="Generation failed."
+      fi
+      ;;
     gcode:v)
       if [[ $state == missing ]]; then
         status="Nothing generated for $file yet; press g."
@@ -406,30 +450,12 @@ while true; do
       ;;
     cad:v)
       # Generating writes each object and view as a STEP file, and lists them.
-      listed="gen/${file%.py}-views.tsv"
-      if [[ ! -e $listed ]]; then
+      if [[ ! -e gen/${file%.py}-views.tsv ]]; then
         status="Nothing generated for $file yet; press g."
         continue
       fi
-      printf '\n'
-      # Each line is a kind (view or object), a name and a description; show
-      # them as columns, the kind in color and the description dimmed.
-      object="$(
-        awk -F '\t' '
-          { kind[NR] = $1; name[NR] = $2; desc[NR] = $3 }
-          length($2) > width { width = length($2) }
-          END {
-            for (i = 1; i <= NR; i++) {
-              color = kind[i] == "view" ? "36" : "33"
-              printf "%s\t\033[%sm%-6s\033[0m  %-*s  \033[2m%s\033[0m\n",
-                name[i], color, kind[i], width, name[i], desc[i]
-            }
-          }' "$listed" |
-          fzf --ansi --delimiter '\t' --with-nth 2 --height '~40%' \
-            --reverse --select-1 |
-          cut -f1
-      )" || continue
-      [[ -n $object ]] || continue
+      pick_listed || continue
+      object="$picked"
       view="gen/${file%.py}-$object.step"
       # FreeCAD reloads what it has open when it changes (see nix/fit.FCMacro).
       if running freecad freecad "$view" nix/fit.FCMacro; then

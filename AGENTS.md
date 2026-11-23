@@ -37,6 +37,12 @@ each set of changes to a project.** It draws in worker processes, each of
 which runs the file again up to `project()`, so keep the file's top-level code
 fast, and don't rely on a cache one object fills being there for another.
 
+A project with many objects takes a while: `just generate FILE.py NAME...`
+writes just the objects and views named, and leaves the rest of `gen/`, the
+plates too, as it was. A view named takes the objects it uses that aren't as
+they were last drawn, so name those you changed with it. Generate everything
+once a change is done.
+
 `just audit FILE.py [OBJECT]` lists an object's spots: edges left sharp, and
 slivers where cuts meet. Run it with generating, on what you changed. And
 `just shots FILE.py OBJECT audit` draws each close up, to `tmp/shots/`, as

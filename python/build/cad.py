@@ -3,10 +3,11 @@
 import contextlib
 import copy
 import io
+import json
 import multiprocessing
 import os
+import shutil
 import sys
-import tempfile
 import threading
 import warnings
 from collections.abc import Callable, Mapping, Sequence
@@ -155,9 +156,22 @@ def write_stl(shape: Shape, path: Path) -> None:
         sys.exit(f"couldn't write {path}")
 
 
-# Of a piece, what a view's worker gets beside its shape: its name, color,
-# filament and parent.
-type Seen = tuple[str, str, str, str]
+# Beside an object's kept pieces, what a view needs of each beyond its shape:
+# its name, color, filament and parent. Written last, so a folder with one is
+# whole.
+SEEN = "seen.json"
+
+
+def keep_pieces(made: list[Piece], keep: Path) -> None:
+    """Write an object's pieces where they sit into `keep`, 0.brep on, for the
+    views that use it: this run's, and a later one's that doesn't draw the
+    object again (see generate())."""
+    shutil.rmtree(keep, ignore_errors=True)
+    keep.mkdir(parents=True)
+    for i, piece in enumerate(made):
+        export_brep(piece.sitting().shape, keep / f"{i}.brep")
+    seen = [(p.name, p.color, p.filament, p.parent) for p in made]
+    (keep / SEEN).write_text(json.dumps(seen))
 
 
 def render(
@@ -167,19 +181,16 @@ def render(
     work: Path,
     step: Path,
     keep: Path | None = None,
-) -> tuple[build.Render, list[Seen]]:
+) -> build.Render:
     """Draw an object, write a mesh of each of its pieces, as printed, into
-    `work`, and all of them as a STEP file to `step`. With `keep`, write each
-    piece where it sits there too, 0.brep on, for views; and say what else of
-    them a view needs."""
+    `work`, and all of them as a STEP file to `step`. With `keep`, keep its
+    pieces there too, for views (see keep_pieces())."""
     solids = []
     filaments = {}
     low, high = [float("inf")] * 3, [float("-inf")] * 3
     made = pieces(name, obj)
     if keep is not None:
-        keep.mkdir(parents=True)
-        for i, piece in enumerate(made):
-            export_brep(piece.sitting().shape, keep / f"{i}.brep")
+        keep_pieces(made, keep)
     drawn = [p.printed() for p in made]
     for i, piece in enumerate(drawn, 1):
         if not piece.shape.is_valid:
@@ -195,14 +206,13 @@ def render(
         low = [min(a, b) for a, b in zip(low, tuple(box.min))]
         high = [max(a, b) for a, b in zip(high, tuple(box.max))]
     write_step(drawn, step)
-    rendered = build.Render(
+    return build.Render(
         solids,
         (tuple(low), tuple(high)),
         list(obj.pauses),
         filaments,
         texts({**orca, **obj.settings}),
     )
-    return rendered, [(p.name, p.color, p.filament, p.parent) for p in made]
 
 
 def audited(name: str, obj: Object) -> tuple[list[audit.Spot], int]:
@@ -269,8 +279,9 @@ def arranged(view: View, objects: Mapping[str, list[Piece]]) -> list[Piece]:
     return view.arrange({n: objects[n] for n in view.uses})
 
 
-def kept(folder: Path, seen: list[Seen]) -> list[Piece]:
-    """An object's pieces as render() kept them, where they sit."""
+def kept(folder: Path) -> list[Piece]:
+    """An object's pieces as keep_pieces() kept them, where they sit."""
+    seen = json.loads((folder / SEEN).read_text())
     return [
         Piece(import_brep(folder / f"{i}.brep"), name, color, filament, parent=parent)
         for i, (name, color, filament, parent) in enumerate(seen)
@@ -284,24 +295,29 @@ given: dict | None = None
 
 def draw(
     name: str, work: Path, step: Path, keep: Path | None
-) -> tuple[tuple[build.Render, list[Seen]], str]:
+) -> tuple[build.Render, str]:
     """In a worker, render an object (see render())."""
     assert given is not None
     obj = given["objects"][name]
     return heard(render, name, obj, given["orca"], work, step, keep)
 
 
-def draw_view(
-    name: str, step: Path, uses: Mapping[str, tuple[Path, list[Seen]]]
-) -> tuple[None, str]:
+def draw_kept(name: str, keep: Path) -> tuple[None, str]:
+    """In a worker, draw an object only to keep its pieces, for a view."""
+    assert given is not None
+    obj = given["objects"][name]
+    return heard(lambda: keep_pieces(pieces(name, obj), keep))
+
+
+def draw_view(name: str, step: Path, uses: Mapping[str, Path]) -> tuple[None, str]:
     """In a worker, write a view as a STEP file: an arranged one from the
-    objects it uses, as render() kept them."""
+    objects it uses, as kept in their folders."""
     assert given is not None
     view = given["views"][name]
 
     def write() -> None:
         if isinstance(view, View):
-            objects = {n: kept(*uses[n]) for n in view.uses}
+            objects = {n: kept(uses[n]) for n in view.uses}
             write_step(arranged(view, objects), step)
         else:
             write_step(pieces(name, view), step)
@@ -433,6 +449,12 @@ def project(
     With more than one thing to draw, they're drawn in workers, each of which
     runs the file again (see workers()).
 
+    `NAME...` writes just those objects' and views' files, and leaves the rest
+    of gen/ as it is, plates and all: to see a change to one without waiting
+    on the others. A view named takes the objects it uses that aren't as they
+    were last drawn, by any run: so what it shows of them may be older than
+    the file.
+
     `--view NAME` writes just tmp/view/<stem>-<name>.step instead. `--audit
     [OBJECT...]` looks the objects over for sharp edges and slivers, and fails
     if it finds any. `--shots NAME [X,Y,Z |
@@ -461,6 +483,14 @@ def project(
         case []:
             with progress.shown():
                 generate(path, objects, views, orca or {}, plates or [])
+        case [*names] if not any(n.startswith("-") for n in names):
+            if unknown := [n for n in names if n not in shown]:
+                sys.exit(
+                    f"not an object or view: {', '.join(unknown)}."
+                    f" There are: {', '.join(shown)}"
+                )
+            with progress.shown():
+                generate(path, objects, views, orca or {}, plates or [], names)
         case ["--view", name] if name in shown:
             out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
             write_step_of(name, shown[name], objects, out)
@@ -471,7 +501,7 @@ def project(
             run_shots(path.stem, name, where, shown[name], objects)
         case _:
             sys.exit(
-                f"usage: {path.name} [--view OBJECT | --audit [OBJECT...] |"
+                f"usage: {path.name} [NAME... | --view OBJECT | --audit [OBJECT...] |"
                 " --shots OBJECT [X,Y,Z | audit]...]"
             )
 
@@ -482,14 +512,19 @@ def generate(
     views: Mapping[str, Object | View],
     orca: Mapping[str, object],
     plates: Sequence[Sequence[str]],
+    only: Sequence[str] = (),
 ) -> None:
-    """project()'s work with no arguments: everything it writes to gen/."""
+    """project()'s work with no arguments: everything it writes to gen/. Or,
+    with `only`, just what it writes of those objects and views."""
     out_dir = build.ROOT / "gen" / path.parent.relative_to(build.ROOT)
-    for old in [
-        *out_dir.glob(f"{path.stem}-*.step"),
-        out_dir / f"{path.stem}-views.tsv",
-    ]:
-        old.unlink(missing_ok=True)
+    if not only:
+        for old in [
+            *out_dir.glob(f"{path.stem}-*.step"),
+            out_dir / f"{path.stem}-views.tsv",
+        ]:
+            old.unlink(missing_ok=True)
+    wanted = [n for n in objects if not only or n in only]
+    looked = [n for n in views if not only or n in only]
 
     def step(name: str) -> Path:
         return out_dir / f"{path.stem}-{name}.step"
@@ -508,62 +543,80 @@ def generate(
         view = views[name]
         return view.uses if isinstance(view, View) else ()
 
+    # Where the pieces are kept of each object a view uses, any view: for this
+    # run's views, and for those of a later run that doesn't draw the object.
     used = {n for v in views for n in uses(v)}
+    cache = build.cache(path)
+    # What this run's views use that it doesn't draw: as last drawn, where
+    # that was kept, and the rest drawn now, only to keep.
+    rest = [n for n in objects if n not in wanted and any(n in uses(v) for v in looked)]
+    old = [n for n in rest if (cache / n / SEEN).exists()]
+    fresh = [n for n in rest if n not in old]
+    for name in looked:
+        if stale := [n for n in uses(name) if n in old]:
+            print(f"{name}: with {', '.join(stale)} as last drawn")
 
-    # Each in a worker, but for one alone, which isn't worth starting one for.
-    count = len(objects) + len(views)
+    # Each in a worker, but for one object alone, which isn't worth starting
+    # one for.
+    count = len(wanted) + len(looked) + len(fresh)
     with (
         workers(min(count, os.cpu_count() or 1))
-        if count > 1
-        else contextlib.nullcontext() as pool,
-        # Where objects' pieces are kept for the views that use them.
-        tempfile.TemporaryDirectory() as tmp,
+        if looked or count > 1
+        else contextlib.nullcontext() as pool
     ):
         # Each view goes once the objects it uses are drawn, the rest at once,
         # to draw while the objects are assembled in Orca. With any, there are
         # workers.
-        progress.expect(len(views))
+        progress.expect(len(looked) + len(fresh))
         looks: dict[str, Future[tuple[None, str]]] = {}
-        made: dict[str, tuple[Path, list[Seen]]] = {}
+        made = {n: cache / n for n in old}
         lock = threading.Lock()
 
-        def look(name: str) -> None:
-            """Start drawing a view, counted as it finishes, not when it's
-            waited on."""
+        def start[T](what: str, work: Callable[..., T], *args) -> Future[T]:
+            """Start a stage in a worker, counted as it finishes, not when
+            it's waited on."""
             assert pool is not None
-            what = f"drawing {name}"
             progress.start(what)
-            given_over = {n: made[n] for n in uses(name)}
-            looks[name] = pool.submit(draw_view, name, step(name), given_over)
-            looks[name].add_done_callback(lambda _: progress.finish(what))
+            future = pool.submit(work, *args)
+            future.add_done_callback(lambda _: progress.finish(what))
+            return future
 
         def ready() -> None:
             """Start the views whose objects are all drawn."""
             with lock:
-                for name in views:
+                for name in looked:
                     if name not in looks and set(uses(name)) <= made.keys():
-                        look(name)
+                        given_over = {n: made[n] for n in uses(name)}
+                        looks[name] = start(
+                            f"drawing {name}", draw_view, name, step(name), given_over
+                        )
 
+        fills = {n: start(f"drawing {n}", draw_kept, n, cache / n) for n in fresh}
         if pool:
             ready()
 
         def drawn(name: str, work: Path) -> build.Render:
-            keep = Path(tmp) / name if name in used else None
+            keep = cache / name if name in used else None
             if pool is None:
-                done, _ = render(name, objects[name], orca, work, step(name))
-                return done
-            done, seen = result(pool.submit(draw, name, work, step(name), keep))
+                return render(name, objects[name], orca, work, step(name), keep)
+            done = result(pool.submit(draw, name, work, step(name), keep))
             if keep is not None:
                 with lock:
-                    made[name] = keep, seen
+                    made[name] = keep
                 ready()
             return done
 
-        # Each plate's objects, a copy at a time.
+        # Each plate's objects, a copy at a time: with everything.
         groups = [
-            [n for n in plate for _ in range(objects[n].count)] for plate in plates
+            [n for n in plate for _ in range(objects[n].count)]
+            for plate in ([] if only else plates)
         ]
-        build.run(path, list(objects), groups, drawn)
+        build.run(path, wanted, groups, drawn, whole=not only)
+        for name, fill in fills.items():
+            result(fill)
+            with lock:
+                made[name] = cache / name
+            ready()
         for drawing in list(looks.values()):
             result(drawing)
 
