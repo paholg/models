@@ -204,14 +204,45 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
     )
 
 
+# How many extruder variants a setting kept for each is published for. A
+# process preset has one for each kind of nozzle each head takes: the U1's four
+# heads, standard and high flow, make eight. A printer with fewer takes those it
+# has and skips the rest; one with more keeps its own values past these.
+VARIANTS = 8
+
+
+@functools.cache
+def variant_keys() -> frozenset[str]:
+    """The process settings Orca keeps a value of per extruder variant."""
+    source = Path(os.environ["ORCA_SOURCE"]) / "src/libslic3r/PrintConfig.cpp"
+    block = re.search(
+        r"print_options_with_variant\s*=\s*\{(.*?)\};", source.read_text(), re.DOTALL
+    )
+    if not block:
+        sys.exit(f"no print_options_with_variant in {source}")
+    return frozenset(re.findall(r'"(\w+)"', block[1]))
+
+
 def publish(model: ET.Element, settings: dict[str, str]) -> None:
-    """Make a project's model a published one, which applies `settings`."""
+    """Make a project's model a published one, which applies `settings`. One
+    Orca keeps per extruder variant goes to them all, each as its own key,
+    `key#N`: Orca skips the bare key unless it has a value for every one."""
+    per_variant = variant_keys() & settings.keys() if settings else frozenset()
+    keys = [
+        each
+        for k in settings
+        for each in ([f"{k}#{i}" for i in range(VARIANTS)] if k in per_variant else [k])
+    ]
+    values = {
+        k: ",".join([v] * VARIANTS) if k in per_variant else v
+        for k, v in settings.items()
+    }
     published = {
         "orca_published": "1",
-        "orca_published_keys": json.dumps(list(settings)),
+        "orca_published_keys": json.dumps(keys),
         # Orca imports only the geometry of a published project with no settings at all.
         "orca_published_config": "\n".join(
-            f"{k} = {v}" for k, v in (settings or {"layer_height": "0.2"}).items()
+            f"{k} = {v}" for k, v in (values or {"layer_height": "0.2"}).items()
         ),
     }
     at = list(model).index(child(model, core("resources")))
@@ -232,8 +263,13 @@ def published(project: Path) -> dict[str, str]:
         line.split(" = ", 1)
         for line in tags.get("orca_published_config", "").splitlines()
     )
-    # A project with nothing to apply still carries a setting, unlisted.
-    return {k: config[k] for k in json.loads(tags.get("orca_published_keys") or "[]")}
+    # A project with nothing to apply still carries a setting, unlisted. One
+    # written for every extruder variant (see publish()) is read back as one.
+    settings = {}
+    for key in json.loads(tags.get("orca_published_keys") or "[]"):
+        base, _, variant = key.partition("#")
+        settings[base] = config[base].split(",")[0] if variant else config[base]
+    return settings
 
 
 # How far over a pause's height to name its layer: half the thinnest layer.
