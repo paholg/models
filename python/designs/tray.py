@@ -36,6 +36,7 @@ from build123d import (
     fillet,
     mirror,
     offset,
+    revolve,
 )
 
 from build.cad import part, sketch
@@ -243,7 +244,8 @@ class Slot:
     `along`, a unit vector, for `depth`. The faces it crosses are each
     (distance along it, which way the wall is from there: 1 on, -1 back),
     chamfered by chamfer_out where they're outside, or by rim_c, where they're
-    inside a well whose floor is at `floor`, from there up."""
+    inside a well whose floor is at `floor`, from the top of its fillet into
+    the wall up."""
 
     x: float
     y: float
@@ -272,7 +274,11 @@ class Slot:
         for d, way, floor in self.inside:
             plane = self.plane(d, way)
             eased = plane.location * flare(self.opening, rim_c, normal)
-            out.append(part(eased & cuboid(-1000, -1000, floor, 1000, 1000, 1000)))
+            # From where the floor's fillet into the wall ends: lower, it
+            # would cut into that fillet beside the slot. A notch() chamfers
+            # the edge from there down.
+            above = cuboid(-1000, -1000, floor + fillet_r, 1000, 1000, 1000)
+            out.append(part(eased & above))
         return out
 
 
@@ -291,11 +297,41 @@ def notch(
         [(0, inset), (length, inset)],
         inset - fillet_r,
     )
+    # The floor's new edge, chamfered, as far as its fillet into the wall: cut
+    # off there, as the chamfer's own end would go on round the corner, into
+    # that fillet beside the notch.
     top = plan & rect(-1, fillet_r, length + 1, inset + 1)
+    edge = Pos(0, 0, floor) * flare(top, rim_c, Vector(0, 0, -1))
+    edge &= cuboid(-inset, fillet_r, floor - 1, length + inset, 2 * inset, floor + 1)
+    # From there the edge goes up the fillet at each end, to the wall, and the
+    # chamfer with it: its section, running on a little out of the part, turned
+    # about the fillet's axis. It ends as the chamfer of the slot's own edge up
+    # the wall begins (see Slot).
+    c, out = rim_c, 0.5
+    axis = Axis((0, fillet_r, floor + fillet_r), (-1, 0, 0))
+    across = Plane((0, fillet_r, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))
+    ends = [
+        revolve(
+            (
+                across
+                * polygon(
+                    [
+                        (x - way * (c + out), floor + out),
+                        (x + way * out, floor + out),
+                        (x + way * out, floor - c - out),
+                    ]
+                )
+            ).faces(),
+            axis,
+            90,
+        )
+        for x, way in ((0, 1), (length, -1))
+    ]
     return [
         at * up(plan, -1, 1 + floor + fillet_r),
         at * flare(plan, chamfer_out, Vector(0, 0, 1)),
-        at * (Pos(0, 0, floor) * flare(top, rim_c, Vector(0, 0, -1))),
+        at * part(edge),
+        *[at * part(end) for end in ends],
     ]
 
 
