@@ -70,6 +70,7 @@
         fonts = [
           pkgs.liberation_ttf
           pkgs.gyre-fonts
+          pkgs.orbitron
         ];
 
         # Include native dependencies for build123d with uv.

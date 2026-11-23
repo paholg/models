@@ -17,6 +17,11 @@ To Print: Vikings Yellow, Red, Blue
   the other panels (0.56 mm of rabbet wall left: if loose, `relief` to 0.16);
   thin CA still wicks from the inside corners' V
 
+## The Crew: Mission Deep Sea
+
+- Check the cardboard tokens fit their slot: their outlines are off a photo
+- Print the insert
+
 ## SET
 
 - Measure the cards and the deck, set `sleeve` and `deck`
