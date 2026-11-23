@@ -8,7 +8,7 @@ well() and its rim() for each stack, less the cuts() of a Slot through a wall
 beside it, and a notch() where that slot goes down through the floor.
 """
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from math import hypot
 
@@ -18,6 +18,7 @@ from build123d import (
     Box,
     Circle,
     Compound,
+    Edge,
     Kind,
     Location,
     Part,
@@ -39,6 +40,7 @@ from build123d import (
     revolve,
 )
 
+from build.audit import sharp_edges
 from build.cad import part, sketch
 
 # Chamfers
@@ -51,6 +53,8 @@ chamfer_out = 0.6
 chamfer_corner = 1
 # Inside corners and floor edges of wells.
 fillet_r = 1
+# The tops of walls, where eased() rounds them.
+round_top = 0.4
 
 
 # Shapes
@@ -130,6 +134,53 @@ def carve(body: Part, cuts: Iterable[Part]) -> Part:
     for c in cuts:
         body = part(body - c)
     return body
+
+
+def eased(
+    body: Part,
+    top: float = round_top,
+    foot: float = chamfer_out,
+    inside: Callable[[Edge], bool] | None = None,
+) -> Part:
+    """A body cut square, with every sharp edge that sticks out eased, all at
+    once, so that they meet as one: those round its foot chamfered by `foot`,
+    as a round there would overhang, and then the rest rounded by `top`. In
+    that order: the other way, the chamfer has rounded corners to go round,
+    and OCCT fails on them. Rounded with the rest are the inside corners that
+    `inside` picks, a floor's edge along a wall say: on their own, before or
+    after, OCCT can't end them on the rest. For a body whose cuts make no
+    chamfers of their own: with both, there are edges where the two
+    disagree."""
+    low = body.bounding_box().min.Z + 1e-4
+
+    def tried(
+        body: Part, ease: Callable[[list[Edge], float], Shape], by: float, under: bool
+    ) -> Part:
+        solid = body.solid()
+        edges = [
+            e
+            for e in sharp_edges(solid, 0.01)
+            if (e.bounding_box().max.Z < low) == under
+        ]
+        if inside and not under:
+            edges += [e for e in sharp_edges(solid, 0.01, convex=False) if inside(e)]
+        try:
+            done = part(ease(edges, by))
+            if done.is_valid:
+                return done
+        except ValueError:
+            pass
+        # Which ones, each alone, to say where.
+        stuck = []
+        for e in edges:
+            try:
+                ease([e], by)
+            except ValueError:
+                stuck.append(tuple(round(v, 1) for v in tuple(e.position_at(0.5))))
+        raise ValueError(f"can't ease by {by}: {stuck or 'only all together'}")
+
+    body = tried(body, chamfer, foot, True)
+    return tried(body, fillet, top, False)
 
 
 def round_corners(
@@ -283,7 +334,12 @@ class Slot:
 
 
 def notch(
-    length: float, through: float, inset: float, floor: float, at: Location
+    length: float,
+    through: float,
+    inset: float,
+    floor: float,
+    at: Location,
+    chamfers: bool = True,
 ) -> list[Part]:
     """Where a pinch slot goes down through a well's floor, the floor is cut
     back from it to inset inside the well, to get a fingertip under the stack.
@@ -291,12 +347,14 @@ def notch(
     wall `through` thick, the opening from x = 0 to length. The notch's
     corners start where the floor's fillet into the wall ends; it takes that
     fillet with it, and its bottom edge, and the floor's new top edge, are
-    chamfered."""
+    chamfered: or, without `chamfers`, left for eased()."""
     plan = round_corners(
         rect(0, -through - 1, length, inset),
         [(0, inset), (length, inset)],
         inset - fillet_r,
     )
+    if not chamfers:
+        return [at * up(plan, -1, 1 + floor + fillet_r)]
     # The floor's new edge, chamfered, as far as its fillet into the wall: cut
     # off there, as the chamfer's own end would go on round the corner, into
     # that fillet beside the notch.

@@ -127,6 +127,26 @@ def turn(edge: Edge, a: Face, b: Face) -> tuple[float, Vector, Vector]:
     return degrees(acos(cos)), at, (nb - na) * 0.02
 
 
+def sharp_edges(
+    solid: Solid, shortest: float = SHARP_LENGTH, convex: bool = True
+) -> list[Edge]:
+    """A solid's convex edges whose faces turn by SHARP degrees or more, as
+    long as `shortest`: or, not `convex`, its concave ones, its inside
+    corners."""
+    faces: dict[Edge, list[Face]] = {}
+    for face in solid.faces():
+        for edge in face.edges():
+            faces.setdefault(edge, []).append(face)
+    sharp = []
+    for edge, beside in faces.items():
+        if len(beside) != 2 or edge.length < shortest:
+            continue
+        angle, at, step = turn(edge, *beside)
+        if angle >= SHARP and solid.is_inside(at + step) != convex:
+            sharp.append(edge)
+    return sharp
+
+
 def finding(kind: str, shape: Edge | Face, at: Vector, said: str) -> Finding:
     box = shape.bounding_box()
     return Finding(kind, at, said, box.min.Z, box.max.Z)
@@ -138,22 +158,16 @@ def audit(shapes: Sequence[Shape], skip: Sequence[Skip] = ()) -> tuple[list[Spot
     found: list[Finding] = []
     solids = together(shapes)
     for solid in solids:
-        faces: dict[Edge, list[Face]] = {}
         for face in solid.faces():
             if face.area < SLIVER_AREA:
                 found.append(finding("sliver", face, face.center(), "face"))
-            for edge in face.edges():
-                faces.setdefault(edge, []).append(face)
-        for edge, beside in faces.items():
+        for edge in solid.edges():
             if edge.length < SLIVER_EDGE:
                 found.append(finding("sliver", edge, edge.position_at(0.5), "edge"))
-                continue
-            if len(beside) != 2 or edge.length < SHARP_LENGTH:
-                continue
-            angle, at, step = turn(edge, *beside)
-            if angle >= SHARP and not solid.is_inside(at + step):
-                said = f"{edge.length:.1f} mm at {angle:.0f}°"
-                found.append(finding("sharp", edge, at, said))
+        for edge in sharp_edges(solid):
+            found.append(
+                finding("sharp", edge, edge.position_at(0.5), f"{edge.length:.1f} mm")
+            )
     box = Compound(solids).bounding_box()
     kept = [f for f in found if not any(s(f, box) for s in skip)]
     spots: list[Spot] = []
