@@ -2,7 +2,7 @@
 
 ## Blood on the Clocktower
 
-- Setup travelers
+- Print the travelers' roses, and try one on a pencil under a ghost
 
 ## The Crew: Mission Deep Sea
 

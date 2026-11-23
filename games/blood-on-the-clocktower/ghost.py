@@ -27,9 +27,15 @@ the same size wherever it is, with the magnets beside it as ever, and takes
 in its opening. The folds fade out round the eyes and mouth. `GHOSTS` are
 the ones to print, each an object, set at random from a seed.
 
+A traveler's wand has a compass rose on it, in quarters of red and blue, which
+its ghost goes on over when it dies: the socket's outline right through it, to
+slide along the pencil. Its red is one piece, the quarters joined by a core
+inside the blue ones, which are shells over it: so that no quarter is held
+only by its seams.
+
 "fit" is the socket alone, at each of `fit_press`, to try on a pencil: the dots
 on each count from the loosest. The view "assembly" is every ghost on its
-pencil, holding its vote.
+pencil, holding its vote, and "travelers" a traveler's wand, alive and dead.
 """
 
 import random
@@ -72,6 +78,7 @@ from build123d import (
     fillet,
     make_hull,
     mirror,
+    offset,
     revolve,
     scale,
 )
@@ -191,6 +198,24 @@ spring_gap = 0.6
 # How far the pencil pushes each spring back.
 press = 0.15
 fit_press = [0, 0.1, 0.2, 0.3]
+
+# Traveler's rose
+
+# From tip to tip, wider than a ghost's hem, to show round it, and thick
+# enough for its edge to show its colors from the side, and for the springs
+# to grip.
+rose_d = 55
+rose_t = 6
+rose_chamfer = 0.6
+# The blue over the red core: on its faces, and round its edge.
+rose_skin = 1
+rose_wall = 1.2
+# How far out the points between its four reach, and the corners between
+# points, which leave a wall round the socket's springs (about 6.2 out). Its
+# corners are rounded by this much.
+rose_between = 20
+rose_valley = 10.5
+rose_round = 0.8
 
 # Mouth
 
@@ -1122,11 +1147,62 @@ def fit() -> list[Piece]:
     return pieces
 
 
+def rose_tip() -> float:
+    """How far out a point's corner is, before it's rounded, for the rounded
+    tip to reach rose_d / 2: the rounding takes off more the sharper it is."""
+    reach = rose_d / 2
+    for _ in range(20):
+        across = rose_valley * sin(pi / 8)
+        along = reach - rose_valley * cos(pi / 8)
+        sharp = across / sqrt(across * across + along * along)
+        reach = rose_d / 2 + rose_round * (1 / sharp - 1)
+    return reach
+
+
+def rose() -> Sketch:
+    """A compass rose: four points on the axes, each of one color, and four
+    shorter between, where the colors meet, so that each is half red and half
+    blue. Its corners are rounded."""
+    reach = [rose_tip(), rose_valley, rose_between, rose_valley]
+    corners = [
+        (q * cos(t), q * sin(t))
+        for k in range(16)
+        for q, t in [(reach[k % 4], k * pi / 8)]
+    ]
+    star = Polygon(*corners, align=None)
+    return sketch(fillet(star.vertices(), rose_round))
+
+
+def traveler() -> list[Piece]:
+    """The traveler's rose as it prints, flat. It sits under the ghost's hem."""
+    outline = rose()
+    body = extrude(outline, rose_t)
+    faces = body.faces().sort_by(Axis.Z)
+    body = chamfer(faces.first.edges() + faces.last.edges(), rose_chamfer)
+    through = Pos(0, 0, -1) * extrude(
+        sketch(Sketch() + socket_parts(press)), rose_t + 2
+    )
+    # Each quarter about an axis, its sides down the middles of the points
+    # between.
+    quarter = Rot(0, 0, -45) * Rectangle(rose_d, rose_d, align=Align.MIN)
+    core = Pos(0, 0, rose_skin) * extrude(
+        sketch(offset(outline, -rose_wall)), rose_t - 2 * rose_skin
+    )
+    red = extrude(sketch(quarter + Rot(0, 0, 180) * quarter), rose_t) + core
+    under = Pos(0, 0, -rose_t)
+    red, blue = part((body & red) - through), part(body - red - through)
+    return [
+        Piece(red, "red", "firebrick", parent="traveler", at=under),
+        Piece(blue, "blue", "royalblue", parent="traveler", at=under),
+    ]
+
+
 # The ghosts to print: each eyes, mouth and texture as often as the rest of
 # its kind, paired at random, but no two ghosts with the same two of them.
 # Drawn again with the same seed, they're the same ghosts.
 ghost_n = 20
 ghost_seed = 1
+traveler_n = 5
 
 
 def styles(n: int, seed: int) -> list[Style]:
@@ -1166,26 +1242,54 @@ def assembly(objects: Mapping[str, list[Piece]]) -> list[Piece]:
     shown = []
     for k, (name, style) in enumerate(GHOSTS.items()):
         at = Pos(pitch * (k % columns), -pitch * (k // columns))
-        held = (
-            slot_frame(slot_at(style.mouth))
-            * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c)
-            * Rot(180, 0, 0)
-        )
         pieces = [
             *objects[name],
-            *(replace(p, shape=held * p.shape) for p in objects["vote"]),
+            *held(style, objects["vote"]),
             Piece(pencil(), "pencil", "gray20"),
         ]
-        shown += [
-            replace(
-                p,
-                shape=at * p.shape,
-                name=f"{name} {p.name}",
-                parent=f"{name}/{name} {p.parent}" if p.parent else name,
-            )
-            for p in pieces
-        ]
+        shown += grouped(name, at, pieces)
     return shown
+
+
+def held(style: Style, vote: list[Piece]) -> list[Piece]:
+    """The vote in a ghost's mouth, face up."""
+    at = (
+        slot_frame(slot_at(style.mouth))
+        * Pos(slot_c + vote_w / 2, 0, slot_t - slot_c)
+        * Rot(180, 0, 0)
+    )
+    return [replace(p, shape=at * p.shape) for p in vote]
+
+
+def grouped(name: str, at: Location, pieces: list[Piece]) -> list[Piece]:
+    """Pieces moved to `at`, in a group of their own, named for it."""
+    return [
+        replace(
+            p,
+            shape=at * p.shape,
+            name=f"{name} {p.name}",
+            parent=f"{name}/{name} {p.parent}" if p.parent else name,
+        )
+        for p in pieces
+    ]
+
+
+# The ghost a dead traveler is shown with.
+traveler_ghost = next(iter(GHOSTS))
+
+
+def travelers(objects: Mapping[str, list[Piece]]) -> list[Piece]:
+    """A traveler's wand alive, with its rose alone, and dead, its ghost on
+    over it."""
+    wand = [*objects["traveler"], Piece(pencil(), "pencil", "gray20")]
+    ghost = [
+        *objects[traveler_ghost],
+        *held(GHOSTS[traveler_ghost], objects["vote"]),
+    ]
+    return [
+        *grouped("alive", Pos(), wand),
+        *grouped("dead", Pos(rose_d + 8), wand + ghost),
+    ]
 
 
 project(
@@ -1207,6 +1311,11 @@ project(
             pauses=[vote_pause],
             count=ghost_n,
         ),
+        "traveler": Object(
+            traveler,
+            "A traveler's compass rose, red and blue; flat",
+            count=traveler_n,
+        ),
         "fit": Object(fit, "The socket alone, at each press, to try on a pencil"),
     },
     views={
@@ -1214,8 +1323,13 @@ project(
             assembly,
             "Each ghost on its pencil, its vote in its mouth",
             [*GHOSTS, "vote"],
-        )
+        ),
+        "travelers": View(
+            travelers,
+            "A traveler's wand, alive and dead",
+            [traveler_ghost, "vote", "traveler"],
+        ),
     },
     # Apart: the vote's layers are thinner than the ghost's.
-    plates=[list(GHOSTS), ["vote"]],
+    plates=[list(GHOSTS), ["vote"], ["traveler"]],
 )
