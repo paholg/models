@@ -82,6 +82,8 @@ bump_r = 0.2
 INLAY = 0.6
 arrow_tail = -12
 arrow_tip = 15
+# A line is the arrow's shaft, as far past the centre as its tail is.
+MARKS = ("arrow", "line", "")
 shaft_w = 4
 head_w = 12
 head_l = 9
@@ -106,8 +108,10 @@ HALF_COLORS = ("gold", "#5c6470")
 ARROW_COLORS = HALF_COLORS[::-1]
 # What the slate gray stands for.
 FILAMENTS = ("", "black")
-# Each half's group in FreeCAD, with its arrow.
+# Each half's group in FreeCAD, with its arrow: named for its color, or, on a
+# coin of one color, its side.
 HALVES = ("gold", "black")
+SIDES = ("front", "back")
 
 
 def sketch(shape: Shape) -> Sketch:
@@ -135,7 +139,7 @@ def up(face: Shape, z0: float, height: float) -> Part:
 def half_settings(shape: str) -> dict[str, object]:
     """On the face, which prints on the bed: rings around the octagon, or chords
     around the round ones."""
-    pattern = "octagramspiral" if shape == "octagon" else "archimedeanchords"
+    pattern = "octagramspiral" if shape == "octagon" else "hilbertcurve"
     return {"bottom_surface_pattern": pattern}
 
 
@@ -159,7 +163,11 @@ class Coin:
     shape: str = "octagon"  # one of SHAPES
     # Where each face's arrow points, in its half's own frame.
     angles: tuple[float, float] = (0, 90)
-    # The knurled coin's bumps, evenly around it, one at 0.
+    # What's inlaid in each face, of MARKS: an arrow, a line, or nothing.
+    marks: tuple[str, str] = ("arrow", "arrow")
+    # Each half's color, of HALF_COLORS: what's inlaid in it is the other.
+    colors: tuple[str, str] = HALF_COLORS
+    # The knurled coin's bumps, evenly around it, one at 0: or none.
     bumps: int = 8
     # Where the pin is, with the hole opposite it across the x axis, so that
     # turning a half over puts each over the other.
@@ -168,7 +176,11 @@ class Coin:
 
     def __post_init__(self) -> None:
         assert self.shape in SHAPES, f"no shape {self.shape}"
-        assert knurls % self.bumps == 0, "knurls must be a multiple of the bumps"
+        assert all(m in MARKS for m in self.marks), f"no marks {self.marks}"
+        assert all(c in HALF_COLORS for c in self.colors), f"no colors {self.colors}"
+        assert not self.bumps or knurls % self.bumps == 0, (
+            "knurls must be a multiple of the bumps"
+        )
 
     def outline(self, inset: float = 0) -> Sketch:
         if self.shape == "octagon":
@@ -222,19 +234,25 @@ class Coin:
             Rot(0, 0, (i + 0.5) * 360 / knurls) * groove for i in range(knurls)
         ]
         body -= up(grooves, -1, self.half_t + 2)
+        if not self.bumps:
+            return body
         bump = self.chamfered(self.bump_2d)
         return body + [
             Rot(0, 0, i * 360 / self.bumps) * bump for i in range(self.bumps)
         ]
 
     def arrow_2d(self, i: int) -> Sketch:
-        """Half i's arrow, as it is in its face."""
+        """Half i's arrow, or its line, as it is in its face."""
+        line = self.marks[i] == "line"
+        shaft_tip = -arrow_tail if line else arrow_tip - head_l + 1
         shaft = Polygon(
             (arrow_tail, -shaft_w / 2),
-            (arrow_tip - head_l + 1, -shaft_w / 2),
-            (arrow_tip - head_l + 1, shaft_w / 2),
+            (shaft_tip, -shaft_w / 2),
+            (shaft_tip, shaft_w / 2),
             (arrow_tail, shaft_w / 2),
         )
+        if line:
+            return Rot(0, 0, self.angles[i]) * opened(shaft, arrow_r)
         head = Polygon(
             (arrow_tip, 0),
             (arrow_tip - head_l, head_w / 2),
@@ -251,7 +269,7 @@ class Coin:
         return Rot(0, 0, sign * self.pin_a) * Pos(pin_r, 0, self.half_t)
 
     def half(self, i: int) -> Shape:
-        """Half i, in its own frame, without its arrow."""
+        """Half i, in its own frame, without what's inlaid in it."""
         pin = extrude(Circle(pin_d / 2), pin_h)
         pin = chamfer(pin.faces().sort_by(Axis.Z).last.edges(), pin_chamfer)
         hole_r = pin_d / 2 + pin_c
@@ -273,41 +291,45 @@ class Coin:
             + Pos(0, 0, -pin_chamfer)
             * extrude(Circle(hole_r), pin_chamfer, (0, 0, 1), taper=-45)
         )
+        body = self.blank() - self.at_pin(-1) * hole + self.at_pin(1) * pin
+        if not self.marks[i]:
+            return body
         # The arrow, cut through the face from under it.
-        face = up(self.arrow_2d(i), -1, 1 + INLAY)
-        return self.blank() - face - self.at_pin(-1) * hole + self.at_pin(1) * pin
+        return body - up(self.arrow_2d(i), -1, 1 + INLAY)
 
     def pieces(self) -> list[Piece]:
-        """Both halves and their arrows: printed face down, side by side, and
-        glued, the second half turned over onto the first."""
+        """Both halves and what's inlaid in them: printed face down, side by
+        side, and glued, the second half turned over onto the first."""
         pitch = D + 2 * BUMP_H + 5
         at = (Location(), flipped(2 * self.half_t))
-        return [
-            piece
-            for i in (0, 1)
-            for piece in (
+        filaments = dict(zip(HALF_COLORS, FILAMENTS))
+        groups = SIDES if self.colors[0] == self.colors[1] else HALVES
+        pieces = []
+        for i, (color, mark) in enumerate(zip(self.colors, self.marks)):
+            where = {"parent": groups[i], "at": at[i], "place": Pos(i * pitch)}
+            pieces.append(
                 Piece(
                     self.half(i),
                     f"half {i}",
-                    HALF_COLORS[i],
-                    FILAMENTS[i],
+                    color,
+                    filaments[color],
                     half_settings(self.shape),
-                    parent=HALVES[i],
-                    at=at[i],
-                    place=Pos(i * pitch),
-                ),
-                Piece(
-                    self.arrow(i),
-                    f"arrow {i}",
-                    ARROW_COLORS[i],
-                    FILAMENTS[1 - i],
-                    arrow_settings(self.angles[i]),
-                    parent=HALVES[i],
-                    at=at[i],
-                    place=Pos(i * pitch),
-                ),
+                    **where,
+                )
             )
-        ]
+            if mark:
+                inlaid = HALF_COLORS[1 - HALF_COLORS.index(color)]
+                pieces.append(
+                    Piece(
+                        self.arrow(i),
+                        f"{mark} {i}",
+                        inlaid,
+                        filaments[inlaid],
+                        arrow_settings(self.angles[i]),
+                        **where,
+                    )
+                )
+        return pieces
 
 
 def row(coins: Mapping[str, list[Piece]]) -> list[Piece]:
