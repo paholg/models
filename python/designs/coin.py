@@ -346,7 +346,7 @@ class Coin:
         groups = SIDES if self.colors[0] == self.colors[1] else HALVES
         pieces = []
         for i, (color, mark) in enumerate(zip(self.colors, self.marks)):
-            where = {"parent": groups[i], "at": at[i], "place": Pos(i * pitch)}
+            parent, place = groups[i], Pos(i * pitch)
             pieces.append(
                 Piece(
                     self.half(i),
@@ -354,7 +354,9 @@ class Coin:
                     color,
                     filaments[color],
                     half_settings(self.shape),
-                    **where,
+                    parent=parent,
+                    at=at[i],
+                    place=place,
                 )
             )
             if mark:
@@ -366,7 +368,9 @@ class Coin:
                         inlaid,
                         filaments[inlaid],
                         arrow_settings(self.angles[i]),
-                        **where,
+                        parent=parent,
+                        at=at[i],
+                        place=place,
                     )
                 )
         return pieces
