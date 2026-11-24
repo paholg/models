@@ -10,7 +10,7 @@ each. The view is the three put together.
 """
 
 from build.cad import Object, View, project
-from designs.coin import SHAPES, Coin, row
+from designs.coin import COIN_SETTINGS, SHAPES, Coin, row
 
 coins = {shape: Coin(shape) for shape in SHAPES}
 
@@ -18,7 +18,12 @@ coins = {shape: Coin(shape) for shape in SHAPES}
 project(
     __file__,
     objects={
-        shape: Object(coin.pieces, "Both halves face down, and their arrows")
+        shape: Object(
+            coin.pieces,
+            "Both halves face down, and their arrows",
+            settings=COIN_SETTINGS,
+            skip_audit=[coin.in_joint],
+        )
         for shape, coin in coins.items()
     },
     views={"assembly": View(row, "Each shape, glued", list(coins))},

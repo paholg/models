@@ -168,8 +168,9 @@ apin_r = 13
 # Behind the gold arrow's tail, as the wedge is.
 apin_a = 180
 
-# Every 45 degrees the halves' bumps line up again.
-coin = Coin("knurled", half_t=half_t)
+# Every 45 degrees the halves' bumps line up again. They turn on each other,
+# so a chamfer either side of the seam hides what they're out by.
+coin = Coin("knurled", half_t=half_t, seam_chamfer=0.2)
 steps = 8
 
 seat_r = ring_d / 2 + play

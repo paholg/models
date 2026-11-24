@@ -15,9 +15,12 @@ reeded edge, like a quarter's, which has a bump where each of the octagon's
 vertices would be.
 
 Two halves, split through the coin's thickness and printed face down, so both
-faces come off the bed. Each half has a pin and a crush-ribbed hole on its glue
-side, placed so the halves only go together one way: with the arrows as far
-apart as `angles` says.
+faces come off the bed. On its glue side each half has a tapered tongue around
+one side, just inside the edge, and a crush-ribbed groove around the other, so
+the halves only go together one way: with the arrows as far apart as `angles`
+says. The seam is flush, and only a land around the rim touches: inside it
+the second half's glue side is a layer lower, a gap for gel glue, so the rim
+closes first and what's squeezed is pushed inward.
 
 In a half's own frame the face is at z = 0 and the glue side is up; the second
 half goes on the first turned over the x axis. games/magic-octagon/rotating.py
@@ -26,9 +29,10 @@ builds on the blank and the arrows, with halves of its own.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from math import cos, hypot, radians, sin
 
 from build123d import (
-    Axis,
+    BoundBox,
     Circle,
     Kind,
     Location,
@@ -40,12 +44,12 @@ from build123d import (
     Rot,
     Shape,
     Sketch,
-    chamfer,
     extrude,
     loft,
     offset,
 )
 
+from build.audit import Finding
 from build.cad import Piece
 
 SHAPES = ("octagon", "round", "knurled")
@@ -58,8 +62,6 @@ HALF_T = 2.5
 # Rounds the vertices.
 corner_r = 1
 face_chamfer = 0.6
-# A small chamfer either side of the seam hides a little misalignment.
-seam_chamfer = 0.2
 
 # Knurling
 
@@ -91,17 +93,29 @@ arrow_r = 0.5
 
 # Joint
 
-pin_d = 4
-pin_h = 1.2
-# From the centre, on the diagonals between the arrows.
-pin_r = 11
-pin_c = 0.15
-pin_chamfer = 0.4
-# The hole is this much deeper than the pin, for glue.
-hole_extra = 0.3
-ribs = 3
-rib_w = 0.8
-rib_press = 0.1
+# A tongue around the y > 0 side of the glue face, and a groove around the
+# other for the other half's: this far inside the outline, and this wide at
+# the seam.
+ring_in = 1.6
+ring_w = 1.6
+tongue_h = 1
+# The flanks lean, and the ends too, to draw the halves together as they close.
+ring_lean = 20
+# Each stops this short of the x axis.
+ring_end = 1
+# The groove is this much wider a side, and this much deeper for glue.
+ring_c = 0.1
+groove_extra = 0.3
+# Crush ribs across the groove's flanks, at the middles of the octagon's
+# sides. A lean of 20 degrees holds the halves 0.14 apart until these crush.
+rib_as = (22.5, 67.5, 112.5, 157.5)
+rib_w = 0.6
+rib_press = 0.05
+# Only this much around the rim touches. Inside it the second half's glue
+# side is a layer lower, so the rim closes first and glue is pushed inward,
+# not out: a gap for gel glue to fill.
+land = 1
+relief = 0.2
 
 # Colors: each half's, and its arrow's, which is the other half's.
 HALF_COLORS = ("gold", "#5c6470")
@@ -134,6 +148,11 @@ def opened(face: Shape, r: float) -> Sketch:
 def up(face: Shape, z0: float, height: float) -> Part:
     """A face, drawn up from z0."""
     return Pos(0, 0, z0) * extrude(sketch(face), height, (0, 0, 1))
+
+
+# For a glued coin's object: the gap inside the rim is `relief`, which has to
+# be a whole layer to print.
+COIN_SETTINGS = {"layer_height": relief}
 
 
 def half_settings(shape: str) -> dict[str, object]:
@@ -169,10 +188,10 @@ class Coin:
     colors: tuple[str, str] = HALF_COLORS
     # The knurled coin's bumps, evenly around it, one at 0: or none.
     bumps: int = 8
-    # Where the pin is, with the hole opposite it across the x axis, so that
-    # turning a half over puts each over the other.
-    pin_a: float = 45
     half_t: float = HALF_T
+    # A chamfer either side of the seam, for halves that turn on each other:
+    # glued, they meet flush.
+    seam_chamfer: float = 0
 
     def __post_init__(self) -> None:
         assert self.shape in SHAPES, f"no shape {self.shape}"
@@ -192,16 +211,15 @@ class Coin:
     def chamfered(self, outline) -> Part:
         """A convex outline, chamfered at the face and the seam: `outline(inset)`
         draws it inset smaller."""
-        t = self.half_t
-        return loft(
-            [
-                outline(face_chamfer),
-                Pos(0, 0, face_chamfer) * outline(0),
-                Pos(0, 0, t - seam_chamfer) * outline(0),
-                Pos(0, 0, t) * outline(seam_chamfer),
-            ],
-            ruled=True,
-        )
+        t, seam = self.half_t, self.seam_chamfer
+        sections = [
+            outline(face_chamfer),
+            Pos(0, 0, face_chamfer) * outline(0),
+            Pos(0, 0, t - seam) * outline(0),
+        ]
+        if seam:
+            sections.append(Pos(0, 0, t) * outline(seam))
+        return loft(sections, ruled=True)
 
     def bump_2d(self, inset: float) -> Sketch:
         """A vertex's bump at +x, chamfered by leaning in, as the edge under it
@@ -264,38 +282,60 @@ class Coin:
         """Half i's, inlaid in its face."""
         return extrude(self.arrow_2d(i), INLAY)
 
-    def at_pin(self, sign: int) -> Location:
-        """On the glue side, at the pin (1) or the hole (-1)."""
-        return Rot(0, 0, sign * self.pin_a) * Pos(pin_r, 0, self.half_t)
+    def side_2d(self, side: int, y: float = 0) -> Sketch:
+        """The half plane y past the x axis, on the tongue's side (1) or the
+        groove's (-1)."""
+        return Pos(0, side * (y + D / 2)) * Rectangle(2 * D, D)
+
+    def ring_2d(self, side: int, grow: float = 0) -> Sketch:
+        """The tongue's foot (1), or the groove's mouth across the x axis from
+        it (-1): grown this much all round."""
+        ring = self.outline(ring_in - grow) - self.outline(ring_in + ring_w + grow)
+        return sketch(ring & self.side_2d(side, ring_end - grow))
 
     def half(self, i: int) -> Shape:
         """Half i, in its own frame, without what's inlaid in it."""
-        pin = extrude(Circle(pin_d / 2), pin_h)
-        pin = chamfer(pin.faces().sort_by(Axis.Z).last.edges(), pin_chamfer)
-        hole_r = pin_d / 2 + pin_c
-        depth = pin_h + hole_extra
-        # Crush ribs, stopping short of the mouth's chamfer.
-        ribbed = (
-            Sketch()
-            + Circle(hole_r)
-            - [
-                Rot(0, 0, k * 360 / ribs)
-                * Pos(pin_d / 2 - rib_press + 0.5, 0)
-                * Rectangle(1, rib_w)
-                for k in range(ribs)
-            ]
-        )
-        hole = (
-            up(ribbed, -depth, depth - pin_chamfer)
-            + up(Sketch() + Circle(hole_r), -pin_chamfer, 1)
-            + Pos(0, 0, -pin_chamfer)
-            * extrude(Circle(hole_r), pin_chamfer, (0, 0, 1), taper=-45)
-        )
-        body = self.blank() - self.at_pin(-1) * hole + self.at_pin(1) * pin
+        t = self.half_t
+        seam = Pos(0, 0, t)
+        tongue = seam * extrude(self.ring_2d(1), tongue_h, taper=ring_lean)
+
+        def groove(grow: float) -> Part:
+            return seam * extrude(
+                self.ring_2d(-1, grow),
+                tongue_h + groove_extra,
+                (0, 0, -1),
+                taper=ring_lean,
+            )
+
+        # The groove is narrower than the tongue at its ribs.
+        ribs = Sketch() + [
+            Rot(0, 0, -a) * Pos(D / 2 - 4, 0) * Rectangle(8, rib_w) for a in rib_as
+        ]
+        grooves = groove(-rib_press) + (groove(ring_c) - up(ribs, 0, t + 1))
+        body = self.blank()
+        if i:
+            body -= up(self.outline(land), t - relief, relief)
+        body = body - grooves + tongue
         if not self.marks[i]:
             return body
         # The arrow, cut through the face from under it.
         return body - up(self.arrow_2d(i), -1, 1 + INLAY)
+
+    def in_joint(self, found: Finding, box: BoundBox) -> bool:
+        """Whether an audit's finding is inside the glued coin: the tongue's
+        and the groove's edges, which the lean leads in, and their ribs. For an
+        object's `skip_audit`."""
+        t = self.half_t
+        reach = tongue_h + groove_extra + 1e-3
+        x, y = found.at.X, found.at.Y
+        if self.shape == "octagon":
+            flats = [radians(22.5 + 45 * k) for k in range(8)]
+            inset = D / 2 * cos(radians(22.5)) - max(
+                x * cos(a) + y * sin(a) for a in flats
+            )
+        else:
+            inset = D / 2 - hypot(x, y)
+        return inset > land - 1e-3 and t - reach < found.low <= found.high < t + reach
 
     def pieces(self) -> list[Piece]:
         """Both halves and what's inlaid in them: printed face down, side by

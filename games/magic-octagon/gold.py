@@ -8,7 +8,7 @@ object, and the plate is one of each; the view is the three put together.
 """
 
 from build.cad import Object, View, project
-from designs.coin import HALF_COLORS, Coin, row
+from designs.coin import COIN_SETTINGS, HALF_COLORS, Coin, row
 
 GOLD = HALF_COLORS[0]
 
@@ -27,7 +27,12 @@ coins = {
 project(
     __file__,
     objects={
-        name: Object(coin.pieces, "Both halves face down, and what's inlaid")
+        name: Object(
+            coin.pieces,
+            "Both halves face down, and what's inlaid",
+            settings=COIN_SETTINGS,
+            skip_audit=[coin.in_joint],
+        )
         for name, coin in coins.items()
     },
     views={"assembly": View(row, "Each coin, glued", list(coins))},

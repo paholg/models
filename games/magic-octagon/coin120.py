@@ -7,25 +7,22 @@ an object, and the plate is one of each; the view is the two put together.
 """
 
 from build.cad import Object, View, project
-from designs.coin import Coin, row
+from designs.coin import COIN_SETTINGS, Coin, row
 
 coins = {
-    shape: Coin(
-        shape,
-        angles=(0, 120),
-        bumps=12,
-        # coin.py's pin holes are 1.5 deep, which leaves little under an
-        # arrow's inlay: here they are clear of both arrows.
-        pin_a=90,
-    )
-    for shape in ("round", "knurled")
+    shape: Coin(shape, angles=(0, 120), bumps=12) for shape in ("round", "knurled")
 }
 
 
 project(
     __file__,
     objects={
-        shape: Object(coin.pieces, "Both halves face down, and their arrows")
+        shape: Object(
+            coin.pieces,
+            "Both halves face down, and their arrows",
+            settings=COIN_SETTINGS,
+            skip_audit=[coin.in_joint],
+        )
         for shape, coin in coins.items()
     },
     views={"assembly": View(row, "Each shape, glued", list(coins))},
