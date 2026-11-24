@@ -48,11 +48,12 @@ layers covering earlier ones. Each is drawn in 2D as it reads from outside:
 `dataclasses.replace()` it in. It's trimmed to its panel: on the front and
 back, the body's piece.
 
-SETTINGS are the layers the joints fit at. `panels` is every panel; with more
+SETTINGS are the layers the joints fit at. `panels` is every panel, each an
+object of its own in Orca, with its art, to print one at a time; with more
 colors than the printer has heads, print `body` and `lid` apart.
 
 `seam_test` and `magnet_test` are coupons of the seam and the magnet pockets
-at a few fits, to try before printing a box.
+at a few fits, to try before printing a box: test/card_box/fits.py prints them.
 """
 
 from collections.abc import Sequence
@@ -642,6 +643,7 @@ class CardBox:
                 self._named(a.name),
                 a.color,
                 settings=self._art_settings(face, a),
+                orca_object=self._named(face),
                 parent=self._parent(face),
                 place=self._flat(face),
             )
@@ -732,6 +734,7 @@ class CardBox:
                     self._named(f"{p} panel"),
                     self._color(p),
                     settings=self._settings(p),
+                    orca_object=self._named(p),
                     parent=self._parent(p),
                     place=self._flat(face, lid and face != "top"),
                 )

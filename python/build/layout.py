@@ -8,15 +8,16 @@ FILAMENTS = 4
 # The U1's bed, and how Orca spaces its plates: a fifth of the bed apart.
 BED = (270.0, 270.0)
 PLATE_STRIDE = 1.2
-# Around a plate's parts, and between them.
+# Around a plate's parts.
 PLATE_MARGIN = 3.0
-PLATE_GAP = 5.0
 # Orders to try packing a group's parts in.
 PACK_TRIES = 300
 
 
-def pack(group: list[str], sizes: dict[str, tuple[float, float]]) -> list[list[tuple]]:
-    """Lay a group's parts out on as few plates as it can.
+def pack(
+    group: list[str], sizes: dict[str, tuple[float, float]], gap: float
+) -> list[list[tuple]]:
+    """Lay a group's parts out on as few plates as it can, `gap` apart.
 
     Returns each plate's (part, x, y, turned): where the part's box goes on the bed,
     and whether it's turned a quarter, which it is only where it fits on a plate
@@ -28,19 +29,19 @@ def pack(group: list[str], sizes: dict[str, tuple[float, float]]) -> list[list[t
         sorted(group, key=lambda p: -sizes[p][0] * sizes[p][1]),
     ]
     orders += [rng.sample(group, len(group)) for _ in range(PACK_TRIES)]
-    return min((pack_in_order(o, sizes) for o in orders), key=len)
+    return min((pack_in_order(o, sizes, gap) for o in orders), key=len)
 
 
 def pack_in_order(
-    group: list[str], sizes: dict[str, tuple[float, float]]
+    group: list[str], sizes: dict[str, tuple[float, float]], gap: float
 ) -> list[list[tuple]]:
     """Lay parts out in the order given, each on the first plate with room, where it
     leaves the least of the free rectangle it best fits (MaxRects): as it is, if
     it fits that way, and turned only if not."""
-    room = [BED[k] - 2 * PLATE_MARGIN + PLATE_GAP for k in (0, 1)]
+    room = [BED[k] - 2 * PLATE_MARGIN + gap for k in (0, 1)]
     plates: list[tuple[list, list]] = []  # each one's free rectangles, and its parts
     for part in group:
-        w, h = (v + PLATE_GAP for v in sizes[part])
+        w, h = (v + gap for v in sizes[part])
         if not any(a <= room[0] and b <= room[1] for a, b in ((w, h), (h, w))):
             sys.exit(f"{part} is too big for the bed: {sizes[part]}")
         for n in range(len(plates) + 1):

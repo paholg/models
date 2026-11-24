@@ -80,6 +80,10 @@ class Piece:
     # Its own. One that Orca keeps for a whole object, a brim say, makes the
     # piece an object of its own, beside the rest.
     settings: Mapping[str, object] = field(default_factory=dict)
+    # The object it's a part of in Orca, by name, beside the rest: pieces with
+    # the same one are its parts, the first giving it its filament. For what's
+    # to print on its own, one object at a time say.
+    orca_object: str = ""
     # The group it goes under in FreeCAD, to show and hide with the rest of it,
     # as a path of groups in groups: "lid/top", say. Orca doesn't see it.
     parent: str = ""
@@ -198,7 +202,9 @@ def render(
         stl = work / f"{i}.stl"
         write_stl(piece.shape, stl)
         color = hex_color(piece.color)
-        solids.append(Solid(stl, color, piece.name, texts(piece.settings)))
+        solids.append(
+            Solid(stl, color, piece.name, texts(piece.settings), piece.orca_object)
+        )
         # Called what the piece calls it, or by its color's name.
         if name := piece.filament or (piece.color if color != piece.color else ""):
             filaments.setdefault(color, name)
@@ -432,9 +438,11 @@ def project(
     orca: Mapping[str, object] | None = None,
     plates: Sequence[Sequence[str]] | None = None,
     views: Mapping[str, Object | View] | None = None,
+    plate_gap: float = 5,
 ) -> None:
     """Write the project's .3mf files to gen/<dir>/: one per object, and one of `plates`,
-    each the names of the objects to print together. `orca` is settings for all of them, an
+    each the names of the objects to print together, `plate_gap` apart: more
+    for a brim, say. `orca` is settings for all of them, an
     object's own `settings` for its prints, and a piece's for that piece; views
     are only to look at. The plates' project applies what its objects share, and
     puts the rest on each object, where Orca lets an object have it, and pauses
@@ -482,7 +490,7 @@ def project(
     match sys.argv[1:]:
         case []:
             with progress.shown():
-                generate(path, objects, views, orca or {}, plates or [])
+                generate(path, objects, views, orca or {}, plates or [], plate_gap)
         case [*names] if not any(n.startswith("-") for n in names):
             if unknown := [n for n in names if n not in shown]:
                 sys.exit(
@@ -490,7 +498,9 @@ def project(
                     f" There are: {', '.join(shown)}"
                 )
             with progress.shown():
-                generate(path, objects, views, orca or {}, plates or [], names)
+                generate(
+                    path, objects, views, orca or {}, plates or [], plate_gap, names
+                )
         case ["--view", name] if name in shown:
             out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
             write_step_of(name, shown[name], objects, out)
@@ -512,6 +522,7 @@ def generate(
     views: Mapping[str, Object | View],
     orca: Mapping[str, object],
     plates: Sequence[Sequence[str]],
+    plate_gap: float,
     only: Sequence[str] = (),
 ) -> None:
     """project()'s work with no arguments: everything it writes to gen/. Or,
@@ -611,7 +622,7 @@ def generate(
             [n for n in plate for _ in range(objects[n].count)]
             for plate in ([] if only else plates)
         ]
-        build.run(path, wanted, groups, drawn, whole=not only)
+        build.run(path, wanted, groups, drawn, plate_gap, whole=not only)
         for name, fill in fills.items():
             result(fill)
             with lock:

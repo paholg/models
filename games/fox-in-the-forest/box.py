@@ -7,9 +7,9 @@ This file is what goes in it, its colors, and its art: the fox in the body's
 front, the forest entrance in its back, and the title in the lid's top, all in
 yellow.
 
-"panels" is the whole box, every panel outside down. "seam" and "magnets" are
-its tests, to try the key's and the magnets' fits before printing a box. The
-view is the box closed.
+"panels" is the whole box, every panel outside down. The view is the box
+closed. test/card_box/fits.py has the tests of the key's and the magnets' fits,
+to try before printing a box.
 """
 
 from dataclasses import replace
@@ -90,11 +90,7 @@ project(
     __file__,
     objects={
         "panels": Object(box.panels, "Every panel outside down, and the art"),
-        "seam": Object(box.seam_test, "The front wall across the seam, at three fits"),
-        "magnets": Object(box.magnet_test, "Magnet pockets at three crushes"),
     },
     views={"assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])},
     orca=SETTINGS,
-    # The tests together, before the box.
-    plates=[["seam", "magnets"], ["panels"]],
 )

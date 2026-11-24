@@ -47,6 +47,7 @@ class Solid:
     color: str  # as #RRGGBB, or none
     name: str
     settings: dict[str, str]  # its own
+    object: str = ""  # the object it's a part of, if not the one of everything left
 
 
 def core(tag: str) -> str:
@@ -85,9 +86,15 @@ class Assembly:
 
     objects: list[Object]
     box: tuple[tuple[float, ...], tuple[float, ...]]  # its corners, as drawn
-    transform: str  # where Orca put it
     meshes: bytes  # the model of its volumes' meshes, as Orca wrote it
     archive: bytes  # Orca's project, for the files any project carries as they are
+
+
+def move(x: float, y: float, z: float, turned: bool = False) -> str:
+    """A move, as a 3MF transform: after a quarter turn counter-clockwise from
+    above, if `turned`. That's the turn's three rows, then the move."""
+    turn = "0 1 0 -1 0 0 0 0 1" if turned else "1 0 0 0 1 0 0 0 1"
+    return f"{turn} {x:.4f} {y:.4f} {z:.4f}"
 
 
 @dataclass
@@ -96,7 +103,7 @@ class Placed:
 
     assembly: Assembly
     name: str  # for its object of everything left
-    transform: str
+    transform: str  # where it goes, from where it's drawn: see move()
     filaments: dict[str, int]  # the tool head for each color
     # Settings for its objects alone, where the project's are for every plate.
     settings: dict[str, str] = field(default_factory=dict)
@@ -160,7 +167,8 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
     """Have Orca make a project of the solids, in `work`.
 
     Orca makes one object of everything. A piece with settings Orca keeps for a
-    whole object, a brim say, gets one of its own instead, where it is.
+    whole object, a brim say, gets one of its own instead, where it is; so do
+    the pieces that name an object, together.
     """
     project = work / "project.3mf"
     # Orca writes result.json into its working directory.
@@ -188,9 +196,9 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
         solid = solids[number - 1]
         of_object = {k: v for k, v in solid.settings.items() if k in whole}
         own = {k: v for k, v in solid.settings.items() if k not in whole}
-        obj = objects.setdefault(
-            solid.name if of_object else "", Object(solid.name, of_object, [])
-        )
+        name = solid.object or (solid.name if of_object else "")
+        obj = objects.setdefault(name, Object(name, {}, []))
+        obj.settings.update(of_object)
         i = attr(part, "id")
         obj.volumes.append(
             Volume(number, solid.name, solid.color, own, i, component[i], part)
@@ -198,7 +206,6 @@ def assemble(solids: list[Solid], box: tuple, work: Path) -> Assembly:
     return Assembly(
         [o for o in objects.values() if o.volumes],
         box,
-        attr(child(model, f"{core('build')}/{core('item')}"), "transform"),
         meshes,
         archive,
     )

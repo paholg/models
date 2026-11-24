@@ -24,7 +24,7 @@ with none to apply still carries one, unlisted.
 A piece's own settings apply to just its part. Orca keeps some settings for a
 whole object, not a part: a brim or a raft, say. A piece with one of those
 becomes an object of its own, where it is, beside the object of everything
-else.
+else. So do the pieces that name an object of theirs, together.
 
 An object can pause, to put something inside it: once the print is z high, or
 a layer sooner, so leave a layer's room over what goes in.
@@ -37,8 +37,8 @@ wherever one of its objects does, and everything on it with it. Each plate is a
 group of objects to print together, as many of each as its `count`.
 
 A group that doesn't fit one plate goes on several. Its objects are packed by
-their bounding boxes, turned a quarter where that helps; nothing keeps room for
-a prime tower. Each plate's name says which filament goes on which tool head.
+their bounding boxes, a gap apart, turned a quarter where that helps; nothing
+keeps room for a prime tower. Each plate's name says which filament goes on which tool head.
 With more colors than heads, those that never print together share one.
 """
 
@@ -154,14 +154,14 @@ def combine(
             # The box's corner to (x, y) on the plate, its bottom to the bed.
             (x0, y0, z0), (_x1, y1, _z1) = built[part].box
             if turned:
-                at = "0 1 0 -1 0 0 0 0 1", origin[0] + x + y1, origin[1] + y - x0
+                at = origin[0] + x + y1, origin[1] + y - x0
             else:
-                at = "1 0 0 0 1 0 0 0 1", origin[0] + x - x0, origin[1] + y - y0
+                at = origin[0] + x - x0, origin[1] + y - y0
             placed.append(
                 orca.Placed(
                     built[part],
                     part if copy == 1 else f"{part} {copy}",
-                    f"{at[0]} {at[1]:.4f} {at[2]:.4f} {-z0:.4f}",
+                    orca.move(*at, -z0, turned),
                     heads,
                     own.get(part, {}),
                 )
@@ -191,10 +191,12 @@ def run(
     exports: list[str],
     groups: list[list[str]],
     render_part: Callable[[str, Path], Render],
+    gap: float,
     whole: bool = True,
 ) -> None:
     """Write the projects of a model file: one for each of `exports`, and one of
-    the plates in `groups`, if any. `render_part` draws a part into a folder.
+    the plates in `groups`, if any, their parts `gap` apart. `render_part` draws
+    a part into a folder.
     Unless that's the `whole` of the file's projects, the others are left.
     """
     out_dir = ROOT / "gen" / file.parent.relative_to(ROOT)
@@ -225,7 +227,12 @@ def run(
             note = ", ".join(f"{k}={v}" for k, v in render.settings.items())
             settings = {k: v for k, v in render.settings.items() if k not in PRESETS}
             name = f"{target.stem} [{note}]" if note else target.stem
-            placed = orca.Placed(assembly, name, assembly.transform, heads)
+            # In the middle of the bed, its bottom on it. Orca's own place for
+            # it is for the CLI's bed, 200 square: the middle of that, or where
+            # it's drawn if it's too big for it.
+            (x0, y0, z0), (x1, y1, _z1) = assembly.box
+            middle = (layout.BED[0] - x0 - x1) / 2, (layout.BED[1] - y0 - y1) / 2
+            placed = orca.Placed(assembly, name, orca.move(*middle, -z0), heads)
             objects = orca.write(
                 target, settings, [orca.Plate(note, [placed], render.pauses)]
             )
@@ -292,7 +299,7 @@ def run(
             p: (a.box[1][0] - a.box[0][0], a.box[1][1] - a.box[0][1])
             for p, a in built.items()
         }
-        packed = [plate for g in groups for plate in layout.pack(g, sizes)]
+        packed = [plate for g in groups for plate in layout.pack(g, sizes, gap)]
         # A color is on one tool head in every project, the plates' too: so
         # the heads are kept, for a run that writes only some of them.
         kept = cache(file) / "heads.json"
