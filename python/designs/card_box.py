@@ -83,9 +83,6 @@ from build123d import (
 
 from build.cad import Piece
 
-# An ear's radius: see SETTINGS, and the gaps on the bed.
-EAR = 8
-
 SETTINGS = {
     # The joints fit at 0.08 mm layers over a 0.2 mm first one, as test coupons
     # found; at 0.2 mm the mitres' steps stand proud and lever the joints out
@@ -102,23 +99,14 @@ SETTINGS = {
     # A guess at why the panels lift off the bed: the preset fills the first
     # layer at 105 mm/s, and Snapmaker suggests no more than 50. Untested.
     "initial_layer_infill_speed": 30,
-    # Another: a panel pulls up as its solid layers shrink, and the preset
-    # makes the inside face's shell 0.8 mm of a 2 mm panel. Half that leaves
-    # more of it sparse. Untested, as is how the inside face looks for it.
-    "top_shell_layers": 5,
-    "top_shell_thickness": 0.4,
-    # And ears, to hold the panels' corners down: cut them off the mitres.
-    # Only at corners of 100 degrees or sharper, which leaves the keys, at
-    # 117, without. Also untested.
-    "brim_type": "brim_ears",
-    "brim_width": EAR,
-    "brim_ears_max_angle": 100,
+    # And the preset goes straight to full speed on the second layer, 0.28 mm
+    # up: ease into it instead. Also untested.
+    "slow_down_layers": 5,
 }
 
-# On the bed: between a wall's body and lid pieces, and between panels. Just
-# over an ear, so that one panel's ears stop short of the next one's edge.
-LID_GAP = EAR + 1
-BED_GAP = EAR + 1
+# On the bed: between a wall's body and lid pieces, and between panels.
+LID_GAP = 5
+BED_GAP = 5
 
 FACES = ("left", "right", "front", "back", "floor", "top")
 WALLS = ("front", "back", "left", "right")
