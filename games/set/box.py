@@ -53,7 +53,7 @@ card_color = "white"
 # Cards
 
 # A card on the front: its width. Its length is as a real card's.
-card_w = 19
+card_w = 17
 card_r = 1.6
 # Between cards.
 card_gap = 2.5
@@ -78,7 +78,7 @@ shade = (0.45, 0.9)
 # Logo
 
 # Across the lid's top, all of it.
-logo_w = 62
+logo_w = 52
 # What the letters are set in.
 font = "TeX Gyre Termes"
 
