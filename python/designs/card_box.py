@@ -81,6 +81,7 @@ from build123d import (
     extrude,
 )
 
+from build.audit import any_sharp
 from build.cad import Object, Piece
 
 SETTINGS = {
@@ -117,7 +118,12 @@ NOTES = """
 
 def to_print(draw: Callable[[], list[Piece]], description: str) -> Object:
     """Something of a box's as an object to print, with how these print."""
-    return Object(draw, description, settings=SETTINGS, notes=NOTES)
+    # Sharp on purpose: the seam, which closes flush outside; the magnets'
+    # pockets, which they fill; and the mitres' ends at the box's corners. So
+    # only slivers are looked for, as art's cuts may leave.
+    return Object(
+        draw, description, settings=SETTINGS, notes=NOTES, skip_audit=[any_sharp]
+    )
 
 
 # On the bed: between a wall's body and lid pieces, and between panels.

@@ -18,8 +18,8 @@ isn't an edge of the object once the inlay is in it.
 
 What an object leaves sharp on purpose, it lists as its `skip_audit` (see
 cad.Object): each a Skip, which says of a finding whether to pass over it. on_top and
-on_bottom are for the rims of holes through an object, a honeycomb's say, and
-anywhere for an object not worth auditing.
+on_bottom are for the rims of holes through an object, a honeycomb's say,
+any_sharp for one that's all joints, and anywhere for one not worth auditing.
 
     Object(riser, "A riser", skip_audit=[on_top, on_bottom])
 """
@@ -79,6 +79,12 @@ def on_top(found: Finding, box: BoundBox) -> bool:
 def on_bottom(found: Finding, box: BoundBox) -> bool:
     """Lying in the object's bottom."""
     return found.high < box.min.Z + 1e-3
+
+
+def any_sharp(found: Finding, box: BoundBox) -> bool:
+    """Any sharp edge, leaving slivers: for what's all joints, whose edges are
+    to meet square."""
+    return found.kind == "sharp"
 
 
 def anywhere(found: Finding, box: BoundBox) -> bool:
