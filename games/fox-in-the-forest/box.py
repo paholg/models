@@ -17,8 +17,8 @@ from pathlib import Path
 
 from build123d import Pos, Sketch, import_svg, scale
 
-from build.cad import Object, View, project, sketch
-from designs.card_box import SETTINGS, Art, CardBox
+from build.cad import View, project, sketch
+from designs.card_box import Art, CardBox, to_print
 
 # Contents
 
@@ -89,8 +89,7 @@ box = replace(
 project(
     __file__,
     objects={
-        "panels": Object(box.panels, "Every panel outside down, and the art"),
+        "panels": to_print(box.panels, "Every panel outside down, and the art"),
     },
     views={"assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])},
-    orca=SETTINGS,
 )

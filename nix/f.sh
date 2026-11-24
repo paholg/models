@@ -264,6 +264,7 @@ draw() {
   keep=""
   check_fresh
   printf '\033[1m%s\033[0m\n\n' "$file"
+  draw_notes
   # $below is how far the cursor ends up below the generate line.
   if [[ $kind == cad ]]; then
     draw_generate
@@ -287,6 +288,18 @@ draw() {
     printf '\n%s\n' "$status"
     below=$((below + 2))
   fi
+}
+
+# Show what $file's last generation noted to do by hand, if anything: loudly,
+# as it's what a print goes wrong without.
+draw_notes() {
+  local notes="gen/${file%.py}-notes.txt" line
+  [[ $kind == cad && -s $notes ]] || return 0
+  printf '  \033[1;30;43m BY HAND, BEFORE PRINTING \033[0m\n'
+  while IFS= read -r line; do
+    printf '  \033[33m▌\033[0m \033[1m%s\033[0m\n' "$line"
+  done <"$notes"
+  printf '\n'
 }
 
 draw_generate() {

@@ -1,17 +1,16 @@
 """An upright box for a deck of cards standing on end, with a lift-off lid held
 on by magnets.
 
-    from designs.card_box import SETTINGS, Art, CardBox
+    from designs.card_box import Art, CardBox, to_print
 
     crest = Art("crest", "yellow", Pos(0, 30) * crest_sketch)
     box = CardBox(sleeve=(66.5, 92.5), stack=40, front=[crest])
     project(
         __file__,
-        objects={"panels": Object(box.panels, "Every panel, outside down")},
+        objects={"panels": to_print(box.panels, "Every panel, outside down")},
         views={
             "assembly": View(lambda o: box.closed(o["panels"]), "Closed", ["panels"])
         },
-        orca=SETTINGS,
     )
 
 x is across the cards, centered; y is front (0) to back; z is up. The seam is
@@ -48,7 +47,8 @@ layers covering earlier ones. Each is drawn in 2D as it reads from outside:
 `dataclasses.replace()` it in. It's trimmed to its panel: on the front and
 back, the body's piece.
 
-SETTINGS are the layers the joints fit at. `panels` is every panel, each an
+`to_print` makes an object of any of these, with the layers the joints fit
+at, and what's to set by hand. `panels` is every panel, each an
 object of its own in Orca, with its art, to print one at a time; with more
 colors than the printer has heads, print `body` and `lid` apart.
 
@@ -56,7 +56,7 @@ colors than the printer has heads, print `body` and `lid` apart.
 at a few fits, to try before printing a box: test/card_box/fits.py prints them.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from math import atan2, cos, degrees, hypot, radians, sin
@@ -81,7 +81,7 @@ from build123d import (
     extrude,
 )
 
-from build.cad import Piece
+from build.cad import Object, Piece
 
 SETTINGS = {
     # The joints fit at 0.08 mm layers over a 0.2 mm first one, as test coupons
@@ -103,6 +103,22 @@ SETTINGS = {
     # up: ease into it instead. Also untested.
     "slow_down_layers": 5,
 }
+
+# What SETTINGS can't say, being the filaments' settings.
+# Both fans come on in full on the second layer, 0.28 mm up, which may be what
+# lifts the panels' corners. Untested.
+NOTES = """
+    Set each filament's cooling by hand:
+      No cooling for the first: 6 layers
+      Full fan speed at layer: 15
+      Auxiliary part cooling fan: 0%
+"""
+
+
+def to_print(draw: Callable[[], list[Piece]], description: str) -> Object:
+    """Something of a box's as an object to print, with how these print."""
+    return Object(draw, description, settings=SETTINGS, notes=NOTES)
+
 
 # On the bed: between a wall's body and lid pieces, and between panels.
 LID_GAP = 5

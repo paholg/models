@@ -34,8 +34,8 @@ from build123d import (
     scale,
 )
 
-from build.cad import Object, View, project, sketch
-from designs.card_box import SETTINGS, Art, CardBox
+from build.cad import View, project, sketch
+from designs.card_box import Art, CardBox, to_print
 
 # Contents
 
@@ -255,15 +255,14 @@ box = replace(
 project(
     __file__,
     objects={
-        "body": Object(box.body, "The body's panels outside down, and the cards"),
-        "lid": Object(box.lid, "The lid's panels outside down, and the logo"),
+        "body": to_print(box.body, "The body's panels outside down, and the cards"),
+        "lid": to_print(box.lid, "The lid's panels outside down, and the logo"),
     },
     views={
         "assembly": View(
             lambda o: box.closed(o["body"] + o["lid"]), "Closed", ["body", "lid"]
         )
     },
-    orca=SETTINGS,
     # Apart: five colors are more than the printer's four heads.
     plates=[["body"], ["lid"]],
 )

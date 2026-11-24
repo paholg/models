@@ -16,9 +16,10 @@ sliced in OrcaSlicer.
 A project is a Python file that draws with build123d and ends by calling
 `project()` from `python/build/cad.py`, whose docstring has the details. It
 passes `project()` the objects to print and views to only look at, each a
-function that draws it and a description. An object is one or more pieces,
-each with its own name, color and slicer settings, which become its parts in
-Orca.
+function that draws it and a description. What can't be set from here, like a
+filament's cooling, goes in an object's `notes`, which `f` shows over its
+keys. An object is one or more pieces, each with its own name, color and
+slicer settings, which become its parts in Orca.
 
 Each piece has its own color, and two positions from where it's drawn: `at`,
 where it sits when assembled, and `place`, where it's printed. Both are moves

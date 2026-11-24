@@ -6,18 +6,19 @@ They're a box's as it comes, so they hold for any box that leaves its walls,
 key and magnets alone.
 """
 
-from build.cad import Object, project
-from designs.card_box import BED_GAP, SETTINGS, CardBox
+from build.cad import project
+from designs.card_box import BED_GAP, CardBox, to_print
 
 box = CardBox()
 
 project(
     __file__,
     objects={
-        "seam": Object(box.seam_test, "The front wall across the seam, at three fits"),
-        "magnets": Object(box.magnet_test, "Magnet pockets at three crushes"),
+        "seam": to_print(
+            box.seam_test, "The front wall across the seam, at three fits"
+        ),
+        "magnets": to_print(box.magnet_test, "Magnet pockets at three crushes"),
     },
-    orca=SETTINGS,
     plates=[["seam", "magnets"]],
     # Room for their ears.
     plate_gap=BED_GAP,

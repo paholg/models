@@ -2,12 +2,14 @@
 
 import contextlib
 import copy
+import inspect
 import io
 import json
 import multiprocessing
 import os
 import shutil
 import sys
+import textwrap
 import threading
 import warnings
 from collections.abc import Callable, Mapping, Sequence
@@ -125,6 +127,9 @@ class Object:
     # high, or a layer sooner, so leave a layer's room over what goes in.
     pauses: Sequence[float] = ()
     count: int = 1  # how many to print: a plate it's on gets that many
+    # What to do by hand before printing it, that no setting here can: a
+    # filament's cooling, say. `f` shows it over its keys.
+    notes: str = ""
     # What its audit is to pass over, as left sharp on purpose: see audit.py.
     skip_audit: Sequence[audit.Skip] = ()
 
@@ -439,6 +444,7 @@ def project(
     plates: Sequence[Sequence[str]] | None = None,
     views: Mapping[str, Object | View] | None = None,
     plate_gap: float = 5,
+    notes: str = "",
 ) -> None:
     """Write the project's .3mf files to gen/<dir>/: one per object, and one of `plates`,
     each the names of the objects to print together, `plate_gap` apart: more
@@ -453,6 +459,10 @@ def project(
     Beside them, for FreeCAD, go <stem>-<name>.step for each view and object,
     an object as it's printed, and <stem>-views.tsv, which lists views, then
     objects: kind, name and description, tabbed.
+
+    `notes` is what to do by hand before printing any of it, as an object's
+    own `notes` is for that object. Each one, once, goes to <stem>-notes.txt,
+    which `f` shows over its keys.
 
     With more than one thing to draw, they're drawn in workers, each of which
     runs the file again (see workers()).
@@ -487,10 +497,15 @@ def project(
         sys.stdout.reconfigure(line_buffering=True)
     path = Path(file).resolve()
     shown = {**views, **objects}
+    # Each note once, however many objects have it.
+    noted = [inspect.cleandoc(n) for n in (notes, *(o.notes for o in objects.values()))]
+    notes = "\n\n".join(dict.fromkeys(n for n in noted if n))
     match sys.argv[1:]:
         case []:
             with progress.shown():
-                generate(path, objects, views, orca or {}, plates or [], plate_gap)
+                generate(
+                    path, objects, views, orca or {}, plates or [], plate_gap, notes
+                )
         case [*names] if not any(n.startswith("-") for n in names):
             if unknown := [n for n in names if n not in shown]:
                 sys.exit(
@@ -499,7 +514,14 @@ def project(
                 )
             with progress.shown():
                 generate(
-                    path, objects, views, orca or {}, plates or [], plate_gap, names
+                    path,
+                    objects,
+                    views,
+                    orca or {},
+                    plates or [],
+                    plate_gap,
+                    notes,
+                    names,
                 )
         case ["--view", name] if name in shown:
             out = build.ROOT / "tmp/view" / f"{path.stem}-{name}.step"
@@ -523,6 +545,7 @@ def generate(
     orca: Mapping[str, object],
     plates: Sequence[Sequence[str]],
     plate_gap: float,
+    notes: str,
     only: Sequence[str] = (),
 ) -> None:
     """project()'s work with no arguments: everything it writes to gen/. Or,
@@ -641,3 +664,10 @@ def generate(
     print(
         f"{listed.relative_to(build.ROOT)}: {len(views)} views, {len(objects)} objects"
     )
+    # The file's as it is now, whatever was drawn.
+    noted = out_dir / f"{path.stem}-notes.txt"
+    if notes:
+        noted.write_text(notes + "\n")
+        print(f"{noted.relative_to(build.ROOT)}:\n{textwrap.indent(notes, '  ')}")
+    else:
+        noted.unlink(missing_ok=True)
