@@ -45,7 +45,7 @@ cell = 10
 # 50 in above a 37 in wide table: the table edge is 20 degrees out, a seated
 # eye roughly 31, so aim for about 30.
 depth = 17
-wall = 0.8
+wall = 0.6
 # Cells in the middle of the louver are stretched this much along the light,
 # to let more light through. Shielding across the table is unchanged; only
 # people sitting in line with the light lose some. 1 = regular hexagons.
