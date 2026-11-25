@@ -209,7 +209,7 @@ class Magnets:
     """Bar magnets in the seam, and the pockets they're glued into."""
 
     # Length, height, thickness.
-    size: tuple[float, float, float] = (18.4, 9, 2.5)
+    size: tuple[float, float, float] = (19, 9, 2.5)
     # Pocket clearance on the thickness.
     clearance: float = 0.12
     # Room on the magnet's height. Loose: a tight magnet bows the cover out
@@ -228,8 +228,6 @@ class Magnets:
     skin: float = 0.84
     # Plastic between a magnet and the seam.
     cover: float = 0.4
-    # Either side of center.
-    offset: float = 20
 
     @property
     def depth(self) -> float:
@@ -290,12 +288,9 @@ class CardBox:
         assert z_top - self.seam[1] >= m.reach + m.glue_gap + 1, (
             "lid too short at the back for its magnets"
         )
-        assert (
-            m.offset - m.size[0] / 2 - m.glue_gap - 1
-            >= self.key_width / 2 + self.key_clearance
-        ), "magnets crowd the key"
-        assert m.offset + m.size[0] / 2 + m.glue_gap + 1 <= self.cavity[0] / 2, (
-            "magnets run into the corners"
+        key, corner = self._magnet_span
+        assert corner - key >= m.size[0] + 2 * (m.glue_gap + 1), (
+            "no room for a magnet between the key and the corner"
         )
         assert self.ease <= 0.5, "ease reaches under the keys"
         assert self._key()[0][0] < self.cavity[1] / 2, (
@@ -321,6 +316,12 @@ class CardBox:
             self.stack + self.margin[1],
             self.sleeve[1] + self.margin[2],
         )
+
+    @property
+    def _magnet_span(self) -> tuple[float, float]:
+        """What a magnet sits in the middle of, from center: the key's edge,
+        and the corner."""
+        return (self.key_width / 2 + self.key_clearance, self.cavity[0] / 2)
 
     @property
     def size(self) -> tuple[float, float, float]:
@@ -507,7 +508,7 @@ class CardBox:
         return [
             Location(
                 Plane(
-                    (sx * self.magnets.offset, self._in(wall), z),
+                    (sx * sum(self._magnet_span) / 2, self._in(wall), z),
                     into.cross(away),
                     away,
                 )
