@@ -60,10 +60,11 @@ card_gap = 2.5
 # The row of them leans this far, counter-clockwise; their lines on the bed
 # lean with them, to run along the cards.
 cards_lean = 12
-# The row's middle, as a share of the front's height below the seam. Low
-# enough to keep the cards off the magnets' pockets, 10 mm under the seam,
-# where the wall is too thin for an inlay.
-cards_at = 0.43
+# The row's middle, as a share of the front's height below the seam: centered
+# on the panel, as its bounding box is on its middle. No higher, to keep the
+# cards off the magnets' pockets, 10 mm under the seam, where the wall is too
+# thin for an inlay: they clear them by 0.4 mm.
+cards_at = 0.5
 # The symbols, as measured off a picture of the cards, in card widths: each
 # one's size, along the card's width and across, and from one to the next.
 diamond_size = (0.683, 0.354)
