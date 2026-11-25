@@ -189,9 +189,13 @@ def text(s: str, size: float, style: FontStyle) -> Sketch:
 
 
 def letter(i: int) -> Sketch:
+    """The S over twice the others' size, its top level with theirs, and the
+    rest of it hanging out under its tile: far enough for its tail to clear
+    the tile's edge by 0.6 mm."""
     if i == 0:
-        s = text("S", 1.12 * tile, FontStyle.BOLDITALIC)
-        return Pos(-0.06 * tile, -0.13 * tile) * s
+        s = text("S", 1.24 * tile, FontStyle.BOLDITALIC)
+        drop = (s.bounding_box().size.Y - letter(1).bounding_box().size.Y) / 2
+        return Pos(-0.06 * tile, -drop) * s
     return text("SET"[i], 0.58 * tile, FontStyle.BOLD)
 
 
